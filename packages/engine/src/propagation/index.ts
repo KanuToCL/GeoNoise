@@ -15,7 +15,6 @@ import {
 import {
   atmosphericAbsorptionSimple,
   atmosphericAbsorptionISO9613,
-  groundFactor,
   GroundType,
   speedOfSound,
 } from '@geonoise/core';
@@ -129,12 +128,23 @@ export function atmosphericAbsorptionOverall(
 // ============================================================================
 
 /**
- * Calculate ground effect (simplified ISO 9613-2)
+ * Legacy ISO 9613-2 Eq. (10) ground attenuation (Dn omitted by design).
+ * Uses simplified mean height hm = (hs + hr) / 2 (ISO Fig. 3 method omitted).
+ */
+export function agrIsoEq10Db(distance: number, sourceHeight: number, receiverHeight: number): number {
+  const hm = 0.5 * (sourceHeight + receiverHeight);
+  const d = Math.max(distance, 1.0);
+  const agr = 4.8 - (2 * hm / d) * (17 + (200 / d));
+  return Math.max(0, agr);
+}
+
+/**
+ * Calculate ground effect (legacy ISO 9613-2 Eq. 10 baseline).
  * @param distance - Distance in meters
  * @param sourceHeight - Source height above ground in meters
  * @param receiverHeight - Receiver height above ground in meters
- * @param groundType - Type of ground surface
- * @param frequency - Frequency in Hz
+ * @param groundType - Type of ground surface (legacy ignores this)
+ * @param frequency - Frequency in Hz (legacy ignores this)
  */
 export function groundEffect(
   distance: number,
@@ -143,33 +153,9 @@ export function groundEffect(
   groundType: GroundType,
   frequency: number
 ): number {
-  const G = groundFactor(groundType);
-
-  if (G === 0) {
-    // Hard ground - no effect for most cases
-    return 0;
-  }
-
-  // Simplified ground effect based on ISO 9613-2
-  // This is a rough approximation
-  const dp = distance; // Projected distance
-  const hm = (sourceHeight + receiverHeight) / 2; // Mean height
-
-  // Height correction
-  if (dp <= 0 || hm <= 0) return 0;
-
-  // Very simplified - real implementation would use full ISO 9613-2
-  const q = 30 * hm / dp;
-  const Agr = -10 * Math.log10(1 + Math.pow(10, -(q - 5) / 10)) * G;
-
-  // Frequency dependency (simplified)
-  if (frequency < 250) {
-    return Agr * 0.5;
-  } else if (frequency > 2000) {
-    return Agr * 0.2;
-  }
-
-  return Agr;
+  void groundType;
+  void frequency;
+  return agrIsoEq10Db(distance, sourceHeight, receiverHeight);
 }
 
 // ============================================================================
@@ -262,6 +248,7 @@ export function calculatePropagation(
         c
       );
     } else {
+      // Legacy ISO 9613-2 Eq. (10) with hm=(hs+hr)/2 and negative values clamped to 0.
       const gt =
         config.groundType === 'hard'
           ? GroundType.Hard
