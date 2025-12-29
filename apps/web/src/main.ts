@@ -80,6 +80,7 @@ const toolGrid = document.querySelector('#toolGrid') as HTMLDivElement | null;
 const selectionLabel = document.querySelector('#selectionLabel') as HTMLSpanElement | null;
 const modeLabel = document.querySelector('#modeLabel') as HTMLSpanElement | null;
 const propertiesBody = document.querySelector('#propertiesBody') as HTMLDivElement | null;
+const sourceTable = document.querySelector('#sourceTable') as HTMLDivElement | null;
 const receiverTable = document.querySelector('#receiverTable') as HTMLDivElement | null;
 const panelStats = document.querySelector('#panelStats') as HTMLDivElement | null;
 const panelLegend = document.querySelector('#panelLegend') as HTMLDivElement | null;
@@ -783,6 +784,8 @@ function computeSceneIncremental(sourceId: string) {
 }
 
 function renderResults() {
+  renderSources();
+
   if (receiverTable) {
     receiverTable.innerHTML = '';
     for (const receiver of results.receivers) {
@@ -795,6 +798,63 @@ function renderResults() {
 
   renderPanelLegend();
   renderPanelStats();
+}
+
+function createInlineField(label: string, value: number, onChange: (value: number) => void) {
+  const field = document.createElement('label');
+  field.className = 'source-field';
+  const name = document.createElement('span');
+  name.textContent = label;
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.step = '0.1';
+  input.value = value.toString();
+  input.addEventListener('change', () => {
+    const next = Number(input.value);
+    if (Number.isFinite(next)) onChange(next);
+  });
+  field.appendChild(name);
+  field.appendChild(input);
+  return field;
+}
+
+function renderSources() {
+  if (!sourceTable) return;
+  sourceTable.innerHTML = '';
+  if (!scene.sources.length) {
+    sourceTable.innerHTML = '<span class="legend-empty">No sources yet.</span>';
+    return;
+  }
+
+  for (const source of scene.sources) {
+    const row = document.createElement('div');
+    row.className = 'source-row';
+    const header = document.createElement('div');
+    header.className = 'source-row-header';
+    header.innerHTML = `<strong>${source.id.toUpperCase()}</strong>`;
+    row.appendChild(header);
+
+    const fields = document.createElement('div');
+    fields.className = 'source-fields';
+    fields.appendChild(createInlineField('Power (dB)', source.power, (value) => {
+      source.power = value;
+      renderProperties();
+      computeScene();
+    }));
+    fields.appendChild(createInlineField('Height (m)', source.z, (value) => {
+      source.z = value;
+      renderProperties();
+      computeScene();
+    }));
+    row.appendChild(fields);
+
+    row.addEventListener('click', (event) => {
+      if ((event.target as HTMLElement).tagName === 'INPUT') return;
+      setSelection({ type: 'source', id: source.id });
+    });
+
+    sourceTable.appendChild(row);
+  }
 }
 
 function createId(prefix: string, seq: number) {

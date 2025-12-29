@@ -439,6 +439,46 @@ button.primary {
   font-size: 13px;
 }
 
+.source-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--panel-border);
+}
+
+.source-row-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--accent-dark);
+}
+
+.source-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.source-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: #6a5a4b;
+}
+
+.source-field input {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  font-family: var(--font);
+  font-size: 12px;
+}
+
 .panel-stats {
   display: flex;
   flex-direction: column;
