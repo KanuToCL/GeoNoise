@@ -4,6 +4,6 @@
  */
 
 export * from './schema/index.js';
-export * from './coords/index.js';
+export * as coords from './coords/index.js';
 export * from './units/index.js';
 export * from './migration/index.js';

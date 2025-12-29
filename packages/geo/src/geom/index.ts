@@ -2,7 +2,7 @@
  * Geometry operations for occlusion and propagation
  */
 
-import { Point2D, Point3D, BoundingBox2D } from '@geonoise/core';
+import type { Point2D, Point3D, BoundingBox2D } from '@geonoise/core/coords';
 import { GEOMETRY_EPSILON } from '@geonoise/shared';
 
 // ============================================================================

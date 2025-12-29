@@ -2,16 +2,9 @@
  * Compute API - Backend-agnostic interface for engine calculations
  */
 
-import type {
-  BackendId,
-  ComputePreference,
-  ComputeTimings,
-  ComputeWarning,
-  ReceiverId,
-  PanelId,
-  SceneHash,
-} from '@geonoise/shared';
+import type { BackendId, ComputeTimings, ComputeWarning, ReceiverId, PanelId, SceneHash } from '@geonoise/shared';
 import type { Scene, EngineConfig, GridConfig, PanelSampling } from '@geonoise/core';
+import { PropagationConfigSchema, MeteoSchema } from '@geonoise/core';
 
 // ============================================================================
 // Request Types
@@ -24,6 +17,7 @@ export type ComputeKind = 'receivers' | 'panel' | 'grid';
 export interface ComputeRequestBase {
   scene: Scene;
   engineConfig?: EngineConfig;
+  requestId?: string;
 }
 
 /** Compute request for individual receivers */
@@ -232,19 +226,26 @@ export function mergeEngineConfig(
   defaults: EngineConfig,
   override?: Partial<EngineConfig>
 ): EngineConfig {
-  if (!override) return defaults;
+  const mode = override?.mode ?? defaults.mode;
+  const outputMetric = override?.outputMetric ?? defaults.outputMetric;
+
+  const mergedPropagationInput = {
+    ...(defaults.propagation ?? {}),
+    ...(override?.propagation ?? {}),
+  };
+  const propagation = PropagationConfigSchema.parse(mergedPropagationInput);
+
+  const mergedMeteoInput = {
+    ...(defaults.meteo ?? {}),
+    ...(override?.meteo ?? {}),
+  };
+  const meteo = MeteoSchema.parse(mergedMeteoInput);
 
   return {
-    mode: override.mode ?? defaults.mode,
-    outputMetric: override.outputMetric ?? defaults.outputMetric,
-    propagation: {
-      ...defaults.propagation,
-      ...override.propagation,
-    },
-    meteo: {
-      ...defaults.meteo,
-      ...override.meteo,
-    },
+    mode,
+    outputMetric,
+    propagation,
+    meteo,
   };
 }
 
@@ -252,48 +253,58 @@ export function mergeEngineConfig(
  * Get default engine config for a mode
  */
 export function getDefaultEngineConfig(mode: 'festival_fast' | 'standards_strict'): EngineConfig {
-  if (mode === 'standards_strict') {
-    return {
-      mode: 'standards_strict',
-      outputMetric: 'LAeq',
-      propagation: {
-        spreading: 'spherical',
-        atmosphericAbsorption: 'iso9613',
-        groundReflection: true,
-        groundType: 'mixed',
-        maxReflections: 1,
-        maxDistance: 2000,
-        includeBarriers: true,
-      },
-      meteo: {
-        temperature: 20,
-        relativeHumidity: 50,
-        pressure: 101.325,
-        windSpeed: 0,
-        windDirection: 0,
-      },
-    };
-  }
-
-  // festival_fast
-  return {
-    mode: 'festival_fast',
+  const base = {
+    mode,
     outputMetric: 'LAeq',
-    propagation: {
+  } as const;
+
+  if (mode === 'standards_strict') {
+    const propagation = PropagationConfigSchema.parse({
       spreading: 'spherical',
-      atmosphericAbsorption: 'simple',
-      groundReflection: false,
+      atmosphericAbsorption: 'iso9613',
+      groundReflection: true,
       groundType: 'mixed',
-      maxReflections: 0,
+      maxReflections: 1,
       maxDistance: 2000,
       includeBarriers: true,
-    },
-    meteo: {
+    });
+
+    const meteo = MeteoSchema.parse({
       temperature: 20,
       relativeHumidity: 50,
       pressure: 101.325,
       windSpeed: 0,
       windDirection: 0,
-    },
+    });
+
+    return {
+      ...base,
+      propagation,
+      meteo,
+    };
+  }
+
+  const propagation = PropagationConfigSchema.parse({
+    spreading: 'spherical',
+    atmosphericAbsorption: 'simple',
+    groundReflection: false,
+    groundType: 'mixed',
+    maxReflections: 0,
+    maxDistance: 2000,
+    includeBarriers: true,
+  });
+
+  const meteo = MeteoSchema.parse({
+    temperature: 20,
+    relativeHumidity: 50,
+    pressure: 101.325,
+    windSpeed: 0,
+    windDirection: 0,
+  });
+
+  return {
+    ...base,
+    propagation,
+    meteo,
   };
 }

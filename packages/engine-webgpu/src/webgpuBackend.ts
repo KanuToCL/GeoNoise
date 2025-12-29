@@ -22,7 +22,7 @@ export class WebGPUBackend implements Engine {
   }
   dispose() {}
 
-  async computeReceivers() { throw new Error('WebGPU backend not implemented'); }
-  async computePanel() { throw new Error('WebGPU backend not implemented'); }
-  async computeGrid() { throw new Error('WebGPU backend not implemented'); }
+  async computeReceivers(_request: any): Promise<any> { throw new Error('WebGPU backend not implemented'); }
+  async computePanel(_request: any): Promise<any> { throw new Error('WebGPU backend not implemented'); }
+  async computeGrid(_request: any): Promise<any> { throw new Error('WebGPU backend not implemented'); }
 }

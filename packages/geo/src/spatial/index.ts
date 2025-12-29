@@ -3,7 +3,8 @@
  * Simple R-tree-like implementation and spatial hash
  */
 
-import { BoundingBox2D, Point2D, boundingBoxesIntersect, pointInBoundingBox } from '@geonoise/core';
+import type { BoundingBox2D, Point2D } from '@geonoise/core/coords';
+import { boundingBoxesIntersect, pointInBoundingBox } from '@geonoise/core/coords';
 
 // ============================================================================
 // Spatial Hash Grid

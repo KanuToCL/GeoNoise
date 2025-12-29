@@ -3,15 +3,9 @@
  * Abstracts map providers (Google Maps, offline grid, etc.)
  */
 
-import {
-  LatLon,
-  LocalMetersENU,
-  CoordinateOrigin,
-  GeoBoundingBox,
-  BoundingBox2D,
-  createCoordinateTransformer,
-  type CoordinateTransformer,
-} from '@geonoise/core';
+import type { LatLon, LocalMetersENU, CoordinateOrigin, GeoBoundingBox } from '@geonoise/core/coords';
+import { createCoordinateTransformer, type CoordinateTransformer } from '@geonoise/core/coords';
+import type { BoundingBox2D } from '@geonoise/core/coords';
 
 // ============================================================================
 // Map Adapter Interface

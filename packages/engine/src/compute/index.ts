@@ -3,8 +3,8 @@
  */
 
 import { sumDecibels, receiverId, MIN_LEVEL } from '@geonoise/shared';
-import type { Scene, EngineConfig, Point3D } from '@geonoise/core';
-import { distance3D } from '@geonoise/core';
+import type { Point3D } from '@geonoise/core/coords';
+import { distance3D } from '@geonoise/core/coords';
 import { generateRectangleSamples, generatePolygonSamples, generateGrid } from '@geonoise/geo';
 import type {
   Engine, EngineCapabilities, ComputeReceiversRequest, ComputeReceiversResponse,

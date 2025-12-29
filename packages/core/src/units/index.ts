@@ -2,12 +2,7 @@
  * Physical units and conversions for acoustic calculations
  */
 
-import {
-  SPEED_OF_SOUND_20C,
-  STANDARD_TEMPERATURE,
-  STANDARD_PRESSURE,
-  STANDARD_HUMIDITY,
-} from '@geonoise/shared';
+import { STANDARD_TEMPERATURE, STANDARD_PRESSURE, STANDARD_HUMIDITY } from '@geonoise/shared';
 
 // ============================================================================
 // Speed of Sound
