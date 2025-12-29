@@ -98,6 +98,16 @@ if (!ctxEl) {
 const canvas = canvasEl;
 const ctx = ctxEl;
 
+let resizeRaf: number | null = null;
+const resizeObserver = new ResizeObserver(() => {
+  if (resizeRaf !== null) cancelAnimationFrame(resizeRaf);
+  resizeRaf = requestAnimationFrame(() => {
+    resizeRaf = null;
+    resizeCanvas();
+  });
+});
+resizeObserver.observe(canvas.closest('.canvas-frame') ?? canvas);
+
 const capability = detectWebGPU();
 const origin = { latLon: { lat: 0, lon: 0 }, altitude: 0 };
 

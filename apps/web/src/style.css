@@ -153,6 +153,30 @@ button.primary {
   gap: 16px;
 }
 
+@media (min-width: 1101px) {
+  body {
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .app {
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .content,
+  .sidebar,
+  .inspector,
+  .canvas-shell {
+    min-height: 0;
+  }
+
+  .sidebar,
+  .inspector {
+    overflow: auto;
+  }
+}
+
 .panel {
   padding: 16px;
   background: var(--panel);
