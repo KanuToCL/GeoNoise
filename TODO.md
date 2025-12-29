@@ -2,9 +2,10 @@
 
 ## Phase 1 Remaining
 - [x] Wire UI compute to `engineCompute` with `requestId` cancellation, warnings, and timings.
-- [ ] Route UI compute preference into backend router + surface GPU capability reason from `@geonoise/engine-webgpu`.
+- [x] Route UI compute preference into backend router + surface GPU capability reason from `@geonoise/engine-webgpu`.
 - [ ] Save/load scene JSON with migrate/validate/normalize + tests `T6.1.1` and `T6.1.2`.
-- [ ] Incremental recompute on drag (source-only delta + resummation) + test `T7.1.1`.
+- [x] Incremental recompute on drag (source-only delta + resummation).
+- [ ] Test `T7.1.1`: incremental equals full recompute within tolerance.
 - [ ] DoD verification + integration tests.
 - [ ] SPEC docs (`SPEC.*.md`) for Phase 1 behavior.
 

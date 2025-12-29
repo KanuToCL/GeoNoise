@@ -1,3 +1,5 @@
+import { isWebGPUAvailable } from '@geonoise/engine-webgpu';
+
 export type ComputePreference = 'auto' | 'cpu' | 'gpu';
 
 type StorageLike = {
@@ -20,9 +22,10 @@ export function savePreference(preference: ComputePreference, storage: StorageLi
   storage.setItem(STORAGE_KEY, preference);
 }
 
-export function detectWebGPU(
-  env: { navigator?: { gpu?: unknown } } = { navigator: (globalThis as any).navigator }
-): CapabilityStatus {
+export function detectWebGPU(env?: { navigator?: { gpu?: unknown } }): CapabilityStatus {
+  if (!env) {
+    return isWebGPUAvailable();
+  }
   if (env.navigator && (env.navigator as { gpu?: unknown }).gpu) {
     return { ok: true };
   }

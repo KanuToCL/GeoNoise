@@ -8,7 +8,7 @@ import {
 import { engineCompute } from '@geonoise/engine-backends';
 import { createEmptyScene } from '@geonoise/core';
 import type { ComputePanelResponse, ComputeReceiversResponse } from '@geonoise/engine';
-import { panelId } from '@geonoise/shared';
+import { panelId, MIN_LEVEL } from '@geonoise/shared';
 import { buildCsv } from './export.js';
 import type { SceneResults, PanelResult } from './export.js';
 import { formatLevel, formatMeters } from './format.js';
@@ -53,6 +53,12 @@ type DragState =
       id: string;
       offset: Point;
     };
+
+type DragContribution = {
+  sourceId: string;
+  receiverEnergy: Map<string, number>;
+  panelEnergy: Map<string, Float64Array>;
+};
 
 const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
 const coordLabel = document.querySelector('#coordLabel') as HTMLDivElement | null;
@@ -134,6 +140,9 @@ let measureStart: Point | null = null;
 let measureEnd: Point | null = null;
 let lastComputeAt = 0;
 let results: SceneResults = { receivers: [], panels: [] };
+let receiverEnergyTotals = new Map<string, number>();
+let panelEnergyTotals = new Map<string, Float64Array>();
+let dragContribution: DragContribution | null = null;
 
 let sourceSeq = 3;
 let receiverSeq = 3;
@@ -201,6 +210,16 @@ function distance(a: Point, b: Point) {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
+function dbToEnergy(level: number) {
+  if (level <= MIN_LEVEL) return 0;
+  return Math.pow(10, level / 10);
+}
+
+function energyToDb(energy: number) {
+  if (energy <= 0) return MIN_LEVEL;
+  return 10 * Math.log10(energy);
+}
+
 function pointInPolygon(point: Point, polygon: Point[]) {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
@@ -213,6 +232,47 @@ function pointInPolygon(point: Point, polygon: Point[]) {
     if (intersect) inside = !inside;
   }
   return inside;
+}
+
+function panelSamplesToEnergy(samples: PanelResult['samples']) {
+  const energies = new Float64Array(samples.length);
+  for (let i = 0; i < samples.length; i += 1) {
+    energies[i] = dbToEnergy(samples[i].LAeq);
+  }
+  return energies;
+}
+
+function recomputePanelStats(panelResult: PanelResult) {
+  let min = Infinity;
+  let max = -Infinity;
+  let energySum = 0;
+  const laeqs: number[] = [];
+
+  for (const sample of panelResult.samples) {
+    const level = sample.LAeq;
+    if (level <= MIN_LEVEL) continue;
+    laeqs.push(level);
+    if (level < min) min = level;
+    if (level > max) max = level;
+    energySum += dbToEnergy(level);
+  }
+
+  if (!laeqs.length || energySum <= 0) {
+    panelResult.LAeq_min = MIN_LEVEL;
+    panelResult.LAeq_max = MIN_LEVEL;
+    panelResult.LAeq_avg = MIN_LEVEL;
+    panelResult.LAeq_p95 = MIN_LEVEL;
+    return;
+  }
+
+  const avg = energyToDb(energySum / laeqs.length);
+  const sorted = [...laeqs].sort((a, b) => a - b);
+  const p95Index = Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1));
+
+  panelResult.LAeq_min = min;
+  panelResult.LAeq_max = max;
+  panelResult.LAeq_avg = avg;
+  panelResult.LAeq_p95 = sorted[p95Index];
 }
 
 function getComputePreference(): ComputePreference {
@@ -253,6 +313,19 @@ function buildEngineScene() {
   return engineScene;
 }
 
+function buildPanelPayload(panel: Panel) {
+  return {
+    panelId: panelId(panel.id),
+    sampling: { type: 'grid' as const, resolution: panel.sampling.resolution, pointCount: panel.sampling.pointCap },
+  };
+}
+
+function buildSingleSourceScene(sourceId: string) {
+  const engineScene = buildEngineScene();
+  engineScene.sources = engineScene.sources.filter((source) => source.id === sourceId);
+  return engineScene;
+}
+
 function pruneResults() {
   const receiverIds = new Set(scene.receivers.map((receiver) => receiver.id));
   results.receivers = results.receivers.filter((receiver) => receiverIds.has(receiver.id));
@@ -287,6 +360,7 @@ function updatePanelResult(panelResult: PanelResult) {
   } else {
     results.panels.push(panelResult);
   }
+  panelEnergyTotals.set(panelResult.panelId, panelSamplesToEnergy(panelResult.samples));
 }
 
 async function computeReceivers(engineScene: ReturnType<typeof buildEngineScene>, preference: ComputePreference) {
@@ -307,6 +381,7 @@ async function computeReceivers(engineScene: ReturnType<typeof buildEngineScene>
         LAeq: result.LAeq,
       };
     });
+    receiverEnergyTotals = new Map(results.receivers.map((receiver) => [receiver.id, dbToEnergy(receiver.LAeq)]));
     updateStatus(response);
     renderResults();
     drawScene();
@@ -326,10 +401,7 @@ async function computePanel(
       {
         kind: 'panel',
         scene: engineScene,
-        payload: {
-          panelId: panelId(panel.id),
-          sampling: { type: 'grid', resolution: panel.sampling.resolution, pointCount: panel.sampling.pointCap },
-        },
+        payload: buildPanelPayload(panel),
       },
       preference,
       `panel:${panel.id}`
@@ -363,6 +435,9 @@ function computeScene() {
   pruneResults();
   renderResults();
   drawScene();
+  dragContribution = null;
+  receiverEnergyTotals = new Map();
+  panelEnergyTotals = new Map();
 
   if (statusPill) statusPill.textContent = 'Computing...';
   const preference = getComputePreference();
@@ -371,6 +446,187 @@ function computeScene() {
   void computeReceivers(engineScene, preference);
   for (const panel of scene.panels) {
     void computePanel(engineScene, preference, panel);
+  }
+}
+
+function primeDragContribution(sourceId: string) {
+  const engineScene = buildSingleSourceScene(sourceId);
+  const preference = getComputePreference();
+  dragContribution = {
+    sourceId,
+    receiverEnergy: new Map(),
+    panelEnergy: new Map(),
+  };
+
+  if (scene.receivers.length) {
+    void primeReceiverContribution(engineScene, preference, sourceId);
+  }
+  for (const panel of scene.panels) {
+    void primePanelContribution(engineScene, preference, sourceId, panel);
+  }
+}
+
+function receiverBaselineReady(sourceId: string) {
+  if (!dragContribution || dragContribution.sourceId !== sourceId) return false;
+  if (scene.receivers.length === 0) return true;
+  return dragContribution.receiverEnergy.size >= scene.receivers.length;
+}
+
+async function primeReceiverContribution(
+  engineScene: ReturnType<typeof buildEngineScene>,
+  preference: ComputePreference,
+  sourceId: string
+) {
+  try {
+    const response = (await engineCompute(
+      { kind: 'receivers', scene: engineScene, payload: {} },
+      preference,
+      `drag:${sourceId}:receivers`
+    )) as ComputeReceiversResponse;
+    const energies = new Map<string, number>();
+    for (const result of response.results) {
+      energies.set(String(result.receiverId), dbToEnergy(result.LAeq));
+    }
+    if (dragContribution && dragContribution.sourceId === sourceId) {
+      dragContribution.receiverEnergy = energies;
+    }
+  } catch (error) {
+    if (isStaleError(error)) return;
+    showComputeError('Receivers', error);
+  }
+}
+
+async function primePanelContribution(
+  engineScene: ReturnType<typeof buildEngineScene>,
+  preference: ComputePreference,
+  sourceId: string,
+  panel: Panel
+) {
+  try {
+    const response = (await engineCompute(
+      { kind: 'panel', scene: engineScene, payload: buildPanelPayload(panel) },
+      preference,
+      `drag:${sourceId}:panel:${panel.id}`
+    )) as ComputePanelResponse;
+    const energies = panelSamplesToEnergy(response.result.samples ?? []);
+    if (dragContribution && dragContribution.sourceId === sourceId) {
+      dragContribution.panelEnergy.set(panel.id, energies);
+    }
+  } catch (error) {
+    if (isStaleError(error)) return;
+    showComputeError(`Panel ${panel.id}`, error);
+  }
+}
+
+function applyReceiverDelta(sourceId: string, newEnergies: Map<string, number>) {
+  if (!dragContribution || dragContribution.sourceId !== sourceId) return false;
+  if (!receiverBaselineReady(sourceId)) return false;
+
+  for (const receiver of results.receivers) {
+    const id = receiver.id;
+    const totalEnergy = receiverEnergyTotals.get(id) ?? dbToEnergy(receiver.LAeq);
+    const previousEnergy = dragContribution.receiverEnergy.get(id) ?? 0;
+    const nextEnergy = newEnergies.get(id) ?? 0;
+    const combined = totalEnergy + nextEnergy - previousEnergy;
+    receiverEnergyTotals.set(id, combined);
+    receiver.LAeq = energyToDb(combined);
+    dragContribution.receiverEnergy.set(id, nextEnergy);
+  }
+
+  return true;
+}
+
+function applyPanelDelta(sourceId: string, panelIdValue: string, newEnergies: Float64Array) {
+  if (!dragContribution || dragContribution.sourceId !== sourceId) return false;
+  const previous = dragContribution.panelEnergy.get(panelIdValue);
+  const panelResult = results.panels.find((panel) => panel.panelId === panelIdValue);
+  if (!previous || !panelResult) return false;
+
+  let totals = panelEnergyTotals.get(panelIdValue);
+  if (!totals) {
+    totals = panelSamplesToEnergy(panelResult.samples);
+    panelEnergyTotals.set(panelIdValue, totals);
+  }
+
+  if (totals.length !== newEnergies.length || previous.length !== newEnergies.length || panelResult.samples.length !== newEnergies.length) {
+    return false;
+  }
+
+  for (let i = 0; i < newEnergies.length; i += 1) {
+    const combined = totals[i] + newEnergies[i] - previous[i];
+    totals[i] = combined;
+    panelResult.samples[i].LAeq = energyToDb(combined);
+    previous[i] = newEnergies[i];
+  }
+
+  recomputePanelStats(panelResult);
+  return true;
+}
+
+async function computeReceiversIncremental(
+  engineScene: ReturnType<typeof buildEngineScene>,
+  preference: ComputePreference,
+  sourceId: string
+) {
+  if (!receiverBaselineReady(sourceId)) return;
+  try {
+    const response = (await engineCompute(
+      { kind: 'receivers', scene: engineScene, payload: {} },
+      preference,
+      `drag:${sourceId}:receivers`
+    )) as ComputeReceiversResponse;
+    const energies = new Map<string, number>();
+    for (const result of response.results) {
+      energies.set(String(result.receiverId), dbToEnergy(result.LAeq));
+    }
+    if (applyReceiverDelta(sourceId, energies)) {
+      updateStatus(response);
+      renderResults();
+      drawScene();
+    }
+  } catch (error) {
+    if (isStaleError(error)) return;
+    showComputeError('Receivers', error);
+  }
+}
+
+async function computePanelIncremental(
+  engineScene: ReturnType<typeof buildEngineScene>,
+  preference: ComputePreference,
+  sourceId: string,
+  panel: Panel
+) {
+  if (!dragContribution || dragContribution.sourceId !== sourceId) return;
+  if (!dragContribution.panelEnergy.has(panel.id)) return;
+  try {
+    const response = (await engineCompute(
+      { kind: 'panel', scene: engineScene, payload: buildPanelPayload(panel) },
+      preference,
+      `drag:${sourceId}:panel:${panel.id}`
+    )) as ComputePanelResponse;
+    const energies = panelSamplesToEnergy(response.result.samples ?? []);
+    if (applyPanelDelta(sourceId, panel.id, energies)) {
+      renderResults();
+      drawScene();
+    }
+  } catch (error) {
+    if (isStaleError(error)) return;
+    showComputeError(`Panel ${panel.id}`, error);
+  }
+}
+
+function computeSceneIncremental(sourceId: string) {
+  if (!dragContribution || dragContribution.sourceId !== sourceId) {
+    primeDragContribution(sourceId);
+    return;
+  }
+
+  const preference = getComputePreference();
+  const engineScene = buildSingleSourceScene(sourceId);
+
+  void computeReceiversIncremental(engineScene, preference, sourceId);
+  for (const panel of scene.panels) {
+    void computePanelIncremental(engineScene, preference, sourceId, panel);
   }
 }
 
@@ -889,7 +1145,11 @@ function handlePointerMove(event: MouseEvent) {
     const now = performance.now();
     if (now - lastComputeAt > 120) {
       lastComputeAt = now;
-      computeScene();
+      if (activeDrag.type === 'source') {
+        computeSceneIncremental(activeDrag.id);
+      } else {
+        computeScene();
+      }
     } else {
       drawScene();
     }
@@ -945,6 +1205,7 @@ function handlePointerDown(event: MouseEvent) {
       const source = scene.sources.find((item) => item.id === hit.id);
       if (source) {
         dragState = { type: 'source', id: source.id, offset: { x: worldHit.x - source.x, y: worldHit.y - source.y } };
+        primeDragContribution(source.id);
       }
     }
     if (hit.type === 'receiver') {
