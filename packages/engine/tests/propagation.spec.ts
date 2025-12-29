@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { agrIsoEq10Db, calculatePropagation, calculateSPL } from '../src/propagation/index.js';
+import { agrIsoEq10Db, calculatePropagation, calculateSPL, groundEffect } from '../src/propagation/index.js';
+import { GroundType } from '@geonoise/core';
 import { getDefaultEngineConfig } from '../src/api/index.js';
 import { CPUEngine } from '../src/compute/index.js';
 import { createEmptyScene } from '@geonoise/core';
@@ -103,9 +104,18 @@ describe('Propagation v1 behavior', () => {
 
   it('legacy ISO Eq.10 Agr is non-negative and matches expected values', () => {
     expect(agrIsoEq10Db(0.5, 1.5, 1.5)).toBe(0);
-    expect(agrIsoEq10Db(20, 1.5, 1.5)).toBeCloseTo(0.75, 2);
+    expect(agrIsoEq10Db(20, 1.5, 1.5)).toBeCloseTo(0, 4);
     const far = agrIsoEq10Db(200, 1.5, 1.5);
     expect(far).toBeGreaterThan(4.4);
     expect(far).toBeLessThan(4.8);
+  });
+
+  it('legacy ground effect applies only to soft ground', () => {
+    const hard = groundEffect(20, 1.5, 1.5, GroundType.Hard, 1000);
+    const mixed = groundEffect(20, 1.5, 1.5, GroundType.Mixed, 1000);
+    const soft = groundEffect(20, 1.5, 1.5, GroundType.Soft, 1000);
+    expect(hard).toBe(0);
+    expect(mixed).toBe(0);
+    expect(soft).toBeGreaterThanOrEqual(0);
   });
 });

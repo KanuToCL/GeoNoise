@@ -132,9 +132,10 @@ export function atmosphericAbsorptionOverall(
  * Uses simplified mean height hm = (hs + hr) / 2 (ISO Fig. 3 method omitted).
  */
 export function agrIsoEq10Db(distance: number, sourceHeight: number, receiverHeight: number): number {
+  // ISO Eq. (10) expects source–receiver distance; use full 3D distance (r1) here.
   const hm = 0.5 * (sourceHeight + receiverHeight);
   const d = Math.max(distance, 1.0);
-  const agr = 4.8 - (2 * hm / d) * (17 + (200 / d));
+  const agr = 4.8 - (2 * hm / d) * (17 + (300 / d));
   return Math.max(0, agr);
 }
 
@@ -143,7 +144,7 @@ export function agrIsoEq10Db(distance: number, sourceHeight: number, receiverHei
  * @param distance - Distance in meters
  * @param sourceHeight - Source height above ground in meters
  * @param receiverHeight - Receiver height above ground in meters
- * @param groundType - Type of ground surface (legacy ignores this)
+ * @param groundType - Type of ground surface (applied only for soft)
  * @param frequency - Frequency in Hz (legacy ignores this)
  */
 export function groundEffect(
@@ -153,8 +154,8 @@ export function groundEffect(
   groundType: GroundType,
   frequency: number
 ): number {
-  void groundType;
   void frequency;
+  if (groundType !== GroundType.Soft) return 0;
   return agrIsoEq10Db(distance, sourceHeight, receiverHeight);
 }
 

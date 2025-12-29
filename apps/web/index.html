@@ -244,8 +244,9 @@
               <li>Atmospheric absorption: Aatm = alpha(f,T,RH,P) * distance, using Simple or ISO 9613-1.</li>
               <li>Broadband uses a representative frequency of 1000 Hz (no per-band propagation yet).</li>
               <li>Ground effect: legacy ISO 9613-2-style correction or optional two-ray phasor model; two-ray can boost or dip levels via interference.</li>
-              <li>Legacy ground: ISO 9613-2 Eq. (10) with hm=(hs+hr)/2 and negative values clamped to 0; Dn is intentionally omitted.</li>
-              <li>Two-ray ground: direct + reflected paths are summed as complex phasors using a Delany–Bazley impedance reflection coefficient.</li>
+              <li>Legacy ground: ISO 9613-2 Eq. (10) with hm=(hs+hr)/2, dd=max(r1,1), 300/dd term, and negative values clamped to 0; applied only for soft ground; Dn is intentionally omitted.</li>
+              <li>Two-ray ground: direct + reflected paths are summed as complex phasors using Delany–Bazley impedance (not Miki) and numerical distance w.</li>
+              <li>Two-ray guards: asymptotic F(w) for |w|>=4 with plane-wave fallback for small |w|, cosθ clamp, |Γ| cap, and |R| floor.</li>
               <li>Barrier loss: Maekawa formula is implemented but not wired without barrier geometry.</li>
             </ul>
           </div>

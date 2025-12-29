@@ -29,6 +29,14 @@ export function complexAbs(a: Complex): number {
   return Math.sqrt(a.re * a.re + a.im * a.im);
 }
 
+export function complexSqrt(a: Complex): Complex {
+  const r = complexAbs(a);
+  if (r === 0) return { re: 0, im: 0 };
+  const t = Math.sqrt((r + a.re) / 2);
+  const u = Math.sqrt((r - a.re) / 2);
+  return { re: t, im: a.im < 0 ? -u : u };
+}
+
 export function complexExpj(phi: number): Complex {
   return { re: Math.cos(phi), im: Math.sin(phi) };
 }
