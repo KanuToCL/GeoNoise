@@ -16,6 +16,7 @@ export type PanelResult = {
   LAeq_min: number;
   LAeq_max: number;
   LAeq_avg: number;
+  LAeq_p50: number;
   LAeq_p95: number;
   samples: PanelSample[];
 };
@@ -37,6 +38,7 @@ export function buildCsv(results: SceneResults) {
     'LAeq_min',
     'LAeq_max',
     'LAeq_avg',
+    'LAeq_p50',
     'LAeq_p95',
   ];
   const rows = [header.join(',')];
@@ -85,6 +87,7 @@ export function buildCsv(results: SceneResults) {
       formatLevel(panel.LAeq_min),
       formatLevel(panel.LAeq_max),
       formatLevel(panel.LAeq_avg),
+      formatLevel(panel.LAeq_p50),
       formatLevel(panel.LAeq_p95),
     ].join(','));
   }

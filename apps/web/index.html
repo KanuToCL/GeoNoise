@@ -54,7 +54,7 @@
               <button class="tool-button is-active" data-tool="select" type="button">Select</button>
               <button class="tool-button" data-tool="add-source" type="button">Add Source</button>
               <button class="tool-button" data-tool="add-receiver" type="button">Add Receiver</button>
-              <button class="tool-button" data-tool="add-panel" type="button">Add Panel</button>
+              <button class="tool-button" data-tool="add-panel" type="button">Add Measure Grid</button>
               <button class="tool-button" data-tool="measure" type="button">Measure</button>
               <button class="tool-button" data-tool="delete" type="button">Delete</button>
             </div>
@@ -73,7 +73,7 @@
             </label>
             <label class="toggle">
               <input type="checkbox" id="layerPanels" checked />
-              <span>Panels</span>
+              <span>Measure Grids</span>
             </label>
             <label class="toggle">
               <input type="checkbox" id="layerGrid" />
@@ -95,7 +95,7 @@
             <div class="scene-meta">
               <div>Sources: <span id="countSources">2</span></div>
               <div>Receivers: <span id="countReceivers">2</span></div>
-              <div>Panels: <span id="countPanels">1</span></div>
+              <div>Measure grids: <span id="countPanels">1</span></div>
             </div>
           </section>
         </aside>
@@ -151,19 +151,20 @@
           <section class="panel">
             <h2>Results</h2>
             <div class="results-section">
-              <div class="results-title">Receivers</div>
-              <div class="results-table" id="receiverTable"></div>
+              <div class="results-title">Measure Grid</div>
+              <div class="panel-legend" id="panelLegend"></div>
+              <div class="panel-stats" id="panelStats"></div>
             </div>
             <div class="results-section">
-              <div class="results-title">Panel Stats</div>
-              <div class="panel-stats" id="panelStats"></div>
+              <div class="results-title">Receivers</div>
+              <div class="results-table" id="receiverTable"></div>
             </div>
             <button class="ghost" id="exportCsv" type="button">Export CSV</button>
           </section>
 
           <section class="panel">
             <h2>Notes</h2>
-            <p class="note">Drag nodes and panels to trigger recompute once wired.</p>
+            <p class="note">Drag nodes and measure grids to trigger recompute once wired.</p>
           </section>
         </aside>
       </div>

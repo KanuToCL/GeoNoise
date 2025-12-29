@@ -52,6 +52,12 @@ type DragState =
       type: 'source' | 'receiver' | 'panel';
       id: string;
       offset: Point;
+    }
+  | {
+      type: 'panel-vertex';
+      id: string;
+      index: number;
+      offset: Point;
     };
 
 type DragContribution = {
@@ -76,6 +82,7 @@ const modeLabel = document.querySelector('#modeLabel') as HTMLSpanElement | null
 const propertiesBody = document.querySelector('#propertiesBody') as HTMLDivElement | null;
 const receiverTable = document.querySelector('#receiverTable') as HTMLDivElement | null;
 const panelStats = document.querySelector('#panelStats') as HTMLDivElement | null;
+const panelLegend = document.querySelector('#panelLegend') as HTMLDivElement | null;
 const exportCsv = document.querySelector('#exportCsv') as HTMLButtonElement | null;
 
 const layerSources = document.querySelector('#layerSources') as HTMLInputElement | null;
@@ -221,6 +228,45 @@ function distance(a: Point, b: Point) {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+
+const sampleRamp = [
+  { stop: 0, color: { r: 32, g: 86, b: 140 } },
+  { stop: 0.45, color: { r: 42, g: 157, b: 143 } },
+  { stop: 0.75, color: { r: 233, g: 196, b: 106 } },
+  { stop: 1, color: { r: 231, g: 111, b: 81 } },
+];
+
+function getSampleColor(ratio: number) {
+  const clamped = Math.min(Math.max(ratio, 0), 1);
+  for (let i = 0; i < sampleRamp.length - 1; i += 1) {
+    const current = sampleRamp[i];
+    const next = sampleRamp[i + 1];
+    if (clamped >= current.stop && clamped <= next.stop) {
+      const span = next.stop - current.stop || 1;
+      const t = (clamped - current.stop) / span;
+      return {
+        r: Math.round(lerp(current.color.r, next.color.r, t)),
+        g: Math.round(lerp(current.color.g, next.color.g, t)),
+        b: Math.round(lerp(current.color.b, next.color.b, t)),
+      };
+    }
+  }
+  return sampleRamp[sampleRamp.length - 1].color;
+}
+
+function colorToCss(color: { r: number; g: number; b: number }) {
+  return `rgb(${color.r}, ${color.g}, ${color.b})`;
+}
+
+function panelSampleRatio(sample: { LAeq: number }, min: number, max: number) {
+  const span = max - min;
+  if (span <= 0) return 0;
+  return (sample.LAeq - min) / span;
+}
+
 function dbToEnergy(level: number) {
   if (level <= MIN_LEVEL) return 0;
   return Math.pow(10, level / 10);
@@ -272,19 +318,80 @@ function recomputePanelStats(panelResult: PanelResult) {
     panelResult.LAeq_min = MIN_LEVEL;
     panelResult.LAeq_max = MIN_LEVEL;
     panelResult.LAeq_avg = MIN_LEVEL;
+    panelResult.LAeq_p50 = MIN_LEVEL;
     panelResult.LAeq_p95 = MIN_LEVEL;
     return;
   }
 
   const avg = energyToDb(energySum / laeqs.length);
   const sorted = [...laeqs].sort((a, b) => a - b);
+  const p50Index = Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.5) - 1));
   const p95Index = Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1));
 
   panelResult.LAeq_min = min;
   panelResult.LAeq_max = max;
   panelResult.LAeq_avg = avg;
+  panelResult.LAeq_p50 = sorted[p50Index];
   panelResult.LAeq_p95 = sorted[p95Index];
 }
+
+function renderPanelLegend() {
+  if (!panelLegend) return;
+  const current = selection;
+  if (current.type !== 'panel') {
+    panelLegend.innerHTML = '<span class="legend-empty">Select a measure grid to view the color range.</span>';
+    return;
+  }
+
+  const result = results.panels.find((panel) => panel.panelId === current.id);
+  if (!result || !Number.isFinite(result.LAeq_min) || !Number.isFinite(result.LAeq_max)) {
+    panelLegend.innerHTML = '<span class="legend-empty">Measure grid results pending.</span>';
+    return;
+  }
+
+  const gradientStops = [0, 0.25, 0.5, 0.75, 1]
+    .map((stop) => `${colorToCss(getSampleColor(stop))} ${Math.round(stop * 100)}%`)
+    .join(', ');
+
+  panelLegend.innerHTML = `
+    <div class="legend-bar" style="background: linear-gradient(90deg, ${gradientStops});"></div>
+    <div class="legend-labels">
+      <span>${formatLevel(result.LAeq_min)} dB</span>
+      <span>${formatLevel(result.LAeq_max)} dB</span>
+    </div>
+  `;
+}
+
+function selectionTypeLabel(type: Selection['type']) {
+  if (type === 'panel') return 'Measure grid';
+  if (type === 'source') return 'Source';
+  if (type === 'receiver') return 'Receiver';
+  return 'None';
+}
+
+function toolLabel(tool: Tool) {
+  switch (tool) {
+    case 'add-panel':
+      return 'Add Measure Grid';
+    case 'add-source':
+      return 'Add Source';
+    case 'add-receiver':
+      return 'Add Receiver';
+    case 'measure':
+      return 'Measure';
+    case 'delete':
+      return 'Delete';
+    default:
+      return 'Select';
+  }
+}
+
+const layerLabels: Record<keyof typeof layers, string> = {
+  sources: 'Sources',
+  receivers: 'Receivers',
+  panels: 'Measure Grids',
+  grid: 'Grid',
+};
 
 function getComputePreference(): ComputePreference {
   if (preferenceSelect) return preferenceSelect.value as ComputePreference;
@@ -425,6 +532,7 @@ async function computePanel(
       LAeq_min: result.LAeq_min,
       LAeq_max: result.LAeq_max,
       LAeq_avg: result.LAeq_avg,
+      LAeq_p50: MIN_LEVEL,
       LAeq_p95: result.LAeq_p95,
       samples: (result.samples ?? []).map((sample) => ({
         x: sample.x,
@@ -433,6 +541,7 @@ async function computePanel(
         LAeq: sample.LAeq,
       })),
     };
+    recomputePanelStats(panelResult);
     updatePanelResult(panelResult);
     renderResults();
     drawScene();
@@ -655,15 +764,17 @@ function renderResults() {
   if (panelStats) {
     panelStats.innerHTML = '';
     if (!results.panels.length) {
-      panelStats.textContent = 'No panels.';
+      panelStats.textContent = 'No measure grids.';
     } else {
       for (const panel of results.panels) {
         const stat = document.createElement('div');
-        stat.innerHTML = `<strong>${panel.panelId.toUpperCase()}</strong> min ${formatLevel(panel.LAeq_min)} / max ${formatLevel(panel.LAeq_max)} / avg ${formatLevel(panel.LAeq_avg)} / p95 ${formatLevel(panel.LAeq_p95)} (${panel.sampleCount} pts)`;
+        stat.innerHTML = `<strong>${panel.panelId.toUpperCase()}</strong> min ${formatLevel(panel.LAeq_min)} / p50 ${formatLevel(panel.LAeq_p50)} / max ${formatLevel(panel.LAeq_max)} / avg ${formatLevel(panel.LAeq_avg)} / p95 ${formatLevel(panel.LAeq_p95)} (${panel.sampleCount} pts)`;
         panelStats.appendChild(stat);
       }
     }
   }
+
+  renderPanelLegend();
 }
 
 function createId(prefix: string, seq: number) {
@@ -673,8 +784,7 @@ function createId(prefix: string, seq: number) {
 function setActiveTool(tool: Tool) {
   activeTool = tool;
   if (modeLabel) {
-    const label = tool.replace('-', ' ');
-    modeLabel.textContent = label.charAt(0).toUpperCase() + label.slice(1);
+    modeLabel.textContent = toolLabel(tool);
   }
 
   if (toolGrid) {
@@ -690,9 +800,10 @@ function setSelection(next: Selection) {
   selection = next;
   const current = selection;
   if (selectionLabel) {
-    selectionLabel.textContent = current.type === 'none' ? 'None' : `${current.type} ${current.id}`;
+    selectionLabel.textContent = current.type === 'none' ? 'None' : `${selectionTypeLabel(current.type)} ${current.id}`;
   }
   renderProperties();
+  renderPanelLegend();
   drawScene();
 }
 
@@ -707,7 +818,7 @@ function renderProperties() {
   }
 
   const header = document.createElement('div');
-  header.textContent = `Editing ${current.type} ${current.id}`;
+  header.textContent = `Editing ${selectionTypeLabel(current.type)} ${current.id}`;
   propertiesBody.appendChild(header);
 
   if (current.type === 'source') {
@@ -743,6 +854,10 @@ function renderProperties() {
       panel.sampling.resolution = Math.max(1, value);
       computeScene();
     }));
+    const hint = document.createElement('div');
+    hint.className = 'property-hint';
+    hint.textContent = 'Drag corner handles on the measure grid to reshape.';
+    propertiesBody.appendChild(hint);
   }
 }
 
@@ -795,7 +910,7 @@ function wireLayerToggle(input: HTMLInputElement | null, key: keyof typeof layer
   input.addEventListener('change', () => {
     layers[key] = input.checked;
     if (layerLabel && input.checked) {
-      layerLabel.textContent = key.charAt(0).toUpperCase() + key.slice(1);
+      layerLabel.textContent = layerLabels[key];
     }
     drawScene();
   });
@@ -824,6 +939,21 @@ function wireTools() {
     const tool = button.dataset.tool as Tool;
     setActiveTool(tool);
   });
+}
+
+function hitTestPanelHandle(point: Point) {
+  const current = selection;
+  if (current.type !== 'panel') return null;
+  const panel = scene.panels.find((item) => item.id === current.id);
+  if (!panel) return null;
+  const hitRadius = 10;
+  for (let i = 0; i < panel.points.length; i += 1) {
+    const screen = worldToCanvas(panel.points[i]);
+    if (distance(screen, point) <= hitRadius) {
+      return { panelId: panel.id, index: i };
+    }
+  }
+  return null;
 }
 
 function hitTest(point: Point) {
@@ -958,18 +1088,17 @@ function drawPanelSamples(panelResult: PanelResult) {
   if (!layers.panels) return;
   const min = panelResult.LAeq_min;
   const max = panelResult.LAeq_max;
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(31, 28, 24, 0.2)';
   for (const sample of panelResult.samples) {
-    const ratio = max - min > 0 ? (sample.LAeq - min) / (max - min) : 0;
-    const color = {
-      r: Math.round(42 + ratio * (231 - 42)),
-      g: Math.round(157 + ratio * (111 - 157)),
-      b: Math.round(143 + ratio * (81 - 143)),
-    };
-    ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.7)`;
+    const ratio = panelSampleRatio(sample, min, max);
+    const color = getSampleColor(ratio);
+    ctx.fillStyle = colorToCss(color);
     const pos = worldToCanvas(sample);
     ctx.beginPath();
-    ctx.arc(pos.x, pos.y, 3, 0, Math.PI * 2);
+    ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
     ctx.fill();
+    ctx.stroke();
   }
 }
 
@@ -997,6 +1126,17 @@ function drawPanels() {
       ctx.stroke();
       ctx.strokeStyle = '#264653';
       ctx.lineWidth = 2;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#264653';
+      ctx.lineWidth = 2;
+      for (const point of panel.points) {
+        const handle = worldToCanvas(point);
+        ctx.beginPath();
+        ctx.arc(handle.x, handle.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
     }
   }
 }
@@ -1152,6 +1292,12 @@ function handlePointerMove(event: MouseEvent) {
         panel.points = panel.points.map((pt) => ({ x: pt.x + dx, y: pt.y + dy }));
       }
     }
+    if (activeDrag.type === 'panel-vertex') {
+      const panel = scene.panels.find((item) => item.id === activeDrag.id);
+      if (panel && panel.points[activeDrag.index]) {
+        panel.points[activeDrag.index] = { x: targetPoint.x, y: targetPoint.y };
+      }
+    }
 
     const now = performance.now();
     if (now - lastComputeAt > 120) {
@@ -1203,6 +1349,24 @@ function handlePointerDown(event: MouseEvent) {
     }
     drawScene();
     return;
+  }
+
+  if (activeTool === 'select') {
+    const handleHit = hitTestPanelHandle(canvasPoint);
+    if (handleHit) {
+      setSelection({ type: 'panel', id: handleHit.panelId });
+      const panel = scene.panels.find((item) => item.id === handleHit.panelId);
+      if (panel) {
+        const vertex = panel.points[handleHit.index];
+        dragState = {
+          type: 'panel-vertex',
+          id: panel.id,
+          index: handleHit.index,
+          offset: { x: worldPoint.x - vertex.x, y: worldPoint.y - vertex.y },
+        };
+      }
+      return;
+    }
   }
 
   const hit = hitTest(canvasPoint);

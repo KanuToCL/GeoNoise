@@ -402,6 +402,15 @@ button.primary {
   font-size: 13px;
 }
 
+.property-hint {
+  font-size: 12px;
+  color: #6a5a4b;
+  background: rgba(231, 111, 81, 0.08);
+  border: 1px dashed rgba(231, 111, 81, 0.35);
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
 .results-section {
   display: flex;
   flex-direction: column;
@@ -440,6 +449,31 @@ button.primary {
 
 .panel-stats strong {
   color: var(--accent-dark);
+}
+
+.panel-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.legend-bar {
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+}
+
+.legend-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #6a5a4b;
+}
+
+.legend-empty {
+  font-size: 12px;
+  color: #8a7b6d;
 }
 
 @keyframes fadeIn {
