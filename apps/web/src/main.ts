@@ -1499,6 +1499,17 @@ function wirePointer() {
 
 function wireKeyboard() {
   window.addEventListener('keydown', (event) => {
+    const activeEl = document.activeElement as HTMLElement | null;
+    const target = event.target as HTMLElement | null;
+    const isEditableTarget = (el: HTMLElement | null) => {
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+    };
+    if (isEditableTarget(target) || isEditableTarget(activeEl)) {
+      return;
+    }
+
     if (event.key === 'Escape') {
       setSelection({ type: 'none' });
       measureStart = null;
