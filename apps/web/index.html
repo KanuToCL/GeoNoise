@@ -50,8 +50,14 @@
             >
               Compute
             </button>
+            <!-- Whole-scene noise map ("Mesh All"): compute a padded grid and render as a heatmap overlay. -->
+            <button class="primary ui-button" id="meshButton" type="button" title="Generate a whole-scene noise map.">
+              Generate Map
+            </button>
             <div class="status-chip status-chip--small" id="computeChip">Ready</div>
           </div>
+          <!-- Lightweight feedback for heavy map computation (keeps UI responsive). -->
+          <div class="map-toast" id="mapToast" role="status" aria-live="polite"></div>
           <div class="run-options">
             <label for="computePreference">Backend</label>
             <select class="ui-inset" id="computePreference">
@@ -230,6 +236,11 @@
             <label class="toggle">
               <input type="checkbox" id="layerPanels" checked />
               <span>Measure Grids</span>
+            </label>
+            <!-- Heatmap layer produced by Generate Map. -->
+            <label class="toggle">
+              <input type="checkbox" id="layerNoiseMap" />
+              <span>Noise Map</span>
             </label>
             <label class="toggle">
               <input type="checkbox" id="layerGrid" />

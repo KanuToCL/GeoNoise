@@ -14,7 +14,12 @@ import {
 } from './theme.js';
 import { engineCompute } from '@geonoise/engine-backends';
 import { createEmptyScene, type EngineConfig, type PropagationConfig } from '@geonoise/core';
-import { getDefaultEngineConfig, type ComputePanelResponse, type ComputeReceiversResponse } from '@geonoise/engine';
+import {
+  getDefaultEngineConfig,
+  type ComputeGridResponse,
+  type ComputePanelResponse,
+  type ComputeReceiversResponse,
+} from '@geonoise/engine';
 import { panelId, MIN_LEVEL } from '@geonoise/shared';
 import { buildCsv } from './export.js';
 import type { SceneResults, PanelResult } from './export.js';
@@ -63,6 +68,20 @@ type Barrier = {
   p2: Point;
   height: number;
   transmissionLoss?: number;
+};
+
+// Whole-scene noise map ("Mesh All") visualization:
+// - A grid is computed in the engine (as a temporary receiver lattice).
+// - Values are mapped to a color ramp and drawn as a scaled texture in world coordinates.
+type NoiseMap = {
+  bounds: { minX: number; minY: number; maxX: number; maxY: number };
+  resolution: number;
+  cols: number;
+  rows: number;
+  values: number[];
+  min: number;
+  max: number;
+  texture: HTMLCanvasElement;
 };
 
 type Tool = 'select' | 'add-source' | 'add-receiver' | 'add-panel' | 'add-barrier' | 'measure' | 'delete';
@@ -131,12 +150,14 @@ const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
 const coordLabel = document.querySelector('#coordLabel') as HTMLDivElement | null;
 const layerLabel = document.querySelector('#layerLabel') as HTMLDivElement | null;
 const computeButton = document.querySelector('#computeButton') as HTMLButtonElement | null;
+const meshButton = document.querySelector('#meshButton') as HTMLButtonElement | null;
 const saveButton = document.querySelector('#saveButton') as HTMLButtonElement | null;
 const loadButton = document.querySelector('#loadButton') as HTMLButtonElement | null;
 const sceneNameInput = document.querySelector('#sceneName') as HTMLInputElement | null;
 const sceneDot = document.querySelector('#sceneDot') as HTMLSpanElement | null;
 const sceneStatusLabel = document.querySelector('#sceneStatusLabel') as HTMLSpanElement | null;
 const computeChip = document.querySelector('#computeChip') as HTMLDivElement | null;
+const mapToast = document.querySelector('#mapToast') as HTMLDivElement | null;
 const rulerLabel = document.querySelector('#rulerLabel') as HTMLDivElement | null;
 const rulerLine = document.querySelector('#rulerLine') as HTMLDivElement | null;
 const scaleText = document.querySelector('#scaleText') as HTMLDivElement | null;
@@ -184,6 +205,7 @@ const propagationGroundModelHelp = document.querySelector('#propagationGroundMod
 const layerSources = document.querySelector('#layerSources') as HTMLInputElement | null;
 const layerReceivers = document.querySelector('#layerReceivers') as HTMLInputElement | null;
 const layerPanels = document.querySelector('#layerPanels') as HTMLInputElement | null;
+const layerNoiseMap = document.querySelector('#layerNoiseMap') as HTMLInputElement | null;
 const layerGrid = document.querySelector('#layerGrid') as HTMLInputElement | null;
 
 const countSources = document.querySelector('#countSources') as HTMLSpanElement | null;
@@ -243,6 +265,7 @@ const layers = {
   sources: true,
   receivers: true,
   panels: true,
+  noiseMap: false,
   grid: false,
 };
 
@@ -264,6 +287,7 @@ let barrierDraftAnchored = false;
 let barrierDragActive = false;
 let lastComputeAt = 0;
 let results: SceneResults = { receivers: [], panels: [] };
+let noiseMap: NoiseMap | null = null;
 let receiverEnergyTotals = new Map<string, number>();
 let panelEnergyTotals = new Map<string, Float64Array>();
 let dragContribution: DragContribution | null = null;
@@ -276,6 +300,10 @@ let isDirty = false;
 let computeToken = 0;
 let activeComputeToken = 0;
 let isComputing = false;
+let mapComputeToken = 0;
+let activeMapToken = 0;
+let isMapComputing = false;
+let mapToastTimer: number | null = null;
 
 const snapMeters = 5;
 let basePixelsPerMeter = 3;
@@ -474,6 +502,7 @@ function pushHistory(options?: { markDirty?: boolean }) {
   history.push(snap);
   historyIndex = history.length - 1;
   updateUndoRedoButtons();
+  invalidateNoiseMap();
   if (options?.markDirty !== false) {
     markDirty();
   }
@@ -504,6 +533,7 @@ function applySnapshot(snap: SceneSnapshot) {
   updateCounts();
   setSelection(selection);
   updateUndoRedoButtons();
+  invalidateNoiseMap();
   computeScene();
 }
 
@@ -621,6 +651,55 @@ function getSampleColor(ratio: number) {
 
 function colorToCss(color: { r: number; g: number; b: number }) {
   return `rgb(${color.r}, ${color.g}, ${color.b})`;
+}
+
+function getGridCounts(bounds: ComputeGridResponse['result']['bounds'], resolution: number) {
+  // Derive cols/rows deterministically from bounds+resolution.
+  // We avoid trusting backend-provided cols/rows because (for the current CPU engine)
+  // the values array is produced by nested loops (x outer, y inner) and must match
+  // the exact count implied by bounds/resolution.
+  const cols = Math.max(1, Math.floor((bounds.maxX - bounds.minX) / resolution + 1e-6) + 1);
+  const rows = Math.max(1, Math.floor((bounds.maxY - bounds.minY) / resolution + 1e-6) + 1);
+  return { cols, rows };
+}
+
+function buildNoiseMapTexture(grid: ComputeGridResponse['result']) {
+  // Convert grid values into a per-cell RGBA texture (in grid-space).
+  // The draw step scales this texture into world-space bounds using worldToCanvas().
+  if (!grid.values.length || grid.max <= MIN_LEVEL) return null;
+  const { cols, rows } = getGridCounts(grid.bounds, grid.resolution);
+  const canvas = document.createElement('canvas');
+  canvas.width = cols;
+  canvas.height = rows;
+  const mapCtx = canvas.getContext('2d');
+  if (!mapCtx) return null;
+
+  const image = mapCtx.createImageData(cols, rows);
+  const span = grid.max - grid.min;
+  const alpha = 200;
+
+  for (let y = 0; y < rows; y += 1) {
+    // Canvas image space is y-down; grid space is y-up.
+    const destY = rows - 1 - y;
+    for (let x = 0; x < cols; x += 1) {
+      // IMPORTANT: values are stored with x-major order (x outer loop, y inner loop).
+      const value = grid.values[x * rows + y];
+      const offset = (destY * cols + x) * 4;
+      if (!Number.isFinite(value) || value <= MIN_LEVEL) {
+        image.data[offset + 3] = 0;
+        continue;
+      }
+      const ratio = span > 0 ? (value - grid.min) / span : 0;
+      const color = getSampleColor(ratio);
+      image.data[offset] = color.r;
+      image.data[offset + 1] = color.g;
+      image.data[offset + 2] = color.b;
+      image.data[offset + 3] = alpha;
+    }
+  }
+
+  mapCtx.putImageData(image, 0, 0);
+  return canvas;
 }
 
 function panelSampleRatio(sample: { LAeq: number }, min: number, max: number) {
@@ -810,6 +889,7 @@ const layerLabels: Record<keyof typeof layers, string> = {
   sources: 'Sources',
   receivers: 'Receivers',
   panels: 'Measure Grids',
+  noiseMap: 'Noise Map',
   grid: 'Grid',
 };
 
@@ -879,6 +959,112 @@ function buildEngineScene() {
   }));
 
   return engineScene;
+}
+
+function getSceneBounds() {
+  // Scene bounds for "Generate Map" are based on *active* geometry primitives.
+  // Notes:
+  // - sources are filtered through solo/mute so the map reflects what will be computed.
+  // - barriers contribute their endpoints; buildings/footprints are not yet exposed in the UI.
+  const points: Point[] = [];
+  for (const source of scene.sources) {
+    if (!isSourceEnabled(source)) continue;
+    points.push({ x: source.x, y: source.y });
+  }
+  for (const receiver of scene.receivers) {
+    points.push({ x: receiver.x, y: receiver.y });
+  }
+  for (const barrier of scene.barriers) {
+    points.push({ x: barrier.p1.x, y: barrier.p1.y });
+    points.push({ x: barrier.p2.x, y: barrier.p2.y });
+  }
+
+  if (!points.length) return null;
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const point of points) {
+    if (point.x < minX) minX = point.x;
+    if (point.y < minY) minY = point.y;
+    if (point.x > maxX) maxX = point.x;
+    if (point.y > maxY) maxY = point.y;
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+function getViewportBounds() {
+  // Viewport bounds (current pan/zoom) in world coordinates.
+  // Used to ensure the generated heatmap spans the visible workspace instead of appearing
+  // as a tiny thumbnail when only a small amount of geometry exists.
+  const rect = canvas.getBoundingClientRect();
+  const topLeft = canvasToWorld({ x: 0, y: 0 });
+  const bottomRight = canvasToWorld({ x: rect.width, y: rect.height });
+  return {
+    minX: Math.min(topLeft.x, bottomRight.x),
+    minY: Math.min(topLeft.y, bottomRight.y),
+    maxX: Math.max(topLeft.x, bottomRight.x),
+    maxY: Math.max(topLeft.y, bottomRight.y),
+  };
+}
+
+function mergeBounds(a: { minX: number; minY: number; maxX: number; maxY: number }, b: { minX: number; minY: number; maxX: number; maxY: number }) {
+  // Union of two AABBs.
+  return {
+    minX: Math.min(a.minX, b.minX),
+    minY: Math.min(a.minY, b.minY),
+    maxX: Math.max(a.maxX, b.maxX),
+    maxY: Math.max(a.maxY, b.maxY),
+  };
+}
+
+function buildNoiseMapGridConfig() {
+  // Resolution strategy:
+  // - target ~50 cells across the max dimension (step ~= max(width,height)/50)
+  // - clamp to ~2,500 points total for responsiveness
+  const bounds = getSceneBounds();
+  if (!bounds) return null;
+
+  let { minX, minY, maxX, maxY } = bounds;
+  if (minX === maxX) {
+    minX -= 5;
+    maxX += 5;
+  }
+  if (minY === maxY) {
+    minY -= 5;
+    maxY += 5;
+  }
+
+  const width = maxX - minX;
+  const height = maxY - minY;
+  const padRatio = 0.15;
+  const paddedScene = {
+    minX: minX - width * padRatio,
+    minY: minY - height * padRatio,
+    maxX: maxX + width * padRatio,
+    maxY: maxY + height * padRatio,
+  };
+  // Merge the padded scene bounds with the current viewport so the heatmap fills the workspace.
+  const padded = mergeBounds(paddedScene, getViewportBounds());
+
+  const paddedWidth = padded.maxX - padded.minX;
+  const paddedHeight = padded.maxY - padded.minY;
+  let resolution = Math.max(paddedWidth, paddedHeight) / 50;
+  if (!Number.isFinite(resolution) || resolution <= 0) resolution = 1;
+
+  let cols = Math.ceil(paddedWidth / resolution) + 1;
+  let rows = Math.ceil(paddedHeight / resolution) + 1;
+  const targetPoints = 2500;
+  const pointCount = cols * rows;
+  if (pointCount > targetPoints) {
+    const scale = Math.sqrt(pointCount / targetPoints);
+    resolution *= scale;
+    cols = Math.ceil(paddedWidth / resolution) + 1;
+    rows = Math.ceil(paddedHeight / resolution) + 1;
+  }
+
+  return { bounds: padded, resolution, elevation: 1.5 };
 }
 
 function buildPanelPayload(panel: Panel) {
@@ -1026,7 +1212,100 @@ async function computePanel(
   }
 }
 
+function invalidateNoiseMap() {
+  // Any scene edit, load, undo/redo, or compute invalidates the previously generated map.
+  // Keeping the map "sticky" would require a stable hash of (scene + engineConfig + bounds + resolution).
+  if (isMapComputing) {
+    activeMapToken = ++mapComputeToken;
+    isMapComputing = false;
+    updateMapUI();
+  }
+  noiseMap = null;
+  layers.noiseMap = false;
+  if (layerNoiseMap) {
+    layerNoiseMap.checked = false;
+  }
+  setMapToast(null);
+  drawScene();
+}
+
+async function computeNoiseMap() {
+  // Generates a global noise map without blocking the UI thread.
+  // The actual propagation compute is routed through the CPU worker backend (see engine-backends),
+  // and we yield a frame before awaiting so the "Generating map..." toast is painted.
+  if (isMapComputing) {
+    invalidateNoiseMap();
+    setMapToast('Map canceled', 'error', 2000);
+    return;
+  }
+
+  if (!scene.sources.some((source) => isSourceEnabled(source))) {
+    setMapToast('Enable at least one source to generate a map.', 'error', 3000);
+    return;
+  }
+
+  const gridConfig = buildNoiseMapGridConfig();
+  if (!gridConfig) {
+    setMapToast('Add sources, receivers, or barriers to define the map bounds.', 'error', 3000);
+    return;
+  }
+
+  const preference = getComputePreference();
+  const engineScene = buildEngineScene();
+  const token = ++mapComputeToken;
+  activeMapToken = token;
+  isMapComputing = true;
+  updateMapUI();
+  setMapToast('Generating map...', 'busy');
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+
+  try {
+    const response = (await engineCompute(
+      {
+        kind: 'grid',
+        scene: engineScene,
+        engineConfig,
+        payload: { gridConfig },
+      },
+      preference,
+      'grid:global'
+    )) as ComputeGridResponse;
+
+    if (token !== activeMapToken) return;
+
+    const texture = buildNoiseMapTexture(response.result);
+    if (!texture) {
+      noiseMap = null;
+      setMapToast('Map has no audible values.', 'error', 3000);
+      drawScene();
+      return;
+    }
+
+    const { cols, rows } = getGridCounts(response.result.bounds, response.result.resolution);
+    noiseMap = { ...response.result, cols, rows, texture };
+    layers.noiseMap = true;
+    if (layerNoiseMap) layerNoiseMap.checked = true;
+    if (layerLabel) layerLabel.textContent = layerLabels.noiseMap;
+
+    drawScene();
+    const timing = response.timings?.totalMs;
+    const timingLabel = typeof timing === 'number' ? `${timing.toFixed(0)} ms` : 'ready';
+    setMapToast(`Map ready (${timingLabel})`, 'ready', 2000);
+  } catch (error) {
+    if (isStaleError(error)) return;
+    setMapToast('Map compute failed.', 'error', 3000);
+    // eslint-disable-next-line no-console
+    console.error('Map compute failed', error);
+  } finally {
+    if (token === activeMapToken) {
+      isMapComputing = false;
+      updateMapUI();
+    }
+  }
+}
+
 function computeScene() {
+  invalidateNoiseMap();
   pruneResults();
   renderResults();
   drawScene();
@@ -1670,6 +1949,36 @@ function updateComputeUI() {
   updateComputeChip(isComputing);
 }
 
+function updateMapButtonState() {
+  if (!meshButton) return;
+  meshButton.textContent = isMapComputing ? 'Cancel Map' : 'Generate Map';
+  meshButton.classList.toggle('is-cancel', isMapComputing);
+}
+
+function setMapToast(message: string | null, state: 'busy' | 'ready' | 'error' = 'busy', autoHideMs?: number) {
+  if (!mapToast) return;
+  if (mapToastTimer) {
+    window.clearTimeout(mapToastTimer);
+    mapToastTimer = null;
+  }
+  if (!message) {
+    mapToast.classList.remove('is-visible');
+    return;
+  }
+  mapToast.textContent = message;
+  mapToast.dataset.state = state;
+  mapToast.classList.add('is-visible');
+  if (autoHideMs) {
+    mapToastTimer = window.setTimeout(() => {
+      mapToast?.classList.remove('is-visible');
+    }, autoHideMs);
+  }
+}
+
+function updateMapUI() {
+  updateMapButtonState();
+}
+
 function wireThemeSwitcher() {
   const storedTheme = getSavedTheme();
   applyAndPersistTheme(storedTheme);
@@ -1913,6 +2222,23 @@ function drawGrid() {
   }
 }
 
+function drawNoiseMap() {
+  // Draw the precomputed heatmap texture scaled to its world-space bounds.
+  // This is the critical step: the map is not drawn at native pixel size; it is stretched
+  // to cover (minX,minY)-(maxX,maxY) in world coordinates.
+  if (!noiseMap) return;
+  const topLeft = worldToCanvas({ x: noiseMap.bounds.minX, y: noiseMap.bounds.maxY });
+  const bottomRight = worldToCanvas({ x: noiseMap.bounds.maxX, y: noiseMap.bounds.minY });
+  const width = bottomRight.x - topLeft.x;
+  const height = bottomRight.y - topLeft.y;
+  if (width <= 0 || height <= 0) return;
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(noiseMap.texture, topLeft.x, topLeft.y, width, height);
+  ctx.restore();
+}
+
 function drawMeasurement() {
   if (!measureStart || !measureEnd) return;
   const start = worldToCanvas(measureStart);
@@ -2154,6 +2480,10 @@ function drawScene() {
   ctx.clearRect(0, 0, rect.width, rect.height);
   ctx.fillStyle = canvasTheme.canvasBg;
   ctx.fillRect(0, 0, rect.width, rect.height);
+
+  if (layers.noiseMap) {
+    drawNoiseMap();
+  }
 
   if (layers.grid) {
     drawGrid();
@@ -2619,6 +2949,13 @@ function wireComputeButton() {
   });
 }
 
+function wireMeshButton() {
+  if (!meshButton) return;
+  meshButton.addEventListener('click', () => {
+    void computeNoiseMap();
+  });
+}
+
 function wireSceneName() {
   if (!sceneNameInput) return;
   sceneNameInput.addEventListener('input', () => {
@@ -2717,6 +3054,7 @@ function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
   setSelection({ type: 'none' });
   history = [];
   historyIndex = -1;
+  invalidateNoiseMap();
   pushHistory({ markDirty: false });
   renderResults();
   computeScene();
@@ -2938,6 +3276,7 @@ function init() {
   wireLayerToggle(layerSources, 'sources');
   wireLayerToggle(layerReceivers, 'receivers');
   wireLayerToggle(layerPanels, 'panels');
+  wireLayerToggle(layerNoiseMap, 'noiseMap');
   wireLayerToggle(layerGrid, 'grid');
   wirePreference();
   wireTools();
@@ -2949,6 +3288,7 @@ function init() {
   wirePropagationControls();
   wireHistory();
   wireComputeButton();
+  wireMeshButton();
   wireSceneName();
   wireSaveLoad();
   wireCanvasHelp();
@@ -2957,6 +3297,7 @@ function init() {
   updateUndoRedoButtons();
   updateSceneStatus();
   setActiveTool(activeTool);
+  updateMapUI();
   resizeCanvas();
   pushHistory({ markDirty: false });
   markSaved();
