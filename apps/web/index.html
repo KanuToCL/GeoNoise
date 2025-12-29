@@ -24,36 +24,73 @@
   <body>
     <div class="app">
       <header class="topbar ui-surface">
-        <div class="brand">
-          <span class="brand-mark"></span>
-          <div>
-            <div class="brand-title">GeoNoise</div>
-            <div class="brand-sub">Phase 1 Console</div>
+        <div class="topbar-left">
+          <div class="brand">
+            <span class="brand-mark"></span>
+            <div>
+              <div class="brand-title">GeoNoise</div>
+              <div class="brand-sub">Phase 1 Console</div>
+            </div>
+          </div>
+          <div class="scene-meta">
+            <input class="scene-name ui-inset" id="sceneName" type="text" value="Untitled" aria-label="Scene name" />
+            <div class="scene-status" id="sceneStatus" aria-live="polite">
+              <span class="scene-dot" id="sceneDot" data-state="saved"></span>
+              <span class="scene-status-label" id="sceneStatusLabel">Saved</span>
+            </div>
           </div>
         </div>
-        <div class="preference">
-          <label for="computePreference">Compute</label>
-          <select class="ui-inset" id="computePreference">
-            <option value="cpu">CPU</option>
-          </select>
-        </div>
-        <div class="theme-switcher" id="themeSwitcher">
-          <span class="theme-label">Theme</span>
-          <div class="theme-segmented" role="group" aria-label="Theme">
-            <button class="theme-option is-active" data-theme-option="default" type="button">Default</button>
-            <button class="theme-option" data-theme-option="neumorphic" type="button">
-              Neumorphic <span class="tag">Experimental</span>
+        <div class="topbar-center">
+          <div class="run-group">
+            <button
+              class="primary ui-button"
+              id="computeButton"
+              type="button"
+              title="Run propagation and update receiver/grid levels."
+            >
+              Compute
             </button>
+            <div class="status-chip status-chip--small" id="computeChip">Ready</div>
+          </div>
+          <div class="run-options">
+            <label for="computePreference">Backend</label>
+            <select class="ui-inset" id="computePreference">
+              <option value="cpu">CPU</option>
+            </select>
           </div>
         </div>
-        <div class="status-chip" id="computeChip">Ready</div>
-        <div class="actions">
-          <button class="ghost ui-button" type="button" title="Open a saved scene.">Load</button>
-          <button class="ghost ui-button" type="button" title="Save this scene as JSON.">Save</button>
+        <div class="topbar-right">
+          <button class="ghost ui-button" id="saveButton" type="button" title="Save this scene as JSON.">Save</button>
+          <button class="ghost ui-button" id="loadButton" type="button" title="Open a saved scene.">Load</button>
           <button class="ghost ui-button" id="undoButton" type="button" title="Undo the last change.">Undo</button>
           <button class="ghost ui-button" id="redoButton" type="button" title="Redo the last change.">Redo</button>
-          <button class="ghost ui-button" id="aboutButton" type="button" title="Model notes, assumptions, and limitations.">About</button>
-          <button class="primary ui-button" type="button" title="Run propagation and update receiver/grid levels.">Compute</button>
+          <div class="action-overflow">
+            <button
+              class="ghost ui-button action-overflow-toggle"
+              id="actionOverflowToggle"
+              type="button"
+              aria-label="More actions"
+              aria-expanded="false"
+            >
+              ...
+            </button>
+            <div class="action-secondary" id="actionSecondary">
+              <div class="overflow-section">
+                <div class="overflow-title">Theme</div>
+                <div class="theme-switcher" id="themeSwitcher">
+                  <div class="theme-segmented" role="group" aria-label="Theme">
+                    <button class="theme-option is-active" data-theme-option="default" type="button">Default</button>
+                    <button class="theme-option" data-theme-option="neumorphic" type="button">
+                      Neumorphic <span class="tag">Experimental</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <button class="ghost ui-button" id="aboutButton" type="button" title="Model notes, assumptions, and limitations.">
+                About
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -85,7 +122,6 @@
               </div>
             </div>
             <div class="tool-instruction" id="toolInstruction"></div>
-            <div class="tool-note">Units: meters (local canvas).</div>
           </section>
 
           <section class="panel ui-surface">
@@ -236,9 +272,21 @@
                 <div class="hud-value" id="layerLabel">Sources</div>
               </div>
             </div>
-            <div class="canvas-hint" id="canvasHint">
-              <span>Drag: pan • Scroll: zoom • Click: select • Shift+Drag: duplicate</span>
-              <button class="ghost ui-button" id="canvasHintClose" type="button">Dismiss</button>
+            <div class="canvas-help" id="canvasHelp">
+              <button
+                class="ghost ui-button canvas-help-button"
+                id="canvasHelpButton"
+                type="button"
+                aria-expanded="false"
+                aria-label="Canvas help"
+              >
+                ?
+              </button>
+              <div class="canvas-help-tooltip" id="canvasHelpTooltip" role="tooltip">
+                <div class="canvas-help-title">Canvas controls</div>
+                <div class="canvas-help-body">Drag: pan • Scroll: zoom • Click: select • Shift+Drag: duplicate</div>
+                <button class="ghost ui-button canvas-help-dismiss" id="canvasHelpDismiss" type="button">Got it</button>
+              </div>
             </div>
             <div class="scale-bar">
               <div class="scale-line" id="scaleLine"></div>
@@ -247,8 +295,7 @@
             <div class="snap-indicator" id="snapIndicator"></div>
           </div>
           <div class="canvas-footer">
-            <div class="footer-pill">Canvas: Local meters</div>
-            <div class="footer-pill" id="statusPill">Ready</div>
+            <div class="footer-pill">Units: meters</div>
           </div>
         </main>
 
@@ -268,6 +315,7 @@
                 <span>Snap</span>
                 <strong>5 m</strong>
               </div>
+              <div class="inspector-hint" id="selectionHint">Click an item to edit it.</div>
             </div>
           </section>
 

@@ -38,6 +38,8 @@
   --shadow-raised: 0 20px 40px rgba(31, 28, 24, 0.18);
   --shadow-pressed: inset 0 2px 4px rgba(0, 0, 0, 0.12);
   --shadow-accent: 0 10px 24px rgba(231, 111, 81, 0.3);
+  --shadow-panel: 0 12px 24px rgba(31, 28, 24, 0.14);
+  --shadow-canvas: 0 26px 54px rgba(31, 28, 24, 0.22);
 
   --status-ok-bg: rgba(42, 157, 143, 0.1);
   --status-ok-border: rgba(42, 157, 143, 0.3);
@@ -67,6 +69,7 @@
   --tooltip-border: var(--border);
   --pill-bg: rgba(255, 255, 255, 0.7);
   --modal-backdrop: rgba(31, 28, 24, 0.55);
+  --canvas-border: rgba(31, 28, 24, 0.08);
 
   --canvas-grid: var(--grid-line);
   --canvas-panel-stroke: var(--accent-dark);
@@ -86,6 +89,7 @@
   --canvas-source-tooltip-bg: rgba(31, 28, 24, 0.85);
   --canvas-source-tooltip-border: rgba(255, 255, 255, 0.35);
   --canvas-source-tooltip-text: var(--canvas-bg);
+  --canvas-selection-halo: rgba(231, 111, 81, 0.2);
 
   --canvas-receiver-fill: var(--accent-cool);
   --canvas-receiver-stroke: var(--accent-cool-strong);
@@ -132,6 +136,8 @@
   --shadow-raised: 10px 10px 24px rgba(125, 140, 165, 0.35), -10px -10px 24px rgba(255, 255, 255, 0.85);
   --shadow-pressed: inset 8px 8px 18px rgba(125, 140, 165, 0.3), inset -8px -8px 18px rgba(255, 255, 255, 0.8);
   --shadow-accent: 10px 10px 22px rgba(125, 140, 165, 0.3), -10px -10px 22px rgba(255, 255, 255, 0.7);
+  --shadow-panel: 8px 8px 18px rgba(125, 140, 165, 0.26), -8px -8px 18px rgba(255, 255, 255, 0.7);
+  --shadow-canvas: 14px 14px 28px rgba(125, 140, 165, 0.34), -14px -14px 28px rgba(255, 255, 255, 0.9);
 
   --status-ok-bg: rgba(59, 156, 144, 0.18);
   --status-ok-border: rgba(59, 156, 144, 0.32);
@@ -161,6 +167,7 @@
   --tooltip-border: var(--border);
   --pill-bg: rgba(255, 255, 255, 0.55);
   --modal-backdrop: rgba(31, 39, 51, 0.5);
+  --canvas-border: rgba(31, 39, 51, 0.12);
 
   --canvas-grid: var(--grid-line);
   --canvas-panel-stroke: var(--accent-dark);
@@ -180,6 +187,7 @@
   --canvas-source-tooltip-bg: rgba(31, 39, 51, 0.85);
   --canvas-source-tooltip-border: rgba(255, 255, 255, 0.3);
   --canvas-source-tooltip-text: var(--surface-2);
+  --canvas-selection-halo: rgba(229, 110, 87, 0.22);
 
   --canvas-receiver-fill: var(--accent-cool);
   --canvas-receiver-stroke: var(--accent-cool-strong);

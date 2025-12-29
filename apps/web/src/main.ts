@@ -103,12 +103,18 @@ type CanvasTheme = {
   badgeBorder: string;
   badgeText: string;
   canvasBg: string;
+  selectionHalo: string;
 };
 
 const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
 const coordLabel = document.querySelector('#coordLabel') as HTMLDivElement | null;
 const layerLabel = document.querySelector('#layerLabel') as HTMLDivElement | null;
-const statusPill = document.querySelector('#statusPill') as HTMLDivElement | null;
+const computeButton = document.querySelector('#computeButton') as HTMLButtonElement | null;
+const saveButton = document.querySelector('#saveButton') as HTMLButtonElement | null;
+const loadButton = document.querySelector('#loadButton') as HTMLButtonElement | null;
+const sceneNameInput = document.querySelector('#sceneName') as HTMLInputElement | null;
+const sceneDot = document.querySelector('#sceneDot') as HTMLSpanElement | null;
+const sceneStatusLabel = document.querySelector('#sceneStatusLabel') as HTMLSpanElement | null;
 const computeChip = document.querySelector('#computeChip') as HTMLDivElement | null;
 const rulerLabel = document.querySelector('#rulerLabel') as HTMLDivElement | null;
 const rulerLine = document.querySelector('#rulerLine') as HTMLDivElement | null;
@@ -119,6 +125,7 @@ const themeOptions = Array.from(document.querySelectorAll<HTMLButtonElement>('[d
 const toolGrid = document.querySelector('#toolGrid') as HTMLDivElement | null;
 const toolInstruction = document.querySelector('#toolInstruction') as HTMLDivElement | null;
 const selectionLabel = document.querySelector('#selectionLabel') as HTMLSpanElement | null;
+const selectionHint = document.querySelector('#selectionHint') as HTMLDivElement | null;
 const modeLabel = document.querySelector('#modeLabel') as HTMLSpanElement | null;
 const modeHint = document.querySelector('#modeHint') as HTMLDivElement | null;
 const propertiesBody = document.querySelector('#propertiesBody') as HTMLDivElement | null;
@@ -129,8 +136,10 @@ const panelStats = document.querySelector('#panelStats') as HTMLDivElement | nul
 const panelLegend = document.querySelector('#panelLegend') as HTMLDivElement | null;
 const exportCsv = document.querySelector('#exportCsv') as HTMLButtonElement | null;
 const snapIndicator = document.querySelector('#snapIndicator') as HTMLDivElement | null;
-const canvasHint = document.querySelector('#canvasHint') as HTMLDivElement | null;
-const canvasHintClose = document.querySelector('#canvasHintClose') as HTMLButtonElement | null;
+const canvasHelp = document.querySelector('#canvasHelp') as HTMLDivElement | null;
+const canvasHelpButton = document.querySelector('#canvasHelpButton') as HTMLButtonElement | null;
+const canvasHelpTooltip = document.querySelector('#canvasHelpTooltip') as HTMLDivElement | null;
+const canvasHelpDismiss = document.querySelector('#canvasHelpDismiss') as HTMLButtonElement | null;
 
 const undoButton = document.querySelector('#undoButton') as HTMLButtonElement | null;
 const redoButton = document.querySelector('#redoButton') as HTMLButtonElement | null;
@@ -138,6 +147,8 @@ const redoButton = document.querySelector('#redoButton') as HTMLButtonElement | 
 const aboutButton = document.querySelector('#aboutButton') as HTMLButtonElement | null;
 const aboutModal = document.querySelector('#aboutModal') as HTMLDivElement | null;
 const aboutClose = document.querySelector('#aboutClose') as HTMLButtonElement | null;
+const actionSecondary = document.querySelector('#actionSecondary') as HTMLDivElement | null;
+const actionOverflowToggle = document.querySelector('#actionOverflowToggle') as HTMLButtonElement | null;
 
 const propagationSpreading = document.querySelector('#propagationSpreading') as HTMLSelectElement | null;
 const propagationAbsorption = document.querySelector('#propagationAbsorption') as HTMLSelectElement | null;
@@ -231,6 +242,10 @@ let engineConfig: EngineConfig = getDefaultEngineConfig('festival_fast');
 let aboutOpen = false;
 let pendingComputes = 0;
 let canvasTheme: CanvasTheme = readCanvasTheme();
+let isDirty = false;
+let computeToken = 0;
+let activeComputeToken = 0;
+let isComputing = false;
 
 const snapMeters = 5;
 let basePixelsPerMeter = 3;
@@ -240,6 +255,8 @@ let panState: { start: Point; origin: Point } | null = null;
 
 const collapsedSources = new Set<string>();
 let soloSourceId: string | null = null;
+
+const CANVAS_HELP_KEY = 'geonoise.canvasHelpDismissed';
 
 type SceneSnapshot = {
   sources: Source[];
@@ -314,6 +331,7 @@ function readCanvasTheme(): CanvasTheme {
     badgeBorder: readCssVar('--canvas-badge-border'),
     badgeText: readCssVar('--canvas-badge-text'),
     canvasBg: readCssVar('--canvas-bg'),
+    selectionHalo: readCssVar('--canvas-selection-halo'),
   };
 }
 
@@ -365,6 +383,26 @@ function updateCounts() {
   if (countPanels) countPanels.textContent = `${scene.panels.length}`;
 }
 
+function updateSceneStatus() {
+  if (sceneDot) {
+    sceneDot.dataset.state = isDirty ? 'dirty' : 'saved';
+  }
+  if (sceneStatusLabel) {
+    sceneStatusLabel.textContent = isDirty ? 'Unsaved' : 'Saved';
+  }
+}
+
+function markDirty() {
+  if (isDirty) return;
+  isDirty = true;
+  updateSceneStatus();
+}
+
+function markSaved() {
+  isDirty = false;
+  updateSceneStatus();
+}
+
 function updateUndoRedoButtons() {
   if (undoButton) undoButton.disabled = historyIndex <= 0;
   if (redoButton) redoButton.disabled = historyIndex >= history.length - 1;
@@ -389,12 +427,15 @@ function snapshotScene(): SceneSnapshot {
   };
 }
 
-function pushHistory() {
+function pushHistory(options?: { markDirty?: boolean }) {
   const snap = snapshotScene();
   history = history.slice(0, historyIndex + 1);
   history.push(snap);
   historyIndex = history.length - 1;
   updateUndoRedoButtons();
+  if (options?.markDirty !== false) {
+    markDirty();
+  }
 }
 
 function applySnapshot(snap: SceneSnapshot) {
@@ -423,12 +464,14 @@ function undo() {
   if (historyIndex <= 0) return;
   historyIndex -= 1;
   applySnapshot(history[historyIndex]);
+  markDirty();
 }
 
 function redo() {
   if (historyIndex >= history.length - 1) return;
   historyIndex += 1;
   applySnapshot(history[historyIndex]);
+  markDirty();
 }
 
 function updatePixelsPerMeter() {
@@ -775,12 +818,12 @@ function pruneResults() {
 }
 
 function updateStatus(meta: { backendId: string; timings?: { totalMs?: number }; warnings?: Array<unknown> }) {
-  if (!statusPill) return;
+  if (!computeChip) return;
   const timing = meta.timings?.totalMs;
   const timingLabel = typeof timing === 'number' ? `${timing.toFixed(1)} ms` : 'n/a';
   const warnings = meta.warnings?.length ?? 0;
   const warningLabel = warnings ? ` • ${warnings} warning${warnings === 1 ? '' : 's'}` : '';
-  statusPill.textContent = `${meta.backendId} • ${timingLabel}${warningLabel}`;
+  computeChip.title = `${meta.backendId} • ${timingLabel}${warningLabel}`;
 }
 
 function isStaleError(error: unknown) {
@@ -788,7 +831,11 @@ function isStaleError(error: unknown) {
 }
 
 function showComputeError(label: string, error: unknown) {
-  if (statusPill) statusPill.textContent = `${label} compute error`;
+  if (computeChip) {
+    computeChip.textContent = 'Error';
+    computeChip.dataset.state = 'error';
+    computeChip.title = `${label} compute error`;
+  }
   // eslint-disable-next-line no-console
   console.error(label, error);
 }
@@ -803,20 +850,27 @@ function updatePanelResult(panelResult: PanelResult) {
   panelEnergyTotals.set(panelResult.panelId, panelSamplesToEnergy(panelResult.samples));
 }
 
-function finishCompute() {
+function finishCompute(token: number) {
+  if (token !== activeComputeToken) return;
   pendingComputes = Math.max(0, pendingComputes - 1);
   if (pendingComputes === 0) {
-    updateComputeChip(false);
+    isComputing = false;
+    updateComputeUI();
   }
 }
 
-async function computeReceivers(engineScene: ReturnType<typeof buildEngineScene>, preference: ComputePreference) {
+async function computeReceivers(
+  engineScene: ReturnType<typeof buildEngineScene>,
+  preference: ComputePreference,
+  token: number
+) {
   try {
     const response = (await engineCompute(
       { kind: 'receivers', scene: engineScene, payload: {}, engineConfig },
       preference,
       'receivers'
     )) as ComputeReceiversResponse;
+    if (token !== activeComputeToken) return;
     const receiverMap = new Map(scene.receivers.map((receiver) => [receiver.id, receiver]));
     results.receivers = response.results.map((result) => {
       const receiver = receiverMap.get(String(result.receiverId));
@@ -836,14 +890,15 @@ async function computeReceivers(engineScene: ReturnType<typeof buildEngineScene>
     if (isStaleError(error)) return;
     showComputeError('Receivers', error);
   } finally {
-    finishCompute();
+    finishCompute(token);
   }
 }
 
 async function computePanel(
   engineScene: ReturnType<typeof buildEngineScene>,
   preference: ComputePreference,
-  panel: Panel
+  panel: Panel,
+  token: number
 ) {
   try {
     const response = (await engineCompute(
@@ -856,6 +911,7 @@ async function computePanel(
       preference,
       `panel:${panel.id}`
     )) as ComputePanelResponse;
+    if (token !== activeComputeToken) return;
 
     const result = response.result;
     const panelResult: PanelResult = {
@@ -881,7 +937,7 @@ async function computePanel(
     if (isStaleError(error)) return;
     showComputeError(`Panel ${panel.id}`, error);
   } finally {
-    finishCompute();
+    finishCompute(token);
   }
 }
 
@@ -893,16 +949,24 @@ function computeScene() {
   receiverEnergyTotals = new Map();
   panelEnergyTotals = new Map();
 
-  if (statusPill) statusPill.textContent = 'Computing...';
   const preference = getComputePreference();
   const engineScene = buildEngineScene();
   pendingComputes = 1 + scene.panels.length;
-  updateComputeChip(true);
+  isComputing = true;
+  activeComputeToken = ++computeToken;
+  updateComputeUI();
 
-  void computeReceivers(engineScene, preference);
+  void computeReceivers(engineScene, preference, activeComputeToken);
   for (const panel of scene.panels) {
-    void computePanel(engineScene, preference, panel);
+    void computePanel(engineScene, preference, panel, activeComputeToken);
   }
+}
+
+function cancelCompute() {
+  activeComputeToken = ++computeToken;
+  pendingComputes = 0;
+  isComputing = false;
+  updateComputeUI();
 }
 
 function primeDragContribution(sourceId: string) {
@@ -1134,6 +1198,7 @@ function renderSources() {
     const row = document.createElement('div');
     row.className = 'source-row';
     row.classList.toggle('is-muted', !isSourceEnabled(source));
+    row.classList.toggle('is-selected', selection.type === 'source' && selection.id === source.id);
     const header = document.createElement('div');
     header.className = 'source-row-header';
     const nameInput = document.createElement('input');
@@ -1143,6 +1208,7 @@ function renderSources() {
     nameInput.placeholder = 'Name';
     nameInput.addEventListener('input', () => {
       source.name = nameInput.value;
+      markDirty();
     });
     nameInput.addEventListener('change', () => {
       pushHistory();
@@ -1156,8 +1222,11 @@ function renderSources() {
     const soloButton = document.createElement('button');
     soloButton.type = 'button';
     soloButton.className = 'source-chip ui-button';
-    soloButton.textContent = soloSourceId === source.id ? 'Soloed' : 'Solo';
+    soloButton.textContent = 'S';
     soloButton.classList.toggle('is-active', soloSourceId === source.id);
+    soloButton.setAttribute('aria-pressed', soloSourceId === source.id ? 'true' : 'false');
+    soloButton.setAttribute('aria-label', soloSourceId === source.id ? 'Unsolo source' : 'Solo source');
+    soloButton.title = soloSourceId === source.id ? 'Unsolo source' : 'Solo source';
     soloButton.addEventListener('click', (event) => {
       event.stopPropagation();
       soloSourceId = soloSourceId === source.id ? null : source.id;
@@ -1169,8 +1238,11 @@ function renderSources() {
     const muteButton = document.createElement('button');
     muteButton.type = 'button';
     muteButton.className = 'source-chip ui-button';
-    muteButton.textContent = source.enabled ? 'Mute' : 'Muted';
+    muteButton.textContent = 'M';
     muteButton.classList.toggle('is-active', !source.enabled);
+    muteButton.setAttribute('aria-pressed', !source.enabled ? 'true' : 'false');
+    muteButton.setAttribute('aria-label', source.enabled ? 'Mute source' : 'Unmute source');
+    muteButton.title = source.enabled ? 'Mute source' : 'Unmute source';
     muteButton.addEventListener('click', (event) => {
       event.stopPropagation();
       source.enabled = !source.enabled;
@@ -1179,12 +1251,16 @@ function renderSources() {
       renderProperties();
       computeScene();
     });
-    const toggleButton = document.createElement('button');
-    toggleButton.type = 'button';
-    toggleButton.className = 'source-chip ui-button';
+    controls.appendChild(soloButton);
+    controls.appendChild(muteButton);
+    const collapseButton = document.createElement('button');
+    collapseButton.type = 'button';
+    collapseButton.className = 'source-collapse';
     const isCollapsed = collapsedSources.has(source.id);
-    toggleButton.textContent = isCollapsed ? 'Expand' : 'Collapse';
-    toggleButton.addEventListener('click', (event) => {
+    collapseButton.textContent = isCollapsed ? '>' : 'v';
+    collapseButton.setAttribute('aria-label', isCollapsed ? 'Expand source' : 'Collapse source');
+    collapseButton.title = isCollapsed ? 'Expand' : 'Collapse';
+    collapseButton.addEventListener('click', (event) => {
       event.stopPropagation();
       if (collapsedSources.has(source.id)) {
         collapsedSources.delete(source.id);
@@ -1193,17 +1269,19 @@ function renderSources() {
       }
       renderSources();
     });
-    controls.appendChild(soloButton);
-    controls.appendChild(muteButton);
-    controls.appendChild(toggleButton);
 
     const titleBlock = document.createElement('div');
     titleBlock.className = 'source-title';
     titleBlock.appendChild(nameInput);
     titleBlock.appendChild(idTag);
 
+    const headerActions = document.createElement('div');
+    headerActions.className = 'source-actions';
+    headerActions.appendChild(controls);
+    headerActions.appendChild(collapseButton);
+
     header.appendChild(titleBlock);
-    header.appendChild(controls);
+    header.appendChild(headerActions);
     row.appendChild(header);
 
     const fields = document.createElement('div');
@@ -1297,7 +1375,11 @@ function setSelection(next: Selection) {
       ? 'None'
       : `${selectionTypeLabel(current.type)} ${current.id.toUpperCase()}`;
   }
+  if (selectionHint) {
+    selectionHint.classList.toggle('is-hidden', current.type !== 'none');
+  }
   renderProperties();
+  renderSources();
   renderPanelLegend();
   renderPanelStats();
   drawScene();
@@ -1424,31 +1506,50 @@ function createTextRow(label: string, value: string, onChange: (value: string) =
   input.type = 'text';
   input.classList.add('ui-inset');
   input.value = value;
-  input.addEventListener('input', () => onChange(input.value));
+  input.addEventListener('input', () => {
+    onChange(input.value);
+    markDirty();
+  });
   input.addEventListener('change', () => pushHistory());
   row.appendChild(name);
   row.appendChild(input);
   return row;
 }
 
-function updateComputeChip(isComputing: boolean) {
+function setComputeChip(label: string, state: 'ready' | 'busy' | 'warning' | 'error') {
   if (!computeChip) return;
-  if (isComputing) {
-    computeChip.textContent = 'Computing...';
-    computeChip.dataset.state = 'busy';
+  computeChip.textContent = label;
+  computeChip.dataset.state = state;
+}
+
+function updateComputeButtonState(computing: boolean) {
+  if (!computeButton) return;
+  computeButton.textContent = computing ? 'Cancel' : 'Compute';
+  computeButton.classList.toggle('is-cancel', computing);
+  computeButton.title = computing ? 'Cancel the current compute.' : 'Run propagation and update receiver/grid levels.';
+}
+
+function updateComputeChip(isBusy: boolean) {
+  if (isBusy) {
+    setComputeChip('Computing...', 'busy');
+    if (computeChip) computeChip.title = '';
     return;
   }
 
   const preference = getComputePreference();
   const resolved = resolveBackend(preference, capability);
   if (resolved.warning) {
-    computeChip.textContent = 'Using CPU (GPU soon)';
-    computeChip.dataset.state = 'warning';
+    setComputeChip('Using CPU (GPU soon)', 'warning');
+    if (computeChip) computeChip.title = '';
     return;
   }
 
-  computeChip.textContent = 'Ready';
-  computeChip.dataset.state = 'ready';
+  setComputeChip('Ready', 'ready');
+}
+
+function updateComputeUI() {
+  updateComputeButtonState(isComputing);
+  updateComputeChip(isComputing);
 }
 
 function wireThemeSwitcher() {
@@ -1485,12 +1586,12 @@ function wirePreference() {
   if (storedPreference !== initialPreference) {
     savePreference(initialPreference);
   }
-  updateComputeChip(false);
+  updateComputeUI();
 
   preferenceSelect.addEventListener('change', () => {
     const preference = preferenceSelect.value as ComputePreference;
     savePreference(preference);
-    updateComputeChip(false);
+    updateComputeUI();
     computeScene();
   });
 }
@@ -1717,6 +1818,9 @@ function drawPanels() {
     ctx.stroke();
 
     if (selection.type === 'panel' && selection.id === panel.id) {
+      ctx.strokeStyle = canvasTheme.selectionHalo;
+      ctx.lineWidth = 10;
+      ctx.stroke();
       ctx.strokeStyle = canvasTheme.panelSelected;
       ctx.lineWidth = 3;
       ctx.stroke();
@@ -1761,6 +1865,10 @@ function drawSources() {
     ctx.stroke();
 
     if (selection.type === 'source' && selection.id === source.id) {
+      ctx.fillStyle = canvasTheme.selectionHalo;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 18, 0, Math.PI * 2);
+      ctx.fill();
       ctx.strokeStyle = canvasTheme.sourceRing;
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -1810,6 +1918,10 @@ function drawReceivers() {
     ctx.stroke();
 
     if (selection.type === 'receiver' && selection.id === receiver.id) {
+      ctx.fillStyle = canvasTheme.selectionHalo;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 18, 0, Math.PI * 2);
+      ctx.fill();
       ctx.strokeStyle = canvasTheme.receiverRing;
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -2234,10 +2346,197 @@ function wireHistory() {
   redoButton?.addEventListener('click', () => redo());
 }
 
-function wireCanvasHint() {
-  if (!canvasHint || !canvasHintClose) return;
-  canvasHintClose.addEventListener('click', () => {
-    canvasHint.classList.add('is-hidden');
+function wireComputeButton() {
+  if (!computeButton) return;
+  computeButton.addEventListener('click', () => {
+    if (isComputing) {
+      cancelCompute();
+      return;
+    }
+    computeScene();
+  });
+}
+
+function wireSceneName() {
+  if (!sceneNameInput) return;
+  sceneNameInput.addEventListener('input', () => {
+    markDirty();
+  });
+}
+
+function buildScenePayload() {
+  return {
+    version: 1,
+    name: sceneNameInput?.value ?? 'Untitled',
+    sources: scene.sources.map((source) => ({ ...source })),
+    receivers: scene.receivers.map((receiver) => ({ ...receiver })),
+    panels: scene.panels.map((panel) => ({
+      ...panel,
+      points: panel.points.map((point) => ({ ...point })),
+      sampling: { ...panel.sampling },
+    })),
+    propagation: getPropagationConfig(),
+  };
+}
+
+function downloadScene() {
+  const payload = buildScenePayload();
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const name = payload.name?.trim() || 'geonoise-scene';
+  link.href = url;
+  link.download = `${name.replace(/\s+/g, '-').toLowerCase()}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function nextSequence(prefix: string, ids: Array<{ id: string }>) {
+  let max = 0;
+  for (const item of ids) {
+    if (!item.id.startsWith(prefix)) continue;
+    const value = Number.parseInt(item.id.slice(prefix.length), 10);
+    if (!Number.isNaN(value)) {
+      max = Math.max(max, value);
+    }
+  }
+  return Math.max(max + 1, ids.length + 1);
+}
+
+function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
+  scene.sources = payload.sources.map((source) => ({ ...source }));
+  scene.receivers = payload.receivers.map((receiver) => ({ ...receiver }));
+  scene.panels = payload.panels.map((panel) => ({
+    ...panel,
+    points: panel.points.map((point) => ({ ...point })),
+    sampling: { ...panel.sampling },
+  }));
+  sourceSeq = nextSequence('s', scene.sources);
+  receiverSeq = nextSequence('r', scene.receivers);
+  panelSeq = nextSequence('p', scene.panels);
+  collapsedSources.clear();
+  soloSourceId = null;
+  selection = { type: 'none' };
+  hoverSelection = null;
+  dragState = null;
+  dragDirty = false;
+  measureStart = null;
+  measureEnd = null;
+  measureLocked = false;
+  if (payload.propagation) {
+    updatePropagationConfig(payload.propagation);
+    updatePropagationControls();
+  }
+  if (sceneNameInput) {
+    sceneNameInput.value = payload.name || 'Untitled';
+  }
+  updateCounts();
+  setSelection({ type: 'none' });
+  history = [];
+  historyIndex = -1;
+  pushHistory({ markDirty: false });
+  renderResults();
+  computeScene();
+  markSaved();
+}
+
+function wireSaveLoad() {
+  saveButton?.addEventListener('click', () => {
+    downloadScene();
+    markSaved();
+  });
+
+  loadButton?.addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json';
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text) as ReturnType<typeof buildScenePayload>;
+        if (!parsed || !Array.isArray(parsed.sources) || !Array.isArray(parsed.receivers) || !Array.isArray(parsed.panels)) {
+          // eslint-disable-next-line no-console
+          console.error('Invalid scene file');
+          return;
+        }
+        applyLoadedScene(parsed);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to load scene', error);
+      }
+    });
+    input.click();
+  });
+}
+
+function wireCanvasHelp() {
+  if (!canvasHelp || !canvasHelpButton || !canvasHelpTooltip) return;
+  const dismissed = localStorage.getItem(CANVAS_HELP_KEY) === '1';
+  if (!dismissed) {
+    canvasHelp.classList.add('is-open');
+    canvasHelpButton.setAttribute('aria-expanded', 'true');
+  }
+
+  const closeHelp = () => {
+    canvasHelp.classList.remove('is-open');
+    canvasHelpButton.setAttribute('aria-expanded', 'false');
+  };
+
+  canvasHelpButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const isOpen = canvasHelp.classList.toggle('is-open');
+    canvasHelpButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  });
+
+  canvasHelpDismiss?.addEventListener('click', () => {
+    localStorage.setItem(CANVAS_HELP_KEY, '1');
+    closeHelp();
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!canvasHelp.classList.contains('is-open')) return;
+    const target = event.target as HTMLElement | null;
+    if (target && canvasHelp.contains(target)) return;
+    closeHelp();
+  });
+}
+
+function wireActionOverflow() {
+  if (!actionSecondary || !actionOverflowToggle) return;
+
+  const closeMenu = () => {
+    actionSecondary.classList.remove('is-open');
+    actionOverflowToggle.setAttribute('aria-expanded', 'false');
+  };
+
+  actionOverflowToggle.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const isOpen = actionSecondary.classList.toggle('is-open');
+    actionOverflowToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  });
+
+  actionSecondary.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    if (target.tagName === 'BUTTON') {
+      closeMenu();
+    }
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!actionSecondary.classList.contains('is-open')) return;
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    if (actionSecondary.contains(target) || actionOverflowToggle.contains(target)) return;
+    closeMenu();
+  });
+
+  window.addEventListener('resize', () => {
+    closeMenu();
   });
 }
 
@@ -2309,28 +2608,33 @@ function wirePropagationControls() {
 
   propagationSpreading?.addEventListener('change', () => {
     updatePropagationConfig({ spreading: propagationSpreading.value as PropagationConfig['spreading'] });
+    markDirty();
     computeScene();
   });
 
   propagationAbsorption?.addEventListener('change', () => {
     updatePropagationConfig({ atmosphericAbsorption: propagationAbsorption.value as PropagationConfig['atmosphericAbsorption'] });
+    markDirty();
     computeScene();
   });
 
   propagationGroundReflection?.addEventListener('change', () => {
     updatePropagationConfig({ groundReflection: propagationGroundReflection.checked });
     updatePropagationControls();
+    markDirty();
     computeScene();
   });
 
   propagationGroundModel?.addEventListener('change', () => {
     updatePropagationConfig({ groundModel: propagationGroundModel.value as PropagationConfig['groundModel'] });
     updatePropagationControls();
+    markDirty();
     computeScene();
   });
 
   propagationGroundType?.addEventListener('change', () => {
     updatePropagationConfig({ groundType: propagationGroundType.value as PropagationConfig['groundType'] });
+    markDirty();
     computeScene();
   });
 
@@ -2342,6 +2646,7 @@ function wirePropagationControls() {
     }
     updatePropagationConfig({ maxDistance: Math.max(1, Math.round(next)) });
     updatePropagationControls();
+    markDirty();
     computeScene();
   });
 }
@@ -2362,12 +2667,18 @@ function init() {
   wireAbout();
   wirePropagationControls();
   wireHistory();
-  wireCanvasHint();
+  wireComputeButton();
+  wireSceneName();
+  wireSaveLoad();
+  wireCanvasHelp();
+  wireActionOverflow();
 
   updateUndoRedoButtons();
+  updateSceneStatus();
   setActiveTool(activeTool);
   resizeCanvas();
-  pushHistory();
+  pushHistory({ markDirty: false });
+  markSaved();
   computeScene();
   window.addEventListener('resize', resizeCanvas);
 }
