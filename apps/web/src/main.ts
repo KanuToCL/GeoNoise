@@ -5,6 +5,13 @@ import {
   savePreference,
   type ComputePreference,
 } from './computePreference.js';
+import {
+  applyTheme,
+  getSavedTheme,
+  isNeumorphismAllowed,
+  saveTheme,
+  type Theme,
+} from './theme.js';
 import { engineCompute } from '@geonoise/engine-backends';
 import { createEmptyScene, type EngineConfig, type PropagationConfig } from '@geonoise/core';
 import { getDefaultEngineConfig, type ComputePanelResponse, type ComputeReceiversResponse } from '@geonoise/engine';
@@ -68,6 +75,36 @@ type DragContribution = {
   panelEnergy: Map<string, Float64Array>;
 };
 
+type CanvasTheme = {
+  gridLine: string;
+  measureLine: string;
+  measureText: string;
+  panelStroke: string;
+  panelFill: string;
+  panelSelected: string;
+  panelHandleFill: string;
+  panelHandleStroke: string;
+  sampleStroke: string;
+  sourceFill: string;
+  sourceStroke: string;
+  sourceMutedFill: string;
+  sourceMutedStroke: string;
+  sourceMutedText: string;
+  sourceLabel: string;
+  sourceRing: string;
+  sourceTooltipBg: string;
+  sourceTooltipBorder: string;
+  sourceTooltipText: string;
+  receiverFill: string;
+  receiverStroke: string;
+  receiverLabel: string;
+  receiverRing: string;
+  badgeBg: string;
+  badgeBorder: string;
+  badgeText: string;
+  canvasBg: string;
+};
+
 const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
 const coordLabel = document.querySelector('#coordLabel') as HTMLDivElement | null;
 const layerLabel = document.querySelector('#layerLabel') as HTMLDivElement | null;
@@ -78,6 +115,7 @@ const rulerLine = document.querySelector('#rulerLine') as HTMLDivElement | null;
 const scaleText = document.querySelector('#scaleText') as HTMLDivElement | null;
 const scaleLine = document.querySelector('#scaleLine') as HTMLDivElement | null;
 const preferenceSelect = document.querySelector('#computePreference') as HTMLSelectElement | null;
+const themeOptions = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-theme-option]'));
 const toolGrid = document.querySelector('#toolGrid') as HTMLDivElement | null;
 const toolInstruction = document.querySelector('#toolInstruction') as HTMLDivElement | null;
 const selectionLabel = document.querySelector('#selectionLabel') as HTMLSpanElement | null;
@@ -192,6 +230,7 @@ let dragDirty = false;
 let engineConfig: EngineConfig = getDefaultEngineConfig('festival_fast');
 let aboutOpen = false;
 let pendingComputes = 0;
+let canvasTheme: CanvasTheme = readCanvasTheme();
 
 const snapMeters = 5;
 let basePixelsPerMeter = 3;
@@ -240,6 +279,76 @@ function niceDistance(value: number): number {
     if (value >= option) best = option;
   }
   return best;
+}
+
+function readCssVar(name: string) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function readCanvasTheme(): CanvasTheme {
+  return {
+    gridLine: readCssVar('--canvas-grid'),
+    measureLine: readCssVar('--canvas-measure-line'),
+    measureText: readCssVar('--canvas-measure-text'),
+    panelStroke: readCssVar('--canvas-panel-stroke'),
+    panelFill: readCssVar('--canvas-panel-fill'),
+    panelSelected: readCssVar('--canvas-panel-selected'),
+    panelHandleFill: readCssVar('--canvas-panel-handle-fill'),
+    panelHandleStroke: readCssVar('--canvas-panel-handle-stroke'),
+    sampleStroke: readCssVar('--canvas-sample-stroke'),
+    sourceFill: readCssVar('--canvas-source-fill'),
+    sourceStroke: readCssVar('--canvas-source-stroke'),
+    sourceMutedFill: readCssVar('--canvas-source-muted-fill'),
+    sourceMutedStroke: readCssVar('--canvas-source-muted-stroke'),
+    sourceMutedText: readCssVar('--canvas-source-muted-text'),
+    sourceLabel: readCssVar('--canvas-source-label'),
+    sourceRing: readCssVar('--canvas-source-ring'),
+    sourceTooltipBg: readCssVar('--canvas-source-tooltip-bg'),
+    sourceTooltipBorder: readCssVar('--canvas-source-tooltip-border'),
+    sourceTooltipText: readCssVar('--canvas-source-tooltip-text'),
+    receiverFill: readCssVar('--canvas-receiver-fill'),
+    receiverStroke: readCssVar('--canvas-receiver-stroke'),
+    receiverLabel: readCssVar('--canvas-receiver-label'),
+    receiverRing: readCssVar('--canvas-receiver-ring'),
+    badgeBg: readCssVar('--canvas-badge-bg'),
+    badgeBorder: readCssVar('--canvas-badge-border'),
+    badgeText: readCssVar('--canvas-badge-text'),
+    canvasBg: readCssVar('--canvas-bg'),
+  };
+}
+
+function refreshCanvasTheme() {
+  canvasTheme = readCanvasTheme();
+  drawScene();
+}
+
+function updateThemeControls(theme: Theme, allowed: boolean) {
+  if (!themeOptions.length) return;
+  themeOptions.forEach((button) => {
+    const option = button.dataset.themeOption as Theme | undefined;
+    if (!option) return;
+    const isActive = option === theme;
+    button.classList.toggle('is-active', isActive);
+    button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    if (option === 'neumorphic') {
+      button.classList.toggle('is-disabled', !allowed);
+      button.setAttribute('aria-disabled', !allowed ? 'true' : 'false');
+      if (!allowed) {
+        button.setAttribute('title', 'Unavailable in high-contrast mode.');
+      } else {
+        button.removeAttribute('title');
+      }
+    }
+  });
+}
+
+function applyAndPersistTheme(next: Theme) {
+  const allowed = isNeumorphismAllowed();
+  const resolved = next === 'neumorphic' && !allowed ? 'default' : next;
+  applyTheme(resolved);
+  saveTheme(resolved);
+  updateThemeControls(resolved, allowed);
+  refreshCanvasTheme();
 }
 
 function sameSelection(a: Selection | null, b: Selection | null) {
@@ -1001,6 +1110,7 @@ function createInlineField(label: string, value: number, onChange: (value: numbe
   name.textContent = label;
   const input = document.createElement('input');
   input.type = 'number';
+  input.classList.add('ui-inset');
   input.step = '0.1';
   input.value = value.toString();
   input.addEventListener('change', () => {
@@ -1027,7 +1137,7 @@ function renderSources() {
     const header = document.createElement('div');
     header.className = 'source-row-header';
     const nameInput = document.createElement('input');
-    nameInput.className = 'source-name';
+    nameInput.className = 'source-name ui-inset';
     nameInput.type = 'text';
     nameInput.value = source.name;
     nameInput.placeholder = 'Name';
@@ -1045,7 +1155,7 @@ function renderSources() {
     controls.className = 'source-controls';
     const soloButton = document.createElement('button');
     soloButton.type = 'button';
-    soloButton.className = 'source-chip';
+    soloButton.className = 'source-chip ui-button';
     soloButton.textContent = soloSourceId === source.id ? 'Soloed' : 'Solo';
     soloButton.classList.toggle('is-active', soloSourceId === source.id);
     soloButton.addEventListener('click', (event) => {
@@ -1058,7 +1168,7 @@ function renderSources() {
     });
     const muteButton = document.createElement('button');
     muteButton.type = 'button';
-    muteButton.className = 'source-chip';
+    muteButton.className = 'source-chip ui-button';
     muteButton.textContent = source.enabled ? 'Mute' : 'Muted';
     muteButton.classList.toggle('is-active', !source.enabled);
     muteButton.addEventListener('click', (event) => {
@@ -1071,7 +1181,7 @@ function renderSources() {
     });
     const toggleButton = document.createElement('button');
     toggleButton.type = 'button';
-    toggleButton.className = 'source-chip';
+    toggleButton.className = 'source-chip ui-button';
     const isCollapsed = collapsedSources.has(source.id);
     toggleButton.textContent = isCollapsed ? 'Expand' : 'Collapse';
     toggleButton.addEventListener('click', (event) => {
@@ -1294,6 +1404,7 @@ function createInputRow(label: string, value: number, onChange: (value: number) 
   name.textContent = label;
   const input = document.createElement('input');
   input.type = 'number';
+  input.classList.add('ui-inset');
   input.value = value.toString();
   input.addEventListener('change', () => {
     const next = Number(input.value);
@@ -1311,6 +1422,7 @@ function createTextRow(label: string, value: string, onChange: (value: string) =
   name.textContent = label;
   const input = document.createElement('input');
   input.type = 'text';
+  input.classList.add('ui-inset');
   input.value = value;
   input.addEventListener('input', () => onChange(input.value));
   input.addEventListener('change', () => pushHistory());
@@ -1337,6 +1449,24 @@ function updateComputeChip(isComputing: boolean) {
 
   computeChip.textContent = 'Ready';
   computeChip.dataset.state = 'ready';
+}
+
+function wireThemeSwitcher() {
+  const storedTheme = getSavedTheme();
+  applyAndPersistTheme(storedTheme);
+  if (!themeOptions.length) return;
+
+  themeOptions.forEach((button) => {
+    button.addEventListener('click', () => {
+      const option = button.dataset.themeOption as Theme | undefined;
+      if (!option) return;
+      if (option === 'neumorphic' && !isNeumorphismAllowed()) {
+        applyAndPersistTheme('default');
+        return;
+      }
+      applyAndPersistTheme(option);
+    });
+  });
 }
 
 function wirePreference() {
@@ -1510,7 +1640,7 @@ function drawGrid() {
   const stepMeters = 20;
   const stepPixels = stepMeters * pixelsPerMeter;
 
-  ctx.strokeStyle = 'rgba(38, 70, 83, 0.12)';
+  ctx.strokeStyle = canvasTheme.gridLine;
   ctx.lineWidth = 1;
 
   for (let x = rect.width / 2 % stepPixels; x <= rect.width; x += stepPixels) {
@@ -1534,7 +1664,7 @@ function drawMeasurement() {
   const end = worldToCanvas(measureEnd);
   const dist = distance(measureStart, measureEnd);
 
-  ctx.strokeStyle = '#264653';
+  ctx.strokeStyle = canvasTheme.measureLine;
   ctx.lineWidth = 2;
   ctx.setLineDash([6, 6]);
   ctx.beginPath();
@@ -1545,7 +1675,7 @@ function drawMeasurement() {
 
   const label = `${formatMeters(dist)} m`;
   const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
-  ctx.fillStyle = '#264653';
+  ctx.fillStyle = canvasTheme.measureText;
   ctx.font = '12px "Space Grotesk", sans-serif';
   ctx.fillText(label, mid.x + 6, mid.y - 6);
 }
@@ -1555,7 +1685,7 @@ function drawPanelSamples(panelResult: PanelResult) {
   const min = panelResult.LAeq_min;
   const max = panelResult.LAeq_max;
   ctx.lineWidth = 1;
-  ctx.strokeStyle = 'rgba(31, 28, 24, 0.2)';
+  ctx.strokeStyle = canvasTheme.sampleStroke;
   for (const sample of panelResult.samples) {
     const ratio = panelSampleRatio(sample, min, max);
     const color = getSampleColor(ratio);
@@ -1569,8 +1699,8 @@ function drawPanelSamples(panelResult: PanelResult) {
 }
 
 function drawPanels() {
-  ctx.strokeStyle = '#264653';
-  ctx.fillStyle = 'rgba(38, 70, 83, 0.12)';
+  ctx.strokeStyle = canvasTheme.panelStroke;
+  ctx.fillStyle = canvasTheme.panelFill;
   ctx.lineWidth = 2;
 
   for (const panel of scene.panels) {
@@ -1587,14 +1717,14 @@ function drawPanels() {
     ctx.stroke();
 
     if (selection.type === 'panel' && selection.id === panel.id) {
-      ctx.strokeStyle = '#e76f51';
+      ctx.strokeStyle = canvasTheme.panelSelected;
       ctx.lineWidth = 3;
       ctx.stroke();
-      ctx.strokeStyle = '#264653';
+      ctx.strokeStyle = canvasTheme.panelStroke;
       ctx.lineWidth = 2;
 
-      ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = '#264653';
+      ctx.fillStyle = canvasTheme.panelHandleFill;
+      ctx.strokeStyle = canvasTheme.panelHandleStroke;
       ctx.lineWidth = 2;
       for (const point of panel.points) {
         const handle = worldToCanvas(point);
@@ -1608,11 +1738,12 @@ function drawPanels() {
 }
 
 function drawSources() {
-  const activeFill = '#e76f51';
-  const activeStroke = '#aa4e37';
-  const mutedFill = 'rgba(31, 28, 24, 0.12)';
-  const mutedStroke = 'rgba(31, 28, 24, 0.35)';
-  const mutedText = '#8a7b6d';
+  const activeFill = canvasTheme.sourceFill;
+  const activeStroke = canvasTheme.sourceStroke;
+  const mutedFill = canvasTheme.sourceMutedFill;
+  const mutedStroke = canvasTheme.sourceMutedStroke;
+  const mutedText = canvasTheme.sourceMutedText;
+  const labelText = canvasTheme.sourceLabel;
 
   for (const source of scene.sources) {
     const isMuted = !source.enabled;
@@ -1630,7 +1761,7 @@ function drawSources() {
     ctx.stroke();
 
     if (selection.type === 'source' && selection.id === source.id) {
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = canvasTheme.sourceRing;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
@@ -1639,7 +1770,7 @@ function drawSources() {
       ctx.lineWidth = 2;
     }
 
-    ctx.fillStyle = isDimmed ? mutedText : '#1f1c18';
+    ctx.fillStyle = isDimmed ? mutedText : labelText;
     ctx.font = '12px "Space Grotesk", sans-serif';
     ctx.fillText(source.id.toUpperCase(), p.x + 14, p.y - 6);
 
@@ -1652,20 +1783,20 @@ function drawSources() {
       const boxHeight = 18;
       const boxX = p.x + 14;
       const boxY = p.y + 8;
-      ctx.fillStyle = 'rgba(31, 28, 24, 0.85)';
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.fillStyle = canvasTheme.sourceTooltipBg;
+      ctx.strokeStyle = canvasTheme.sourceTooltipBorder;
       ctx.lineWidth = 1;
       ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
       ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
-      ctx.fillStyle = '#fdfaf5';
+      ctx.fillStyle = canvasTheme.sourceTooltipText;
       ctx.fillText(label, boxX + paddingX, boxY + 12);
     }
   }
 }
 
 function drawReceivers() {
-  ctx.fillStyle = '#2a9d8f';
-  ctx.strokeStyle = '#1f6f65';
+  ctx.fillStyle = canvasTheme.receiverFill;
+  ctx.strokeStyle = canvasTheme.receiverStroke;
   ctx.lineWidth = 2;
 
   for (const receiver of scene.receivers) {
@@ -1679,19 +1810,19 @@ function drawReceivers() {
     ctx.stroke();
 
     if (selection.type === 'receiver' && selection.id === receiver.id) {
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = canvasTheme.receiverRing;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.strokeStyle = '#1f6f65';
+      ctx.strokeStyle = canvasTheme.receiverStroke;
       ctx.lineWidth = 2;
     }
 
-    ctx.fillStyle = '#1f1c18';
+    ctx.fillStyle = canvasTheme.receiverLabel;
     ctx.font = '12px "Space Grotesk", sans-serif';
     ctx.fillText(receiver.id.toUpperCase(), p.x + 14, p.y + 4);
-    ctx.fillStyle = '#2a9d8f';
+    ctx.fillStyle = canvasTheme.receiverFill;
   }
 }
 
@@ -1703,13 +1834,13 @@ function drawReceiverBadges() {
     const p = worldToCanvas(receiver);
     const label = `${formatLevel(result.LAeq)} dB`;
     ctx.font = '12px "Space Grotesk", sans-serif';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.strokeStyle = 'rgba(31, 28, 24, 0.25)';
+    ctx.fillStyle = canvasTheme.badgeBg;
+    ctx.strokeStyle = canvasTheme.badgeBorder;
     ctx.lineWidth = 1;
     const width = ctx.measureText(label).width + 14;
     ctx.fillRect(p.x + 12, p.y + 14, width, 20);
     ctx.strokeRect(p.x + 12, p.y + 14, width, 20);
-    ctx.fillStyle = '#1f1c18';
+    ctx.fillStyle = canvasTheme.badgeText;
     ctx.fillText(label, p.x + 18, p.y + 28);
   }
 }
@@ -1717,7 +1848,7 @@ function drawReceiverBadges() {
 function drawScene() {
   const rect = canvas.getBoundingClientRect();
   ctx.clearRect(0, 0, rect.width, rect.height);
-  ctx.fillStyle = '#fdfaf5';
+  ctx.fillStyle = canvasTheme.canvasBg;
   ctx.fillRect(0, 0, rect.width, rect.height);
 
   if (layers.grid) {
@@ -2217,6 +2348,7 @@ function wirePropagationControls() {
 
 function init() {
   updateCounts();
+  wireThemeSwitcher();
   wireLayerToggle(layerSources, 'sources');
   wireLayerToggle(layerReceivers, 'receivers');
   wireLayerToggle(layerPanels, 'panels');

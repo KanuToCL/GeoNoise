@@ -27,3 +27,5 @@ execFileSync('tsc', ['-b', ...projects], {
 mkdirSync(dist, { recursive: true });
 copyFileSync(resolve(root, 'index.html'), resolve(dist, 'index.html'));
 copyFileSync(resolve(root, 'src', 'style.css'), resolve(dist, 'style.css'));
+mkdirSync(resolve(dist, 'styles'), { recursive: true });
+copyFileSync(resolve(root, 'src', 'styles', 'theme.css'), resolve(dist, 'styles', 'theme.css'));

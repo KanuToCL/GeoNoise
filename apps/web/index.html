@@ -1,9 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="default">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GeoNoise</title>
+    <link rel="stylesheet" href="./styles/theme.css" />
     <link rel="stylesheet" href="./style.css" />
     <script type="importmap">
       {
@@ -22,7 +23,7 @@
   </head>
   <body>
     <div class="app">
-      <header class="topbar">
+      <header class="topbar ui-surface">
         <div class="brand">
           <span class="brand-mark"></span>
           <div>
@@ -32,45 +33,54 @@
         </div>
         <div class="preference">
           <label for="computePreference">Compute</label>
-          <select id="computePreference">
+          <select class="ui-inset" id="computePreference">
             <option value="cpu">CPU</option>
           </select>
         </div>
+        <div class="theme-switcher" id="themeSwitcher">
+          <span class="theme-label">Theme</span>
+          <div class="theme-segmented" role="group" aria-label="Theme">
+            <button class="theme-option is-active" data-theme-option="default" type="button">Default</button>
+            <button class="theme-option" data-theme-option="neumorphic" type="button">
+              Neumorphic <span class="tag">Experimental</span>
+            </button>
+          </div>
+        </div>
         <div class="status-chip" id="computeChip">Ready</div>
         <div class="actions">
-          <button class="ghost" type="button" title="Open a saved scene.">Load</button>
-          <button class="ghost" type="button" title="Save this scene as JSON.">Save</button>
-          <button class="ghost" id="undoButton" type="button" title="Undo the last change.">Undo</button>
-          <button class="ghost" id="redoButton" type="button" title="Redo the last change.">Redo</button>
-          <button class="ghost" id="aboutButton" type="button" title="Model notes, assumptions, and limitations.">About</button>
-          <button class="primary" type="button" title="Run propagation and update receiver/grid levels.">Compute</button>
+          <button class="ghost ui-button" type="button" title="Open a saved scene.">Load</button>
+          <button class="ghost ui-button" type="button" title="Save this scene as JSON.">Save</button>
+          <button class="ghost ui-button" id="undoButton" type="button" title="Undo the last change.">Undo</button>
+          <button class="ghost ui-button" id="redoButton" type="button" title="Redo the last change.">Redo</button>
+          <button class="ghost ui-button" id="aboutButton" type="button" title="Model notes, assumptions, and limitations.">About</button>
+          <button class="primary ui-button" type="button" title="Run propagation and update receiver/grid levels.">Compute</button>
         </div>
       </header>
 
       <div class="content">
         <aside class="sidebar">
-          <section class="panel">
+          <section class="panel ui-surface">
             <h2>Tools</h2>
             <div class="tool-groups" id="toolGrid">
               <div class="tool-group">
                 <div class="tool-group-title">Edit</div>
                 <div class="tool-grid">
-                  <button class="tool-button is-active" data-tool="select" type="button">Select (V)</button>
-                  <button class="tool-button" data-tool="delete" type="button">Delete (Del)</button>
+                  <button class="tool-button ui-button is-active" data-tool="select" type="button">Select (V)</button>
+                  <button class="tool-button ui-button" data-tool="delete" type="button">Delete (Del)</button>
                 </div>
               </div>
               <div class="tool-group">
                 <div class="tool-group-title">Add</div>
                 <div class="tool-grid">
-                  <button class="tool-button" data-tool="add-source" type="button">Add Source (S)</button>
-                  <button class="tool-button" data-tool="add-receiver" type="button">Add Receiver (R)</button>
-                  <button class="tool-button" data-tool="add-panel" type="button">Add Measure Grid (G)</button>
+                  <button class="tool-button ui-button" data-tool="add-source" type="button">Add Source (S)</button>
+                  <button class="tool-button ui-button" data-tool="add-receiver" type="button">Add Receiver (R)</button>
+                  <button class="tool-button ui-button" data-tool="add-panel" type="button">Add Measure Grid (G)</button>
                 </div>
               </div>
               <div class="tool-group">
                 <div class="tool-group-title">Inspect</div>
                 <div class="tool-grid">
-                  <button class="tool-button" data-tool="measure" type="button">Measure (M)</button>
+                  <button class="tool-button ui-button" data-tool="measure" type="button">Measure (M)</button>
                 </div>
               </div>
             </div>
@@ -78,20 +88,20 @@
             <div class="tool-note">Units: meters (local canvas).</div>
           </section>
 
-          <section class="panel">
+          <section class="panel ui-surface">
             <h2>Propagation model</h2>
             <div class="properties">
               <div class="property-row property-row-stack">
                 <div class="field-label">
                   <span>Spreading</span>
                   <span class="tooltip">
-                    <button class="tooltip-trigger" type="button" aria-label="Spreading info">?</button>
+                    <button class="tooltip-trigger ui-button" type="button" aria-label="Spreading info">?</button>
                     <span class="tooltip-content">
                       <span class="tooltip-note">Distance loss model (point vs line sources).</span>
                     </span>
                   </span>
                 </div>
-                <select id="propagationSpreading">
+                <select class="ui-inset" id="propagationSpreading">
                   <option value="spherical">Spherical</option>
                   <option value="cylindrical">Cylindrical</option>
                 </select>
@@ -101,13 +111,13 @@
                 <div class="field-label">
                   <span>Atmospheric</span>
                   <span class="tooltip">
-                    <button class="tooltip-trigger" type="button" aria-label="Atmospheric info">?</button>
+                    <button class="tooltip-trigger ui-button" type="button" aria-label="Atmospheric info">?</button>
                     <span class="tooltip-content">
                       <span class="tooltip-note">Air absorption vs frequency.</span>
                     </span>
                   </span>
                 </div>
-                <select id="propagationAbsorption">
+                <select class="ui-inset" id="propagationAbsorption">
                   <option value="none">None</option>
                   <option value="simple">Simple</option>
                   <option value="iso9613">ISO 9613-1</option>
@@ -121,20 +131,20 @@
               <div class="field-help" id="propagationGroundHelp">Includes reflection + absorption by ground.</div>
               <div class="ground-details" id="propagationGroundDetails">
                 <div class="property-row property-row-stack">
-                  <div class="field-label">
-                    <span>Ground model</span>
-                    <span class="tooltip">
-                      <button class="tooltip-trigger" type="button" aria-label="Ground model info">?</button>
-                      <span class="tooltip-content">
-                        <span class="tooltip-title">Direct + reflected paths</span>
-                        <pre class="tooltip-diagram">source o----&gt; receiver
+                <div class="field-label">
+                  <span>Ground model</span>
+                  <span class="tooltip">
+                    <button class="tooltip-trigger ui-button" type="button" aria-label="Ground model info">?</button>
+                    <span class="tooltip-content">
+                      <span class="tooltip-title">Direct + reflected paths</span>
+                      <pre class="tooltip-diagram">source o----&gt; receiver
       \\      /
        \\____/ ground</pre>
                         <span class="tooltip-note">Detailed mode can raise or lower levels based on phase.</span>
                       </span>
                     </span>
                   </div>
-                  <select id="propagationGroundModel">
+                  <select class="ui-inset" id="propagationGroundModel">
                     <optgroup label="Recommended">
                       <option value="legacy">Simple (ISO 9613-2) - Recommended</option>
                     </optgroup>
@@ -145,16 +155,16 @@
                   <div class="field-help" id="propagationGroundModelHelp"></div>
                 </div>
                 <div class="property-row property-row-stack">
-                  <div class="field-label">
-                    <span>Ground surface</span>
-                    <span class="tooltip">
-                      <button class="tooltip-trigger" type="button" aria-label="Ground surface info">?</button>
-                      <span class="tooltip-content">
-                        <span class="tooltip-note">Porous ground absorbs more; hard ground reflects more.</span>
-                      </span>
+                <div class="field-label">
+                  <span>Ground surface</span>
+                  <span class="tooltip">
+                    <button class="tooltip-trigger ui-button" type="button" aria-label="Ground surface info">?</button>
+                    <span class="tooltip-content">
+                      <span class="tooltip-note">Porous ground absorbs more; hard ground reflects more.</span>
                     </span>
-                  </div>
-                  <select id="propagationGroundType">
+                  </span>
+                </div>
+                  <select class="ui-inset" id="propagationGroundType">
                     <option value="hard">Hard (concrete/water)</option>
                     <option value="mixed">Mixed</option>
                     <option value="soft">Porous (grass/soil)</option>
@@ -164,13 +174,13 @@
               </div>
               <div class="property-row">
                 <span>Max distance (m)</span>
-                <input id="propagationMaxDistance" type="number" min="1" step="1" />
+                <input class="ui-inset" id="propagationMaxDistance" type="number" min="1" step="1" />
               </div>
             </div>
             <div class="tool-note">Ground + absorption affect results today. Barriers + multi-reflections are still TODO.</div>
           </section>
 
-          <section class="panel">
+          <section class="panel ui-surface">
             <h2>Layers</h2>
             <label class="toggle">
               <input type="checkbox" id="layerSources" checked />
@@ -190,7 +200,7 @@
             </label>
           </section>
 
-          <section class="panel">
+          <section class="panel ui-surface">
             <h2>Ruler</h2>
             <div class="ruler-card">
               <div class="ruler-label" id="rulerLabel">50 m</div>
@@ -199,7 +209,7 @@
             <div class="ruler-note">Uses local meters ENU.</div>
           </section>
 
-          <section class="panel">
+          <section class="panel ui-surface">
             <h2>Scene</h2>
             <div class="scene-meta">
               <div>Sources: <span id="countSources">2</span></div>
@@ -210,7 +220,7 @@
         </aside>
 
         <main class="canvas-shell">
-          <div class="canvas-frame">
+          <div class="canvas-frame ui-surface">
             <canvas id="mapCanvas"></canvas>
             <div class="canvas-hud">
               <div class="hud-card">
@@ -228,7 +238,7 @@
             </div>
             <div class="canvas-hint" id="canvasHint">
               <span>Drag: pan • Scroll: zoom • Click: select • Shift+Drag: duplicate</span>
-              <button class="ghost" id="canvasHintClose" type="button">Dismiss</button>
+              <button class="ghost ui-button" id="canvasHintClose" type="button">Dismiss</button>
             </div>
             <div class="scale-bar">
               <div class="scale-line" id="scaleLine"></div>
@@ -243,7 +253,7 @@
         </main>
 
         <aside class="inspector">
-          <section class="panel">
+          <section class="panel ui-surface">
             <h2>Inspector</h2>
             <div class="inspector-body">
               <div class="inspector-row">
@@ -261,12 +271,12 @@
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel ui-surface">
             <h2>Properties</h2>
             <div class="properties" id="propertiesBody">Select an item to edit its properties.</div>
           </section>
 
-          <section class="panel">
+          <section class="panel ui-surface">
             <h2>Sources</h2>
             <div class="results-section">
               <div class="results-table" id="sourceTable"></div>
@@ -274,7 +284,7 @@
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel ui-surface">
             <h2>Measure Grid Stats</h2>
             <div class="results-section">
               <div class="panel-legend" id="panelLegend"></div>
@@ -282,16 +292,16 @@
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel ui-surface">
             <h2>Results</h2>
             <div class="results-section">
               <div class="results-title">Receivers</div>
               <div class="results-table" id="receiverTable"></div>
             </div>
-            <button class="ghost" id="exportCsv" type="button">Export CSV</button>
+            <button class="ghost ui-button" id="exportCsv" type="button">Export CSV</button>
           </section>
 
-          <section class="panel">
+          <section class="panel ui-surface">
             <h2>Notes</h2>
             <p class="note">Drag nodes and measure grids to trigger recompute once wired.</p>
           </section>
@@ -301,10 +311,10 @@
 
     <div class="modal" id="aboutModal" aria-hidden="true">
       <div class="modal-backdrop" data-modal-close></div>
-      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+      <div class="modal-card ui-surface" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
         <div class="modal-header">
           <h2 id="aboutTitle">About the Engine</h2>
-          <button class="ghost" id="aboutClose" type="button">Close</button>
+          <button class="ghost ui-button" id="aboutClose" type="button">Close</button>
         </div>
         <p class="note">
           This phase uses a simplified outdoor propagation model intended for fast iteration, not compliance.

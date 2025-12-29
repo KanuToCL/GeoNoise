@@ -41,6 +41,12 @@ function resolveFilePath(urlPath) {
     return resolve(root, 'src', 'style.css');
   }
 
+  if (urlPath === '/styles/theme.css') {
+    const themeDist = resolve(dist, 'styles', 'theme.css');
+    if (existsSync(themeDist)) return themeDist;
+    return resolve(root, 'src', 'styles', 'theme.css');
+  }
+
   if (urlPath.startsWith('/packages/')) {
     const packageCandidate = resolve(repoRoot, `.${urlPath}`);
     if (existsSync(packageCandidate)) return packageCandidate;
