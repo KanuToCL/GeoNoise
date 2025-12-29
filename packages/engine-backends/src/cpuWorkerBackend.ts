@@ -35,7 +35,7 @@ export class CPUWorkerBackend implements Engine {
   private async getEngine(): Promise<Engine> {
     if (!this._enginePromise) {
       this._enginePromise = (async () => {
-        const mod = await import('../../engine/src/compute/index.js');
+        const mod = await import('@geonoise/engine');
         return new (mod as any).CPUEngine() as Engine;
       })();
     }

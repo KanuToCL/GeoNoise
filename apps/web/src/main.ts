@@ -5,8 +5,12 @@ import {
   savePreference,
   type ComputePreference,
 } from './computePreference.js';
+import { engineCompute } from '@geonoise/engine-backends';
+import { createEmptyScene } from '@geonoise/core';
+import type { ComputePanelResponse, ComputeReceiversResponse } from '@geonoise/engine';
+import { panelId } from '@geonoise/shared';
 import { buildCsv } from './export.js';
-import type { SceneResults, ReceiverResult, PanelResult, PanelSample } from './export.js';
+import type { SceneResults, PanelResult } from './export.js';
 import { formatLevel, formatMeters } from './format.js';
 
 type Point = { x: number; y: number };
@@ -50,7 +54,7 @@ type DragState =
       offset: Point;
     };
 
-const canvas = document.querySelector('#mapCanvas') as HTMLCanvasElement | null;
+const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
 const coordLabel = document.querySelector('#coordLabel') as HTMLDivElement | null;
 const layerLabel = document.querySelector('#layerLabel') as HTMLDivElement | null;
 const statusPill = document.querySelector('#statusPill') as HTMLDivElement | null;
@@ -77,16 +81,19 @@ const countSources = document.querySelector('#countSources') as HTMLSpanElement 
 const countReceivers = document.querySelector('#countReceivers') as HTMLSpanElement | null;
 const countPanels = document.querySelector('#countPanels') as HTMLSpanElement | null;
 
-if (!canvas) {
+if (!canvasEl) {
   throw new Error('Canvas element missing');
 }
 
-const ctx = canvas.getContext('2d');
-if (!ctx) {
+const ctxEl = canvasEl.getContext('2d');
+if (!ctxEl) {
   throw new Error('Canvas context missing');
 }
+const canvas = canvasEl;
+const ctx = ctxEl;
 
 const capability = detectWebGPU();
+const origin = { latLon: { lat: 0, lon: 0 }, altitude: 0 };
 
 const scene = {
   sources: [
@@ -131,8 +138,6 @@ let results: SceneResults = { receivers: [], panels: [] };
 let sourceSeq = 3;
 let receiverSeq = 3;
 let panelSeq = 2;
-
-const MIN_LEVEL = -120;
 
 function niceDistance(value: number): number {
   const options = [5, 10, 20, 50, 100, 200, 500, 1000];
@@ -196,30 +201,6 @@ function distance(a: Point, b: Point) {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-function sumDecibels(levels: number[]) {
-  if (!levels.length) return MIN_LEVEL;
-  const sum = levels.reduce((acc, level) => acc + Math.pow(10, level / 10), 0);
-  return 10 * Math.log10(sum);
-}
-
-function computeSPL(source: Source, point: { x: number; y: number; z: number }) {
-  const dx = source.x - point.x;
-  const dy = source.y - point.y;
-  const dz = source.z - point.z;
-  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-  const safeDistance = Math.max(dist, 1);
-  const attenuation = 20 * Math.log10(safeDistance) + 11;
-  const level = source.power - attenuation;
-  return Math.max(level, MIN_LEVEL);
-}
-
-function percentile(values: number[], ratio: number) {
-  if (!values.length) return MIN_LEVEL;
-  const sorted = [...values].sort((a, b) => a - b);
-  const idx = Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * ratio) - 1));
-  return sorted[idx];
-}
-
 function pointInPolygon(point: Point, polygon: Point[]) {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
@@ -234,86 +215,163 @@ function pointInPolygon(point: Point, polygon: Point[]) {
   return inside;
 }
 
-function polygonBounds(points: Point[]) {
-  const xs = points.map((pt) => pt.x);
-  const ys = points.map((pt) => pt.y);
-  return {
-    minX: Math.min(...xs),
-    maxX: Math.max(...xs),
-    minY: Math.min(...ys),
-    maxY: Math.max(...ys),
-  };
+function getComputePreference(): ComputePreference {
+  if (preferenceSelect) return preferenceSelect.value as ComputePreference;
+  return loadPreference();
 }
 
-function samplePolygon(points: Point[], resolution: number, cap: number, elevation: number): PanelSample[] {
-  if (points.length < 3) return [];
-  const bounds = polygonBounds(points);
-  const samples: PanelSample[] = [];
+function buildEngineScene() {
+  const engineScene = createEmptyScene(origin, 'UI Scene');
 
-  for (let x = bounds.minX; x <= bounds.maxX; x += resolution) {
-    for (let y = bounds.minY; y <= bounds.maxY; y += resolution) {
-      if (pointInPolygon({ x, y }, points)) {
-        samples.push({ x, y, z: elevation, LAeq: MIN_LEVEL });
-      }
-    }
-  }
+  engineScene.sources = scene.sources.map((source) => ({
+    id: source.id,
+    type: 'point',
+    name: `Source ${source.id.toUpperCase()}`,
+    position: { x: source.x, y: source.y, z: source.z },
+    soundPowerLevel: source.power,
+    enabled: true,
+  }));
 
-  if (cap > 0 && samples.length > cap) {
-    const stride = Math.ceil(samples.length / cap);
-    return samples.filter((_, idx) => idx % stride === 0);
-  }
+  engineScene.receivers = scene.receivers.map((receiver) => ({
+    id: receiver.id,
+    type: 'point',
+    name: `Receiver ${receiver.id.toUpperCase()}`,
+    position: { x: receiver.x, y: receiver.y, z: receiver.z },
+    enabled: true,
+  }));
 
-  return samples;
+  engineScene.panels = scene.panels.map((panel) => ({
+    id: panel.id,
+    type: 'polygon',
+    name: `Panel ${panel.id.toUpperCase()}`,
+    vertices: panel.points.map((pt) => ({ x: pt.x, y: pt.y })),
+    elevation: panel.elevation,
+    sampling: { type: 'grid', resolution: panel.sampling.resolution, pointCount: panel.sampling.pointCap },
+    enabled: true,
+  }));
+
+  return engineScene;
 }
 
-function computeScene(): SceneResults {
-  const receiverResults: ReceiverResult[] = scene.receivers.map((receiver) => {
-    const levels = scene.sources.map((source) => computeSPL(source, receiver));
-    return {
-      id: receiver.id,
-      x: receiver.x,
-      y: receiver.y,
-      z: receiver.z,
-      LAeq: sumDecibels(levels),
-    };
-  });
+function pruneResults() {
+  const receiverIds = new Set(scene.receivers.map((receiver) => receiver.id));
+  results.receivers = results.receivers.filter((receiver) => receiverIds.has(receiver.id));
 
-  const panelResults: PanelResult[] = scene.panels.map((panel) => {
-    const samples = samplePolygon(panel.points, panel.sampling.resolution, panel.sampling.pointCap, panel.elevation);
-    const levels = samples.map((sample) => {
-      const level = sumDecibels(scene.sources.map((source) => computeSPL(source, sample)));
-      sample.LAeq = level;
-      return level;
+  const panelIds = new Set(scene.panels.map((panel) => panel.id));
+  results.panels = results.panels.filter((panel) => panelIds.has(panel.panelId));
+}
+
+function updateStatus(meta: { backendId: string; timings?: { totalMs?: number }; warnings?: Array<unknown> }) {
+  if (!statusPill) return;
+  const timing = meta.timings?.totalMs;
+  const timingLabel = typeof timing === 'number' ? `${timing.toFixed(1)} ms` : 'n/a';
+  const warnings = meta.warnings?.length ?? 0;
+  const warningLabel = warnings ? ` • ${warnings} warning${warnings === 1 ? '' : 's'}` : '';
+  statusPill.textContent = `${meta.backendId} • ${timingLabel}${warningLabel}`;
+}
+
+function isStaleError(error: unknown) {
+  return error instanceof Error && error.message === 'stale';
+}
+
+function showComputeError(label: string, error: unknown) {
+  if (statusPill) statusPill.textContent = `${label} compute error`;
+  // eslint-disable-next-line no-console
+  console.error(label, error);
+}
+
+function updatePanelResult(panelResult: PanelResult) {
+  const idx = results.panels.findIndex((panel) => panel.panelId === panelResult.panelId);
+  if (idx >= 0) {
+    results.panels[idx] = panelResult;
+  } else {
+    results.panels.push(panelResult);
+  }
+}
+
+async function computeReceivers(engineScene: ReturnType<typeof buildEngineScene>, preference: ComputePreference) {
+  try {
+    const response = (await engineCompute(
+      { kind: 'receivers', scene: engineScene, payload: {} },
+      preference,
+      'receivers'
+    )) as ComputeReceiversResponse;
+    const receiverMap = new Map(scene.receivers.map((receiver) => [receiver.id, receiver]));
+    results.receivers = response.results.map((result) => {
+      const receiver = receiverMap.get(String(result.receiverId));
+      return {
+        id: receiver?.id ?? String(result.receiverId),
+        x: receiver?.x ?? 0,
+        y: receiver?.y ?? 0,
+        z: receiver?.z ?? 0,
+        LAeq: result.LAeq,
+      };
     });
+    updateStatus(response);
+    renderResults();
+    drawScene();
+  } catch (error) {
+    if (isStaleError(error)) return;
+    showComputeError('Receivers', error);
+  }
+}
 
-    const validLevels = levels.filter((level) => Number.isFinite(level));
-    const min = validLevels.length ? Math.min(...validLevels) : MIN_LEVEL;
-    const max = validLevels.length ? Math.max(...validLevels) : MIN_LEVEL;
-    const avg = validLevels.length
-      ? sumDecibels(validLevels) - 10 * Math.log10(validLevels.length)
-      : MIN_LEVEL;
-    const p95 = validLevels.length ? percentile(validLevels, 0.95) : MIN_LEVEL;
+async function computePanel(
+  engineScene: ReturnType<typeof buildEngineScene>,
+  preference: ComputePreference,
+  panel: Panel
+) {
+  try {
+    const response = (await engineCompute(
+      {
+        kind: 'panel',
+        scene: engineScene,
+        payload: {
+          panelId: panelId(panel.id),
+          sampling: { type: 'grid', resolution: panel.sampling.resolution, pointCount: panel.sampling.pointCap },
+        },
+      },
+      preference,
+      `panel:${panel.id}`
+    )) as ComputePanelResponse;
 
-    return {
-      panelId: panel.id,
-      sampleCount: samples.length,
-      LAeq_min: min,
-      LAeq_max: max,
-      LAeq_avg: avg,
-      LAeq_p95: p95,
-      samples,
+    const result = response.result;
+    const panelResult: PanelResult = {
+      panelId: String(result.panelId),
+      sampleCount: result.sampleCount,
+      LAeq_min: result.LAeq_min,
+      LAeq_max: result.LAeq_max,
+      LAeq_avg: result.LAeq_avg,
+      LAeq_p95: result.LAeq_p95,
+      samples: (result.samples ?? []).map((sample) => ({
+        x: sample.x,
+        y: sample.y,
+        z: sample.z,
+        LAeq: sample.LAeq,
+      })),
     };
-  });
+    updatePanelResult(panelResult);
+    renderResults();
+    drawScene();
+  } catch (error) {
+    if (isStaleError(error)) return;
+    showComputeError(`Panel ${panel.id}`, error);
+  }
+}
 
-  results = { receivers: receiverResults, panels: panelResults };
+function computeScene() {
+  pruneResults();
   renderResults();
   drawScene();
 
-  if (statusPill) {
-    statusPill.textContent = `Computed ${receiverResults.length} receivers`;
-  }
+  if (statusPill) statusPill.textContent = 'Computing...';
+  const preference = getComputePreference();
+  const engineScene = buildEngineScene();
 
-  return results;
+  void computeReceivers(engineScene, preference);
+  for (const panel of scene.panels) {
+    void computePanel(engineScene, preference, panel);
+  }
 }
 
 function renderResults() {
@@ -363,8 +421,9 @@ function setActiveTool(tool: Tool) {
 
 function setSelection(next: Selection) {
   selection = next;
+  const current = selection;
   if (selectionLabel) {
-    selectionLabel.textContent = selection.type === 'none' ? 'None' : `${selection.type} ${selection.id}`;
+    selectionLabel.textContent = current.type === 'none' ? 'None' : `${current.type} ${current.id}`;
   }
   renderProperties();
   drawScene();
@@ -373,18 +432,19 @@ function setSelection(next: Selection) {
 function renderProperties() {
   if (!propertiesBody) return;
   propertiesBody.innerHTML = '';
+  const current = selection;
 
-  if (selection.type === 'none') {
+  if (current.type === 'none') {
     propertiesBody.textContent = 'Select an item to edit its properties.';
     return;
   }
 
   const header = document.createElement('div');
-  header.textContent = `Editing ${selection.type} ${selection.id}`;
+  header.textContent = `Editing ${current.type} ${current.id}`;
   propertiesBody.appendChild(header);
 
-  if (selection.type === 'source') {
-    const source = scene.sources.find((item) => item.id === selection.id);
+  if (current.type === 'source') {
+    const source = scene.sources.find((item) => item.id === current.id);
     if (!source) return;
     propertiesBody.appendChild(createInputRow('Height (m)', source.z, (value) => {
       source.z = value;
@@ -396,8 +456,8 @@ function renderProperties() {
     }));
   }
 
-  if (selection.type === 'receiver') {
-    const receiver = scene.receivers.find((item) => item.id === selection.id);
+  if (current.type === 'receiver') {
+    const receiver = scene.receivers.find((item) => item.id === current.id);
     if (!receiver) return;
     propertiesBody.appendChild(createInputRow('Height (m)', receiver.z, (value) => {
       receiver.z = value;
@@ -405,8 +465,8 @@ function renderProperties() {
     }));
   }
 
-  if (selection.type === 'panel') {
-    const panel = scene.panels.find((item) => item.id === selection.id);
+  if (current.type === 'panel') {
+    const panel = scene.panels.find((item) => item.id === current.id);
     if (!panel) return;
     propertiesBody.appendChild(createInputRow('Elevation (m)', panel.elevation, (value) => {
       panel.elevation = value;
@@ -459,6 +519,7 @@ function wirePreference() {
     const preference = preferenceSelect.value as ComputePreference;
     savePreference(preference);
     updateComputeStatus(preference);
+    computeScene();
   });
 }
 
@@ -626,7 +687,7 @@ function drawMeasurement() {
   ctx.fillText(label, mid.x + 6, mid.y - 6);
 }
 
-function drawPanelSamples(panel: Panel, panelResult: PanelResult) {
+function drawPanelSamples(panelResult: PanelResult) {
   if (!layers.panels) return;
   const min = panelResult.LAeq_min;
   const max = panelResult.LAeq_max;
@@ -768,7 +829,7 @@ function drawScene() {
     for (const panelResult of results.panels) {
       const panel = scene.panels.find((item) => item.id === panelResult.panelId);
       if (panel) {
-        drawPanelSamples(panel, panelResult);
+        drawPanelSamples(panelResult);
       }
     }
   }
@@ -797,26 +858,27 @@ function handlePointerMove(event: MouseEvent) {
   }
 
   if (dragState) {
+    const activeDrag = dragState;
     const targetPoint = {
-      x: worldPoint.x - dragState.offset.x,
-      y: worldPoint.y - dragState.offset.y,
+      x: worldPoint.x - activeDrag.offset.x,
+      y: worldPoint.y - activeDrag.offset.y,
     };
-    if (dragState.type === 'source') {
-      const source = scene.sources.find((item) => item.id === dragState.id);
+    if (activeDrag.type === 'source') {
+      const source = scene.sources.find((item) => item.id === activeDrag.id);
       if (source) {
         source.x = targetPoint.x;
         source.y = targetPoint.y;
       }
     }
-    if (dragState.type === 'receiver') {
-      const receiver = scene.receivers.find((item) => item.id === dragState.id);
+    if (activeDrag.type === 'receiver') {
+      const receiver = scene.receivers.find((item) => item.id === activeDrag.id);
       if (receiver) {
         receiver.x = targetPoint.x;
         receiver.y = targetPoint.y;
       }
     }
-    if (dragState.type === 'panel') {
-      const panel = scene.panels.find((item) => item.id === dragState.id);
+    if (activeDrag.type === 'panel') {
+      const panel = scene.panels.find((item) => item.id === activeDrag.id);
       if (panel) {
         const dx = targetPoint.x - panel.points[0].x;
         const dy = targetPoint.y - panel.points[0].y;

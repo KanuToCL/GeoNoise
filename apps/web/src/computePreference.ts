@@ -20,8 +20,10 @@ export function savePreference(preference: ComputePreference, storage: StorageLi
   storage.setItem(STORAGE_KEY, preference);
 }
 
-export function detectWebGPU(env: { navigator?: { gpu?: unknown } } = globalThis): CapabilityStatus {
-  if (env.navigator && 'gpu' in env.navigator) {
+export function detectWebGPU(
+  env: { navigator?: { gpu?: unknown } } = { navigator: (globalThis as any).navigator }
+): CapabilityStatus {
+  if (env.navigator && (env.navigator as { gpu?: unknown }).gpu) {
     return { ok: true };
   }
   return { ok: false, reason: 'WebGPU not available on this device' };

@@ -4,12 +4,23 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = resolve(root, '..', '..');
 const dist = resolve(root, 'dist');
 
 rmSync(dist, { recursive: true, force: true });
 
-execFileSync('tsc', ['-b'], {
-  cwd: root,
+const projects = [
+  'packages/shared',
+  'packages/core',
+  'packages/geo',
+  'packages/engine',
+  'packages/engine-backends',
+  'packages/engine-webgpu',
+  'apps/web',
+];
+
+execFileSync('tsc', ['-b', ...projects], {
+  cwd: repoRoot,
   stdio: 'inherit',
 });
 

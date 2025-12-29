@@ -4,9 +4,21 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "composite": true,
-    "declaration": false,
-    "declarationMap": false
+    "declaration": true,
+    "declarationMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@geonoise/*": ["../../packages/*/dist"]
+    }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+  "exclude": ["node_modules", "dist", "**/*.test.ts"],
+  "references": [
+    { "path": "../../packages/shared" },
+    { "path": "../../packages/core" },
+    { "path": "../../packages/geo" },
+    { "path": "../../packages/engine" },
+    { "path": "../../packages/engine-backends" },
+    { "path": "../../packages/engine-webgpu" }
+  ]
 }

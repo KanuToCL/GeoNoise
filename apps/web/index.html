@@ -5,6 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GeoNoise</title>
     <link rel="stylesheet" href="./style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "@geonoise/shared": "/packages/shared/dist/index.js",
+          "@geonoise/core": "/packages/core/dist/index.js",
+          "@geonoise/core/coords": "/packages/core/dist/coords/index.js",
+          "@geonoise/geo": "/packages/geo/dist/index.js",
+          "@geonoise/engine": "/packages/engine/dist/index.js",
+          "@geonoise/engine-backends": "/packages/engine-backends/dist/index.js",
+          "@geonoise/engine-webgpu": "/packages/engine-webgpu/dist/index.js",
+          "zod": "/node_modules/zod/index.js"
+        }
+      }
+    </script>
   </head>
   <body>
     <div class="app">

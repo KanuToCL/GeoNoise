@@ -5,10 +5,21 @@ import { dirname, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = resolve(root, '..', '..');
 const dist = resolve(root, 'dist');
 
-const tsc = spawn('tsc', ['-b', '--watch'], {
-  cwd: root,
+const projects = [
+  'packages/shared',
+  'packages/core',
+  'packages/geo',
+  'packages/engine',
+  'packages/engine-backends',
+  'packages/engine-webgpu',
+  'apps/web',
+];
+
+const tsc = spawn('tsc', ['-b', '--watch', ...projects], {
+  cwd: repoRoot,
   stdio: 'inherit',
 });
 
@@ -28,6 +39,16 @@ function resolveFilePath(urlPath) {
     const cssDist = resolve(dist, 'style.css');
     if (existsSync(cssDist)) return cssDist;
     return resolve(root, 'src', 'style.css');
+  }
+
+  if (urlPath.startsWith('/packages/')) {
+    const packageCandidate = resolve(repoRoot, `.${urlPath}`);
+    if (existsSync(packageCandidate)) return packageCandidate;
+  }
+
+  if (urlPath.startsWith('/node_modules/')) {
+    const moduleCandidate = resolve(repoRoot, `.${urlPath}`);
+    if (existsSync(moduleCandidate)) return moduleCandidate;
   }
 
   const candidate = resolve(dist, `.${urlPath}`);

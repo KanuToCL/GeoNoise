@@ -20,7 +20,8 @@ export async function createDefaultRouter(options?: { defaultPreference?: import
 
   // Try to register WebGPU backend if available (optional dynamic import)
   // Skip dynamic import during test runs to avoid requiring built dist files
-  if (process.env.NODE_ENV !== 'test') {
+  const isTest = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+  if (!isTest) {
     try {
       // Dynamic import to avoid hard dependency if package is not present
       // Use eval to prevent static bundlers (vite) from resolving the import at build time
