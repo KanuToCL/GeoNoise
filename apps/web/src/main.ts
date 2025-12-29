@@ -96,6 +96,9 @@ const propagationGroundReflection = document.querySelector('#propagationGroundRe
 const propagationGroundModel = document.querySelector('#propagationGroundModel') as HTMLSelectElement | null;
 const propagationGroundType = document.querySelector('#propagationGroundType') as HTMLSelectElement | null;
 const propagationMaxDistance = document.querySelector('#propagationMaxDistance') as HTMLInputElement | null;
+const propagationGroundDetails = document.querySelector('#propagationGroundDetails') as HTMLDivElement | null;
+const propagationGroundHelp = document.querySelector('#propagationGroundHelp') as HTMLDivElement | null;
+const propagationGroundModelHelp = document.querySelector('#propagationGroundModelHelp') as HTMLDivElement | null;
 
 const layerSources = document.querySelector('#layerSources') as HTMLInputElement | null;
 const layerReceivers = document.querySelector('#layerReceivers') as HTMLInputElement | null;
@@ -1589,18 +1592,34 @@ function wireAbout() {
 
 function updatePropagationControls() {
   const current = getPropagationConfig();
+  const groundEnabled = current.groundReflection;
   if (propagationSpreading) propagationSpreading.value = current.spreading;
   if (propagationAbsorption) propagationAbsorption.value = current.atmosphericAbsorption;
-  if (propagationGroundReflection) propagationGroundReflection.checked = current.groundReflection;
+  if (propagationGroundReflection) propagationGroundReflection.checked = groundEnabled;
   if (propagationGroundModel) {
     propagationGroundModel.value = current.groundModel;
-    propagationGroundModel.disabled = !current.groundReflection;
+    propagationGroundModel.disabled = !groundEnabled;
   }
   if (propagationGroundType) {
     propagationGroundType.value = current.groundType;
-    propagationGroundType.disabled = !current.groundReflection;
+    propagationGroundType.disabled = !groundEnabled;
   }
   if (propagationMaxDistance) propagationMaxDistance.value = current.maxDistance.toString();
+  if (propagationGroundDetails) {
+    propagationGroundDetails.classList.toggle('is-hidden', !groundEnabled);
+  }
+  if (propagationGroundHelp) {
+    propagationGroundHelp.classList.toggle('is-hidden', !groundEnabled);
+  }
+  if (propagationGroundModelHelp) {
+    if (!groundEnabled) {
+      propagationGroundModelHelp.textContent = '';
+    } else if (current.groundModel === 'legacy') {
+      propagationGroundModelHelp.textContent = 'Best for quick A-weighted maps; does not model interference ripples.';
+    } else {
+      propagationGroundModelHelp.textContent = 'Models interference between direct + reflected sound; results vary by frequency and geometry.';
+    }
+  }
 }
 
 function wirePropagationControls() {
@@ -1628,6 +1647,7 @@ function wirePropagationControls() {
 
   propagationGroundModel?.addEventListener('change', () => {
     updatePropagationConfig({ groundModel: propagationGroundModel.value as PropagationConfig['groundModel'] });
+    updatePropagationControls();
     computeScene();
   });
 

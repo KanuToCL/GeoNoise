@@ -82,22 +82,43 @@
               </div>
               <label class="toggle">
                 <input type="checkbox" id="propagationGroundReflection" />
-                <span>Ground reflection</span>
+                <span>Ground effects</span>
               </label>
-              <div class="property-row property-row-stack">
-                <span>Ground model</span>
-                <select id="propagationGroundModel">
-                  <option value="legacy">Legacy</option>
-                  <option value="twoRayPhasor">Two-ray phasor</option>
-                </select>
-              </div>
-              <div class="property-row property-row-stack">
-                <span>Ground type</span>
-                <select id="propagationGroundType">
-                  <option value="hard">Hard</option>
-                  <option value="mixed">Mixed</option>
-                  <option value="soft">Soft</option>
-                </select>
+              <div class="field-help" id="propagationGroundHelp">Includes reflection + absorption by ground.</div>
+              <div class="ground-details" id="propagationGroundDetails">
+                <div class="property-row property-row-stack">
+                  <div class="field-label">
+                    <span>Ground model</span>
+                    <span class="tooltip">
+                      <button class="tooltip-trigger" type="button" aria-label="Ground model info">i</button>
+                      <span class="tooltip-content">
+                        <span class="tooltip-title">Direct + reflected paths</span>
+                        <pre class="tooltip-diagram">source o----&gt; receiver
+      \\      /
+       \\____/ ground</pre>
+                        <span class="tooltip-note">Detailed mode can raise or lower levels based on phase.</span>
+                      </span>
+                    </span>
+                  </div>
+                  <select id="propagationGroundModel">
+                    <optgroup label="Recommended">
+                      <option value="legacy">Simple (ISO 9613-2) - Recommended</option>
+                    </optgroup>
+                    <optgroup label="Advanced">
+                      <option value="twoRayPhasor">Detailed (Two-ray phasor) - Frequency-dependent</option>
+                    </optgroup>
+                  </select>
+                  <div class="field-help" id="propagationGroundModelHelp"></div>
+                </div>
+                <div class="property-row property-row-stack">
+                  <span>Ground surface</span>
+                  <select id="propagationGroundType">
+                    <option value="hard">Hard (concrete/water)</option>
+                    <option value="mixed">Mixed</option>
+                    <option value="soft">Porous (grass/soil)</option>
+                  </select>
+                  <div class="field-help">Porous ground absorbs more; hard ground reflects more.</div>
+                </div>
               </div>
               <div class="property-row">
                 <span>Max distance (m)</span>
