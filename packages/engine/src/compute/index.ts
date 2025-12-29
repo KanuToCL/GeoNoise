@@ -70,7 +70,21 @@ export class CPUEngine implements Engine {
 
     const panel = scene.panels.find(p => p.id === request.payload.panelId);
     if (!panel || !panel.enabled) {
-      return { kind: 'panel', result: { panelId: request.payload.panelId as any, sampleCount: 0, LAeq_min: MIN_LEVEL, LAeq_max: MIN_LEVEL, LAeq_avg: MIN_LEVEL }, sceneHash: createRequestHash(request), backendId: 'cpu-main', timings: { totalMs: performance.now() - start }, warnings: [{ code: 'PANEL_NOT_FOUND', message: 'Panel not found or disabled', severity: 'warning' }] };
+      return {
+        kind: 'panel',
+        result: {
+          panelId: request.payload.panelId as any,
+          sampleCount: 0,
+          LAeq_min: MIN_LEVEL,
+          LAeq_max: MIN_LEVEL,
+          LAeq_avg: MIN_LEVEL,
+          LAeq_p95: MIN_LEVEL,
+        },
+        sceneHash: createRequestHash(request),
+        backendId: 'cpu-main',
+        timings: { totalMs: performance.now() - start },
+        warnings: [{ code: 'PANEL_NOT_FOUND', message: 'Panel not found or disabled', severity: 'warning' }],
+      };
     }
 
     const sampling = request.payload.sampling ?? panel.sampling ?? { type: 'grid', resolution: 5 };
@@ -81,6 +95,10 @@ export class CPUEngine implements Engine {
       samples = generateRectangleSamples({ x: panel.center.x, y: panel.center.y }, panel.width, panel.height, panel.rotation ?? 0, sampling.resolution, elevation);
     } else {
       samples = generatePolygonSamples(panel.vertices, sampling.resolution, elevation);
+    }
+    if (sampling.pointCount && samples.length > sampling.pointCount) {
+      const stride = Math.ceil(samples.length / sampling.pointCount);
+      samples = samples.filter((_, idx) => idx % stride === 0);
     }
 
     const enabledSources = scene.sources.filter(s => s.enabled);
@@ -93,11 +111,16 @@ export class CPUEngine implements Engine {
     });
 
     const laeqs = sampleResults.map(s => s.LAeq).filter(l => l > MIN_LEVEL);
+    const sorted = [...laeqs].sort((a, b) => a - b);
+    const p95Index = sorted.length
+      ? Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1))
+      : 0;
     const result: PanelResult = {
       panelId: request.payload.panelId as any, sampleCount: samples.length,
       LAeq_min: laeqs.length ? Math.min(...laeqs) : MIN_LEVEL,
       LAeq_max: laeqs.length ? Math.max(...laeqs) : MIN_LEVEL,
       LAeq_avg: laeqs.length ? sumDecibels(laeqs) - 10 * Math.log10(laeqs.length) : MIN_LEVEL,
+      LAeq_p95: laeqs.length ? sorted[p95Index] : MIN_LEVEL,
       samples: sampleResults
     };
 

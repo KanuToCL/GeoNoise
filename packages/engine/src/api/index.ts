@@ -76,6 +76,7 @@ export interface PanelResult {
   LAeq_min: number;
   LAeq_max: number;
   LAeq_avg: number;
+  LAeq_p95: number;
   LAeq_L90?: number;
   samples?: PanelSampleResult[];
 }

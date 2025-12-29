@@ -35,6 +35,19 @@
       <div class="content">
         <aside class="sidebar">
           <section class="panel">
+            <h2>Tools</h2>
+            <div class="tool-grid" id="toolGrid">
+              <button class="tool-button is-active" data-tool="select" type="button">Select</button>
+              <button class="tool-button" data-tool="add-source" type="button">Add Source</button>
+              <button class="tool-button" data-tool="add-receiver" type="button">Add Receiver</button>
+              <button class="tool-button" data-tool="add-panel" type="button">Add Panel</button>
+              <button class="tool-button" data-tool="measure" type="button">Measure</button>
+              <button class="tool-button" data-tool="delete" type="button">Delete</button>
+            </div>
+            <div class="tool-note">Click or drag on the canvas in local meters.</div>
+          </section>
+
+          <section class="panel">
             <h2>Layers</h2>
             <label class="toggle">
               <input type="checkbox" id="layerSources" checked />
@@ -103,17 +116,35 @@
             <div class="inspector-body">
               <div class="inspector-row">
                 <span>Selection</span>
-                <strong>None</strong>
+                <strong id="selectionLabel">None</strong>
               </div>
               <div class="inspector-row">
                 <span>Mode</span>
-                <strong>Drag</strong>
+                <strong id="modeLabel">Select</strong>
               </div>
               <div class="inspector-row">
                 <span>Snap</span>
                 <strong>5 m</strong>
               </div>
             </div>
+          </section>
+
+          <section class="panel">
+            <h2>Properties</h2>
+            <div class="properties" id="propertiesBody">Select an item to edit its properties.</div>
+          </section>
+
+          <section class="panel">
+            <h2>Results</h2>
+            <div class="results-section">
+              <div class="results-title">Receivers</div>
+              <div class="results-table" id="receiverTable"></div>
+            </div>
+            <div class="results-section">
+              <div class="results-title">Panel Stats</div>
+              <div class="panel-stats" id="panelStats"></div>
+            </div>
+            <button class="ghost" id="exportCsv" type="button">Export CSV</button>
           </section>
 
           <section class="panel">

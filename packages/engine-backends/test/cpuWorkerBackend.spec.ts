@@ -107,6 +107,7 @@ describe('CPUWorkerBackend', () => {
             "LAeq_avg": 68.22669956338883,
             "LAeq_max": 72.25600681842305,
             "LAeq_min": 64.42157274747662,
+            "LAeq_p95": 72.25600681842305,
             "panelId": "p1",
             "sampleCount": 9,
             "samples": [
