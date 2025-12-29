@@ -178,6 +178,7 @@ const layers = {
 let pixelsPerMeter = 3;
 let activeTool: Tool = 'select';
 let selection: Selection = { type: 'none' };
+let hoverSelection: Selection | null = null;
 let dragState: DragState = null;
 let measureStart: Point | null = null;
 let measureEnd: Point | null = null;
@@ -239,6 +240,14 @@ function niceDistance(value: number): number {
     if (value >= option) best = option;
   }
   return best;
+}
+
+function sameSelection(a: Selection | null, b: Selection | null) {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  if (a.type !== b.type) return false;
+  if (a.type === 'none' || b.type === 'none') return a.type === b.type;
+  return a.id === b.id;
 }
 
 function updateCounts() {
@@ -597,8 +606,9 @@ function getComputePreference(): ComputePreference {
 }
 
 function isSourceEnabled(source: Source) {
+  if (!source.enabled) return false;
   if (soloSourceId) return source.id === soloSourceId;
-  return source.enabled;
+  return true;
 }
 
 function buildEngineScene() {
@@ -1333,12 +1343,12 @@ function wirePreference() {
   if (!preferenceSelect) return;
   const storedPreference = loadPreference();
   const gpuOption = preferenceSelect.querySelector('option[value="gpu"]') as HTMLOptionElement | null;
-  const gpuDisabled = gpuOption?.disabled ?? false;
+  const gpuUnavailable = !gpuOption || gpuOption.disabled;
   let initialPreference: ComputePreference = storedPreference === 'gpu' ? 'gpu' : 'cpu';
   if (storedPreference === 'auto') {
     initialPreference = 'cpu';
   }
-  if (gpuDisabled) {
+  if (gpuUnavailable) {
     initialPreference = 'cpu';
   }
   preferenceSelect.value = initialPreference;
@@ -1598,12 +1608,22 @@ function drawPanels() {
 }
 
 function drawSources() {
-  ctx.fillStyle = '#e76f51';
-  ctx.strokeStyle = '#aa4e37';
-  ctx.lineWidth = 2;
+  const activeFill = '#e76f51';
+  const activeStroke = '#aa4e37';
+  const mutedFill = 'rgba(31, 28, 24, 0.12)';
+  const mutedStroke = 'rgba(31, 28, 24, 0.35)';
+  const mutedText = '#8a7b6d';
 
   for (const source of scene.sources) {
+    const isMuted = !source.enabled;
+    const isSuppressed = !!soloSourceId && soloSourceId !== source.id;
+    const isDimmed = isMuted || isSuppressed;
+    const fill = isDimmed ? mutedFill : activeFill;
+    const stroke = isDimmed ? mutedStroke : activeStroke;
     const p = worldToCanvas(source);
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
     ctx.fill();
@@ -1615,14 +1635,31 @@ function drawSources() {
       ctx.beginPath();
       ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.strokeStyle = '#aa4e37';
+      ctx.strokeStyle = stroke;
       ctx.lineWidth = 2;
     }
 
-    ctx.fillStyle = '#1f1c18';
+    ctx.fillStyle = isDimmed ? mutedText : '#1f1c18';
     ctx.font = '12px "Space Grotesk", sans-serif';
     ctx.fillText(source.id.toUpperCase(), p.x + 14, p.y - 6);
-    ctx.fillStyle = '#e76f51';
+
+    const isHovered = hoverSelection?.type === 'source' && hoverSelection.id === source.id;
+    if (isHovered && isMuted) {
+      const label = 'Muted';
+      ctx.font = '11px "Space Grotesk", sans-serif';
+      const paddingX = 6;
+      const boxWidth = ctx.measureText(label).width + paddingX * 2;
+      const boxHeight = 18;
+      const boxX = p.x + 14;
+      const boxY = p.y + 8;
+      ctx.fillStyle = 'rgba(31, 28, 24, 0.85)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.lineWidth = 1;
+      ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+      ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
+      ctx.fillStyle = '#fdfaf5';
+      ctx.fillText(label, boxX + paddingX, boxY + 12);
+    }
   }
 }
 
@@ -1745,6 +1782,17 @@ function handlePointerMove(event: MouseEvent) {
     return;
   }
 
+  if (!dragState && (activeTool === 'select' || activeTool === 'delete')) {
+    const nextHover = hitTest(canvasPoint);
+    if (!sameSelection(hoverSelection, nextHover)) {
+      hoverSelection = nextHover;
+      drawScene();
+    }
+  } else if (!dragState && hoverSelection) {
+    hoverSelection = null;
+    drawScene();
+  }
+
   if (dragState) {
     const activeDrag = dragState;
     const targetPoint = {
@@ -1805,6 +1853,7 @@ function handlePointerDown(event: MouseEvent) {
   const canvasPoint = { x: event.clientX - rect.left, y: event.clientY - rect.top };
   const worldPoint = canvasToWorld(canvasPoint);
   const { point: snappedPoint } = snapPoint(worldPoint);
+  hoverSelection = null;
 
   if (activeTool === 'add-source') {
     addSourceAt(snappedPoint);
@@ -1933,6 +1982,16 @@ function handlePointerDown(event: MouseEvent) {
   }
 }
 
+function handlePointerLeave() {
+  if (hoverSelection) {
+    hoverSelection = null;
+    drawScene();
+  }
+  if (snapIndicator) {
+    snapIndicator.style.display = 'none';
+  }
+}
+
 function handlePointerUp() {
   if (panState) {
     panState = null;
@@ -1950,6 +2009,7 @@ function handlePointerUp() {
 function wirePointer() {
   canvas.addEventListener('mousemove', handlePointerMove);
   canvas.addEventListener('mousedown', handlePointerDown);
+  canvas.addEventListener('mouseleave', handlePointerLeave);
   window.addEventListener('mouseup', handlePointerUp);
 }
 
