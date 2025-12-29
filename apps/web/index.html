@@ -25,78 +25,73 @@
     <div class="app">
       <header class="topbar ui-surface">
         <div class="topbar-left">
-          <div class="brand">
-            <span class="brand-mark"></span>
-            <div>
-              <div class="brand-title">GeoNoise</div>
-              <div class="brand-sub">Phase 1 Console</div>
-            </div>
-          </div>
-          <div class="scene-meta">
-            <input class="scene-name ui-inset" id="sceneName" type="text" value="Untitled" aria-label="Scene name" />
-            <div class="scene-status" id="sceneStatus" aria-live="polite">
-              <span class="scene-dot" id="sceneDot" data-state="saved"></span>
-              <span class="scene-status-label" id="sceneStatusLabel">Saved</span>
-            </div>
+          <div class="topbar-actions">
+            <button class="ghost ui-button" id="undoButton" type="button" title="Undo the last change.">Undo</button>
+            <button class="ghost ui-button" id="redoButton" type="button" title="Redo the last change.">Redo</button>
           </div>
         </div>
         <div class="topbar-center">
-          <div class="run-group">
-            <button
-              class="primary ui-button"
-              id="computeButton"
-              type="button"
-              title="Run propagation and update receiver/grid levels."
-            >
-              Compute
-            </button>
-            <!-- Whole-scene noise map ("Mesh All"): compute a padded grid and render as a heatmap overlay. -->
-            <button class="primary ui-button" id="meshButton" type="button" title="Generate a whole-scene noise map.">
-              Generate Map
-            </button>
-            <div class="status-chip status-chip--small" id="computeChip">Ready</div>
-          </div>
-          <!-- Lightweight feedback for heavy map computation (keeps UI responsive). -->
-          <div class="map-toast" id="mapToast" role="status" aria-live="polite"></div>
-          <div class="run-options">
-            <label for="computePreference">Backend</label>
-            <select class="ui-inset" id="computePreference">
-              <option value="cpu">CPU</option>
-            </select>
+          <div class="brand brand--debossed">
+            <div class="brand-icon" aria-hidden="true">
+              <svg class="brand-rings" viewBox="0 0 100 100" focusable="false" aria-hidden="true">
+                <defs>
+                  <filter id="brand-inner-shadow" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+                    <feOffset dx="-2" dy="-2" in="SourceAlpha" result="shadow1" />
+                    <feGaussianBlur in="shadow1" stdDeviation="2" result="shadow1-blur" />
+                    <feComposite in="shadow1-blur" in2="SourceAlpha" operator="arithmetic" k2="-1" k3="1" result="shadow1-inner" />
+                    <feFlood flood-color="rgb(163, 177, 198)" flood-opacity="0.6" result="shadow1-color" />
+                    <feComposite in="shadow1-color" in2="shadow1-inner" operator="in" result="shadow1-final" />
+                    <feOffset dx="2" dy="2" in="SourceAlpha" result="shadow2" />
+                    <feGaussianBlur in="shadow2" stdDeviation="2" result="shadow2-blur" />
+                    <feComposite in="shadow2-blur" in2="SourceAlpha" operator="arithmetic" k2="-1" k3="1" result="shadow2-inner" />
+                    <feFlood flood-color="white" flood-opacity="0.7" result="shadow2-color" />
+                    <feComposite in="shadow2-color" in2="shadow2-inner" operator="in" result="shadow2-final" />
+                    <feComposite in="shadow1-final" in2="shadow2-final" operator="over" result="shadow-combined" />
+                    <feComposite in="SourceGraphic" in2="shadow-combined" operator="over" />
+                  </filter>
+                </defs>
+                <g class="brand-ring-group" filter="url(#brand-inner-shadow)">
+                  <circle class="brand-ring" cx="50" cy="50" r="36" />
+                  <circle class="brand-ring" cx="50" cy="50" r="26" />
+                  <circle class="brand-ring" cx="50" cy="50" r="16" />
+                </g>
+              </svg>
+              <span class="brand-core"></span>
+            </div>
+            <div class="brand-title">GeoNoise</div>
           </div>
         </div>
         <div class="topbar-right">
-          <button class="ghost ui-button" id="saveButton" type="button" title="Save this scene as JSON.">Save</button>
-          <button class="ghost ui-button" id="loadButton" type="button" title="Open a saved scene.">Load</button>
-          <button class="ghost ui-button" id="undoButton" type="button" title="Undo the last change.">Undo</button>
-          <button class="ghost ui-button" id="redoButton" type="button" title="Redo the last change.">Redo</button>
-          <div class="action-overflow">
-            <button
-              class="ghost ui-button action-overflow-toggle"
-              id="actionOverflowToggle"
-              type="button"
-              aria-label="More actions"
-              aria-expanded="false"
-            >
-              ...
-            </button>
-            <div class="action-secondary" id="actionSecondary">
-              <div class="overflow-section">
-                <div class="overflow-title">Theme</div>
-                <div class="theme-switcher" id="themeSwitcher">
-                  <div class="theme-segmented" role="group" aria-label="Theme">
-                    <button class="theme-option is-active" data-theme-option="default" type="button">Default</button>
-                    <button class="theme-option" data-theme-option="neumorphic" type="button">
-                      Neumorphic <span class="tag">Experimental</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <button class="ghost ui-button" id="aboutButton" type="button" title="Model notes, assumptions, and limitations.">
-                About
+          <div class="control-module">
+            <div class="run-group">
+              <button
+                class="primary ui-button"
+                id="computeButton"
+                type="button"
+                title="Run propagation and update receiver/grid levels."
+              >
+                Compute
               </button>
+              <!-- Whole-scene noise map ("Mesh All"): compute a padded grid and render as a heatmap overlay. -->
+              <button class="primary ui-button" id="meshButton" type="button" title="Generate a whole-scene noise map.">
+                Generate Map
+              </button>
+              <div class="status-chip status-chip--small" id="computeChip" aria-label="Compute status">Ready</div>
             </div>
+            <div class="run-options">
+              <label for="computePreference">CPU</label>
+              <div class="select-shell">
+                <select class="ui-inset" id="computePreference">
+                  <option value="cpu">CPU</option>
+                </select>
+              </div>
+            </div>
+            <!-- Lightweight feedback for heavy map computation (keeps UI responsive). -->
+            <div class="map-toast" id="mapToast" role="status" aria-live="polite"></div>
           </div>
+          <button class="ghost ui-button" id="aboutButton" type="button" title="Model notes, assumptions, and limitations.">
+            About
+          </button>
         </div>
       </header>
 

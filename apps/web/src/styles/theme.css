@@ -1,98 +1,115 @@
 :root {
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 18px;
-  --focus-ring: 0 0 0 3px rgba(255, 120, 90, 0.35);
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --focus-ring: 0 0 0 3px rgba(122, 166, 161, 0.35);
   --font: "Space Grotesk", "IBM Plex Sans", "Fira Sans", "Segoe UI", sans-serif;
+  --brand-bg: #e0e5ec;
+  --brand-shadow-light: rgba(255, 255, 255, 0.7);
+  --brand-shadow-dark: rgba(163, 177, 198, 0.6);
+  --brand-accent: #00ff00;
 }
 
 [data-theme='default'] {
-  --bg: #f4efe7;
-  --bg-gradient-start: #fff7e8;
-  --bg-gradient-end: #e8decc;
-  --surface: #fbf7f1;
-  --surface-2: #ffffff;
-  --canvas-bg: #fdfaf5;
+  --bg: #e6ebf3;
+  --bg-gradient-start: #e6ebf3;
+  --bg-gradient-end: #e6ebf3;
+  --surface: #e9edf3;
+  --surface-2: #eef2f7;
+  --surface-hi: #f5f8fc;
+  --surface-lo: #dde3ec;
+  --surface-press-hi: #e1e6ee;
+  --surface-press-lo: #f7f9fc;
+  --canvas-bg: #e0e6ee;
 
-  --text: #1f1c18;
-  --text-muted: #6a5a4b;
-  --text-soft: #5f5144;
-  --text-subtle: #8a7b6d;
+  --text: #596170;
+  --text-muted: #788190;
+  --text-soft: #667080;
+  --text-subtle: #8b93a2;
 
-  --border: #d6c9b7;
-  --border-soft: rgba(38, 70, 83, 0.2);
-  --border-softer: rgba(38, 70, 83, 0.15);
-  --border-strong: rgba(38, 70, 83, 0.3);
-  --border-contrast: rgba(31, 28, 24, 0.25);
+  --border: #d3d9e2;
+  --border-soft: rgba(166, 176, 192, 0.35);
+  --border-softer: rgba(166, 176, 192, 0.25);
+  --border-strong: rgba(123, 132, 146, 0.4);
+  --border-contrast: rgba(89, 97, 112, 0.32);
 
-  --accent: #e76f51;
-  --accent-strong: #d15a3b;
-  --accent-cool: #2a9d8f;
-  --accent-cool-strong: #1f6f65;
-  --accent-dark: #264653;
-  --accent-contrast: #ffffff;
-  --accent-soft: rgba(231, 111, 81, 0.12);
-  --accent-soft-strong: rgba(231, 111, 81, 0.2);
-  --accent-glow: 0 0 0 6px rgba(231, 111, 81, 0.2);
+  --accent: #7aa6a1;
+  --accent-strong: #5f8f8a;
+  --accent-cool: #8aa1c4;
+  --accent-cool-strong: #6f86a8;
+  --accent-dark: #4a5a68;
+  --accent-contrast: #f6f8fb;
+  --accent-soft: rgba(122, 166, 161, 0.18);
+  --accent-soft-strong: rgba(122, 166, 161, 0.28);
+  --accent-glow: 0 0 12px rgba(122, 166, 161, 0.45);
 
-  --shadow-raised: 0 20px 40px rgba(31, 28, 24, 0.18);
-  --shadow-pressed: inset 0 2px 4px rgba(0, 0, 0, 0.12);
-  --shadow-accent: 0 10px 24px rgba(231, 111, 81, 0.3);
-  --shadow-panel: 0 12px 24px rgba(31, 28, 24, 0.14);
-  --shadow-canvas: 0 26px 54px rgba(31, 28, 24, 0.22);
+  --shadow-light: rgba(255, 255, 255, 0.85);
+  --shadow-dark: rgba(165, 175, 190, 0.45);
+  --shadow-raised: 8px 8px 16px var(--shadow-dark), -8px -8px 16px var(--shadow-light);
+  --shadow-pressed: inset 6px 6px 10px var(--shadow-dark), inset -6px -6px 10px var(--shadow-light);
+  --shadow-accent: 8px 8px 16px rgba(165, 175, 190, 0.4), -8px -8px 16px rgba(255, 255, 255, 0.85), 0 0 12px rgba(122, 166, 161, 0.35);
+  --shadow-panel: 10px 10px 20px rgba(165, 175, 190, 0.45), -10px -10px 20px rgba(255, 255, 255, 0.85);
+  --shadow-canvas: 14px 14px 26px rgba(165, 175, 190, 0.5), -14px -14px 26px rgba(255, 255, 255, 0.9);
 
-  --status-ok-bg: rgba(42, 157, 143, 0.1);
-  --status-ok-border: rgba(42, 157, 143, 0.3);
-  --status-ok-text: var(--accent-dark);
-  --status-busy-bg: rgba(233, 196, 106, 0.18);
-  --status-busy-border: rgba(233, 196, 106, 0.45);
-  --status-busy-text: #8f5b1c;
-  --status-warn-bg: rgba(231, 111, 81, 0.12);
-  --status-warn-border: rgba(231, 111, 81, 0.4);
-  --status-warn-text: var(--accent-strong);
+  --status-ok-bg: rgba(116, 183, 156, 0.18);
+  --status-ok-border: rgba(116, 183, 156, 0.45);
+  --status-ok-text: #4f6b5f;
+  --status-busy-bg: rgba(196, 176, 110, 0.22);
+  --status-busy-border: rgba(196, 176, 110, 0.45);
+  --status-busy-text: #6f6142;
+  --status-warn-bg: rgba(190, 130, 120, 0.2);
+  --status-warn-border: rgba(190, 130, 120, 0.4);
+  --status-warn-text: #6c4c48;
+  --status-led-off: #cbd2da;
+  --status-led-ok: #74b79c;
+  --status-led-busy: #c5b06b;
+  --status-led-error: #c38a82;
+  --toggle-on: #7dcf8a;
+  --toggle-on-dark: #5fb975;
+  --toggle-on-glow: rgba(125, 207, 138, 0.5);
 
-  --surface-glass: rgba(255, 255, 255, 0.85);
-  --surface-glass-soft: rgba(255, 255, 255, 0.7);
-  --surface-glass-strong: rgba(255, 255, 255, 0.8);
-  --surface-glass-max: rgba(255, 255, 255, 0.95);
+  --surface-glass: rgba(237, 242, 248, 0.88);
+  --surface-glass-soft: rgba(237, 242, 248, 0.7);
+  --surface-glass-strong: rgba(237, 242, 248, 0.8);
+  --surface-glass-max: rgba(237, 242, 248, 0.95);
 
-  --info-bg: rgba(42, 157, 143, 0.08);
-  --info-border: rgba(42, 157, 143, 0.35);
-  --warning-bg: rgba(231, 111, 81, 0.08);
-  --warning-border: rgba(231, 111, 81, 0.35);
+  --info-bg: rgba(122, 166, 161, 0.12);
+  --info-border: rgba(122, 166, 161, 0.35);
+  --warning-bg: rgba(190, 130, 120, 0.15);
+  --warning-border: rgba(190, 130, 120, 0.35);
 
-  --ruler-bg: rgba(38, 70, 83, 0.05);
-  --ruler-border: rgba(38, 70, 83, 0.3);
-  --grid-line: rgba(38, 70, 83, 0.12);
+  --ruler-bg: rgba(163, 177, 198, 0.2);
+  --ruler-border: rgba(123, 130, 140, 0.3);
+  --grid-line: rgba(123, 130, 140, 0.18);
 
-  --tooltip-bg: #ffffff;
+  --tooltip-bg: #e8ecf1;
   --tooltip-border: var(--border);
-  --pill-bg: rgba(255, 255, 255, 0.7);
-  --modal-backdrop: rgba(31, 28, 24, 0.55);
-  --canvas-border: rgba(31, 28, 24, 0.08);
+  --pill-bg: rgba(227, 231, 236, 0.75);
+  --modal-backdrop: rgba(80, 86, 96, 0.45);
+  --canvas-border: rgba(123, 130, 140, 0.25);
 
   --canvas-grid: var(--grid-line);
   --canvas-panel-stroke: var(--accent-dark);
-  --canvas-panel-fill: rgba(38, 70, 83, 0.12);
+  --canvas-panel-fill: rgba(123, 130, 140, 0.18);
   --canvas-panel-selected: var(--accent);
   --canvas-panel-handle-fill: var(--accent-contrast);
   --canvas-panel-handle-stroke: var(--accent-dark);
-  --canvas-sample-stroke: rgba(31, 28, 24, 0.2);
+  --canvas-sample-stroke: rgba(73, 80, 88, 0.2);
 
   --canvas-barrier-stroke: var(--accent-dark);
   --canvas-barrier-selected: var(--accent);
 
   --canvas-source-fill: var(--accent);
-  --canvas-source-stroke: #aa4e37;
-  --canvas-source-muted-fill: rgba(31, 28, 24, 0.12);
-  --canvas-source-muted-stroke: rgba(31, 28, 24, 0.35);
+  --canvas-source-stroke: var(--accent-strong);
+  --canvas-source-muted-fill: rgba(73, 80, 88, 0.16);
+  --canvas-source-muted-stroke: rgba(73, 80, 88, 0.35);
   --canvas-source-muted-text: var(--text-subtle);
   --canvas-source-label: var(--text);
   --canvas-source-ring: var(--accent-contrast);
-  --canvas-source-tooltip-bg: rgba(31, 28, 24, 0.85);
-  --canvas-source-tooltip-border: rgba(255, 255, 255, 0.35);
+  --canvas-source-tooltip-bg: rgba(73, 80, 88, 0.85);
+  --canvas-source-tooltip-border: rgba(255, 255, 255, 0.4);
   --canvas-source-tooltip-text: var(--canvas-bg);
-  --canvas-selection-halo: rgba(231, 111, 81, 0.2);
+  --canvas-selection-halo: rgba(122, 166, 161, 0.28);
 
   --canvas-receiver-fill: var(--accent-cool);
   --canvas-receiver-stroke: var(--accent-cool-strong);
@@ -113,6 +130,10 @@
   --bg-gradient-end: #dde5f1;
   --surface: #edf2fa;
   --surface-2: #f2f6fd;
+  --surface-hi: #f6f9ff;
+  --surface-lo: #e0e7f2;
+  --surface-press-hi: #dbe3ef;
+  --surface-press-lo: #f8fbff;
   --canvas-bg: #f5f8fd;
 
   --text: #1f2733;
@@ -136,7 +157,9 @@
   --accent-soft-strong: rgba(229, 110, 87, 0.22);
   --accent-glow: 0 0 0 6px rgba(229, 110, 87, 0.25);
 
-  --shadow-raised: 10px 10px 24px rgba(125, 140, 165, 0.35), -10px -10px 24px rgba(255, 255, 255, 0.85);
+  --shadow-light: rgba(255, 255, 255, 0.85);
+  --shadow-dark: rgba(125, 140, 165, 0.35);
+  --shadow-raised: 10px 10px 24px var(--shadow-dark), -10px -10px 24px var(--shadow-light);
   --shadow-pressed: inset 8px 8px 18px rgba(125, 140, 165, 0.3), inset -8px -8px 18px rgba(255, 255, 255, 0.8);
   --shadow-accent: 10px 10px 22px rgba(125, 140, 165, 0.3), -10px -10px 22px rgba(255, 255, 255, 0.7);
   --shadow-panel: 8px 8px 18px rgba(125, 140, 165, 0.26), -8px -8px 18px rgba(255, 255, 255, 0.7);
@@ -151,6 +174,13 @@
   --status-warn-bg: rgba(229, 110, 87, 0.18);
   --status-warn-border: rgba(229, 110, 87, 0.36);
   --status-warn-text: var(--accent-strong);
+  --status-led-off: #cfd6de;
+  --status-led-ok: #3b9c90;
+  --status-led-busy: #d7b464;
+  --status-led-error: #e56e57;
+  --toggle-on: #79d09a;
+  --toggle-on-dark: #56b982;
+  --toggle-on-glow: rgba(121, 208, 154, 0.45);
 
   --surface-glass: rgba(255, 255, 255, 0.78);
   --surface-glass-soft: rgba(255, 255, 255, 0.6);

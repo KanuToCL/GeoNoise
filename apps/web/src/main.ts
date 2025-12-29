@@ -1917,6 +1917,7 @@ function setComputeChip(label: string, state: 'ready' | 'busy' | 'warning' | 'er
   if (!computeChip) return;
   computeChip.textContent = label;
   computeChip.dataset.state = state;
+  computeChip.setAttribute('aria-label', label);
 }
 
 function updateComputeButtonState(computing: boolean) {
