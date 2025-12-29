@@ -17,10 +17,12 @@ type Point = { x: number; y: number };
 
 type Source = {
   id: string;
+  name: string;
   x: number;
   y: number;
   z: number;
   power: number;
+  enabled: boolean;
 };
 
 type Receiver = {
@@ -70,21 +72,30 @@ const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
 const coordLabel = document.querySelector('#coordLabel') as HTMLDivElement | null;
 const layerLabel = document.querySelector('#layerLabel') as HTMLDivElement | null;
 const statusPill = document.querySelector('#statusPill') as HTMLDivElement | null;
-const computeStatus = document.querySelector('#computeStatus') as HTMLDivElement | null;
+const computeChip = document.querySelector('#computeChip') as HTMLDivElement | null;
 const rulerLabel = document.querySelector('#rulerLabel') as HTMLDivElement | null;
 const rulerLine = document.querySelector('#rulerLine') as HTMLDivElement | null;
 const scaleText = document.querySelector('#scaleText') as HTMLDivElement | null;
 const scaleLine = document.querySelector('#scaleLine') as HTMLDivElement | null;
 const preferenceSelect = document.querySelector('#computePreference') as HTMLSelectElement | null;
 const toolGrid = document.querySelector('#toolGrid') as HTMLDivElement | null;
+const toolInstruction = document.querySelector('#toolInstruction') as HTMLDivElement | null;
 const selectionLabel = document.querySelector('#selectionLabel') as HTMLSpanElement | null;
 const modeLabel = document.querySelector('#modeLabel') as HTMLSpanElement | null;
+const modeHint = document.querySelector('#modeHint') as HTMLDivElement | null;
 const propertiesBody = document.querySelector('#propertiesBody') as HTMLDivElement | null;
 const sourceTable = document.querySelector('#sourceTable') as HTMLDivElement | null;
+const sourceSumMode = document.querySelector('#sourceSumMode') as HTMLDivElement | null;
 const receiverTable = document.querySelector('#receiverTable') as HTMLDivElement | null;
 const panelStats = document.querySelector('#panelStats') as HTMLDivElement | null;
 const panelLegend = document.querySelector('#panelLegend') as HTMLDivElement | null;
 const exportCsv = document.querySelector('#exportCsv') as HTMLButtonElement | null;
+const snapIndicator = document.querySelector('#snapIndicator') as HTMLDivElement | null;
+const canvasHint = document.querySelector('#canvasHint') as HTMLDivElement | null;
+const canvasHintClose = document.querySelector('#canvasHintClose') as HTMLButtonElement | null;
+
+const undoButton = document.querySelector('#undoButton') as HTMLButtonElement | null;
+const redoButton = document.querySelector('#redoButton') as HTMLButtonElement | null;
 
 const aboutButton = document.querySelector('#aboutButton') as HTMLButtonElement | null;
 const aboutModal = document.querySelector('#aboutModal') as HTMLDivElement | null;
@@ -135,8 +146,8 @@ const origin = { latLon: { lat: 0, lon: 0 }, altitude: 0 };
 
 const scene = {
   sources: [
-    { id: 's1', x: -40, y: 10, z: 1.5, power: 100 },
-    { id: 's2', x: 60, y: -20, z: 1.5, power: 94 },
+    { id: 's1', name: 'Source S1', x: -40, y: 10, z: 1.5, power: 100, enabled: true },
+    { id: 's2', name: 'Source S2', x: 60, y: -20, z: 1.5, power: 94, enabled: true },
   ] as Source[],
   receivers: [
     { id: 'r1', x: 10, y: 30, z: 1.5 },
@@ -176,8 +187,35 @@ let results: SceneResults = { receivers: [], panels: [] };
 let receiverEnergyTotals = new Map<string, number>();
 let panelEnergyTotals = new Map<string, Float64Array>();
 let dragContribution: DragContribution | null = null;
+let dragDirty = false;
 let engineConfig: EngineConfig = getDefaultEngineConfig('festival_fast');
 let aboutOpen = false;
+let pendingComputes = 0;
+
+const snapMeters = 5;
+let basePixelsPerMeter = 3;
+let zoom = 1;
+let panOffset = { x: 0, y: 0 };
+let panState: { start: Point; origin: Point } | null = null;
+
+const collapsedSources = new Set<string>();
+let soloSourceId: string | null = null;
+
+type SceneSnapshot = {
+  sources: Source[];
+  receivers: Receiver[];
+  panels: Panel[];
+  sourceSeq: number;
+  receiverSeq: number;
+  panelSeq: number;
+  selection: Selection;
+  soloSourceId: string | null;
+  panOffset: Point;
+  zoom: number;
+};
+
+let history: SceneSnapshot[] = [];
+let historyIndex = -1;
 
 let sourceSeq = 3;
 let receiverSeq = 3;
@@ -209,6 +247,76 @@ function updateCounts() {
   if (countPanels) countPanels.textContent = `${scene.panels.length}`;
 }
 
+function updateUndoRedoButtons() {
+  if (undoButton) undoButton.disabled = historyIndex <= 0;
+  if (redoButton) redoButton.disabled = historyIndex >= history.length - 1;
+}
+
+function snapshotScene(): SceneSnapshot {
+  return {
+    sources: scene.sources.map((source) => ({ ...source })),
+    receivers: scene.receivers.map((receiver) => ({ ...receiver })),
+    panels: scene.panels.map((panel) => ({
+      ...panel,
+      points: panel.points.map((pt) => ({ ...pt })),
+      sampling: { ...panel.sampling },
+    })),
+    sourceSeq,
+    receiverSeq,
+    panelSeq,
+    selection: { ...selection } as Selection,
+    soloSourceId,
+    panOffset: { ...panOffset },
+    zoom,
+  };
+}
+
+function pushHistory() {
+  const snap = snapshotScene();
+  history = history.slice(0, historyIndex + 1);
+  history.push(snap);
+  historyIndex = history.length - 1;
+  updateUndoRedoButtons();
+}
+
+function applySnapshot(snap: SceneSnapshot) {
+  scene.sources = snap.sources.map((source) => ({ ...source }));
+  scene.receivers = snap.receivers.map((receiver) => ({ ...receiver }));
+  scene.panels = snap.panels.map((panel) => ({
+    ...panel,
+    points: panel.points.map((pt) => ({ ...pt })),
+    sampling: { ...panel.sampling },
+  }));
+  sourceSeq = snap.sourceSeq;
+  receiverSeq = snap.receiverSeq;
+  panelSeq = snap.panelSeq;
+  selection = snap.selection;
+  soloSourceId = snap.soloSourceId;
+  panOffset = { ...snap.panOffset };
+  zoom = snap.zoom;
+  updatePixelsPerMeter();
+  updateCounts();
+  setSelection(selection);
+  updateUndoRedoButtons();
+  computeScene();
+}
+
+function undo() {
+  if (historyIndex <= 0) return;
+  historyIndex -= 1;
+  applySnapshot(history[historyIndex]);
+}
+
+function redo() {
+  if (historyIndex >= history.length - 1) return;
+  historyIndex += 1;
+  applySnapshot(history[historyIndex]);
+}
+
+function updatePixelsPerMeter() {
+  pixelsPerMeter = basePixelsPerMeter * zoom;
+}
+
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
@@ -216,7 +324,8 @@ function resizeCanvas() {
   canvas.height = rect.height * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  pixelsPerMeter = rect.width / 320;
+  basePixelsPerMeter = rect.width / 320;
+  updatePixelsPerMeter();
   updateScaleBar();
   drawScene();
 }
@@ -237,17 +346,24 @@ function updateScaleBar() {
 function worldToCanvas(point: Point): Point {
   const rect = canvas.getBoundingClientRect();
   return {
-    x: rect.width / 2 + point.x * pixelsPerMeter,
-    y: rect.height / 2 - point.y * pixelsPerMeter,
+    x: rect.width / 2 + (point.x + panOffset.x) * pixelsPerMeter,
+    y: rect.height / 2 - (point.y + panOffset.y) * pixelsPerMeter,
   };
 }
 
 function canvasToWorld(point: Point): Point {
   const rect = canvas.getBoundingClientRect();
   return {
-    x: (point.x - rect.width / 2) / pixelsPerMeter,
-    y: -(point.y - rect.height / 2) / pixelsPerMeter,
+    x: (point.x - rect.width / 2) / pixelsPerMeter - panOffset.x,
+    y: -(point.y - rect.height / 2) / pixelsPerMeter - panOffset.y,
   };
+}
+
+function snapPoint(point: Point): { point: Point; snapped: boolean } {
+  const snappedX = Math.round(point.x / snapMeters) * snapMeters;
+  const snappedY = Math.round(point.y / snapMeters) * snapMeters;
+  const snapped = Math.abs(point.x - snappedX) > 0.001 || Math.abs(point.y - snappedY) > 0.001;
+  return { point: { x: snappedX, y: snappedY }, snapped };
 }
 
 function distance(a: Point, b: Point) {
@@ -393,6 +509,10 @@ function renderPanelLegend() {
 function renderPanelStats() {
   if (!panelStats) return;
   panelStats.innerHTML = '';
+  if (!scene.panels.length) {
+    panelStats.innerHTML = '<span class="legend-empty">Add a measure grid to see stats.</span>';
+    return;
+  }
   const current = selection;
   if (current.type !== 'panel') {
     panelStats.innerHTML = '<span class="legend-empty">Select a measure grid to view stats.</span>';
@@ -446,6 +566,23 @@ function toolLabel(tool: Tool) {
   }
 }
 
+function toolInstructionFor(tool: Tool) {
+  switch (tool) {
+    case 'add-source':
+      return 'Click to place a source. Drag to reposition.';
+    case 'add-receiver':
+      return 'Click to place a receiver. Drag to reposition.';
+    case 'add-panel':
+      return 'Click to place a measure grid.';
+    case 'measure':
+      return 'Click two points to measure distance.';
+    case 'delete':
+      return 'Click an item to remove it. Undo restores it.';
+    default:
+      return 'Click to select. Drag to move. Shift+drag to duplicate.';
+  }
+}
+
 const layerLabels: Record<keyof typeof layers, string> = {
   sources: 'Sources',
   receivers: 'Receivers',
@@ -455,7 +592,13 @@ const layerLabels: Record<keyof typeof layers, string> = {
 
 function getComputePreference(): ComputePreference {
   if (preferenceSelect) return preferenceSelect.value as ComputePreference;
-  return loadPreference();
+  const stored = loadPreference();
+  return stored === 'auto' ? 'cpu' : stored;
+}
+
+function isSourceEnabled(source: Source) {
+  if (soloSourceId) return source.id === soloSourceId;
+  return source.enabled;
 }
 
 function buildEngineScene() {
@@ -464,10 +607,10 @@ function buildEngineScene() {
   engineScene.sources = scene.sources.map((source) => ({
     id: source.id,
     type: 'point',
-    name: `Source ${source.id.toUpperCase()}`,
+    name: source.name.trim() || `Source ${source.id.toUpperCase()}`,
     position: { x: source.x, y: source.y, z: source.z },
     soundPowerLevel: source.power,
-    enabled: true,
+    enabled: isSourceEnabled(source),
   }));
 
   engineScene.receivers = scene.receivers.map((receiver) => ({
@@ -541,6 +684,13 @@ function updatePanelResult(panelResult: PanelResult) {
   panelEnergyTotals.set(panelResult.panelId, panelSamplesToEnergy(panelResult.samples));
 }
 
+function finishCompute() {
+  pendingComputes = Math.max(0, pendingComputes - 1);
+  if (pendingComputes === 0) {
+    updateComputeChip(false);
+  }
+}
+
 async function computeReceivers(engineScene: ReturnType<typeof buildEngineScene>, preference: ComputePreference) {
   try {
     const response = (await engineCompute(
@@ -566,6 +716,8 @@ async function computeReceivers(engineScene: ReturnType<typeof buildEngineScene>
   } catch (error) {
     if (isStaleError(error)) return;
     showComputeError('Receivers', error);
+  } finally {
+    finishCompute();
   }
 }
 
@@ -609,6 +761,8 @@ async function computePanel(
   } catch (error) {
     if (isStaleError(error)) return;
     showComputeError(`Panel ${panel.id}`, error);
+  } finally {
+    finishCompute();
   }
 }
 
@@ -623,6 +777,8 @@ function computeScene() {
   if (statusPill) statusPill.textContent = 'Computing...';
   const preference = getComputePreference();
   const engineScene = buildEngineScene();
+  pendingComputes = 1 + scene.panels.length;
+  updateComputeChip(true);
 
   void computeReceivers(engineScene, preference);
   for (const panel of scene.panels) {
@@ -857,31 +1013,110 @@ function renderSources() {
   for (const source of scene.sources) {
     const row = document.createElement('div');
     row.className = 'source-row';
+    row.classList.toggle('is-muted', !isSourceEnabled(source));
     const header = document.createElement('div');
     header.className = 'source-row-header';
-    header.innerHTML = `<strong>${source.id.toUpperCase()}</strong>`;
+    const nameInput = document.createElement('input');
+    nameInput.className = 'source-name';
+    nameInput.type = 'text';
+    nameInput.value = source.name;
+    nameInput.placeholder = 'Name';
+    nameInput.addEventListener('input', () => {
+      source.name = nameInput.value;
+    });
+    nameInput.addEventListener('change', () => {
+      pushHistory();
+    });
+    const idTag = document.createElement('span');
+    idTag.className = 'source-id';
+    idTag.textContent = source.id.toUpperCase();
+
+    const controls = document.createElement('div');
+    controls.className = 'source-controls';
+    const soloButton = document.createElement('button');
+    soloButton.type = 'button';
+    soloButton.className = 'source-chip';
+    soloButton.textContent = soloSourceId === source.id ? 'Soloed' : 'Solo';
+    soloButton.classList.toggle('is-active', soloSourceId === source.id);
+    soloButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      soloSourceId = soloSourceId === source.id ? null : source.id;
+      pushHistory();
+      renderSources();
+      renderProperties();
+      computeScene();
+    });
+    const muteButton = document.createElement('button');
+    muteButton.type = 'button';
+    muteButton.className = 'source-chip';
+    muteButton.textContent = source.enabled ? 'Mute' : 'Muted';
+    muteButton.classList.toggle('is-active', !source.enabled);
+    muteButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      source.enabled = !source.enabled;
+      pushHistory();
+      renderSources();
+      renderProperties();
+      computeScene();
+    });
+    const toggleButton = document.createElement('button');
+    toggleButton.type = 'button';
+    toggleButton.className = 'source-chip';
+    const isCollapsed = collapsedSources.has(source.id);
+    toggleButton.textContent = isCollapsed ? 'Expand' : 'Collapse';
+    toggleButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (collapsedSources.has(source.id)) {
+        collapsedSources.delete(source.id);
+      } else {
+        collapsedSources.add(source.id);
+      }
+      renderSources();
+    });
+    controls.appendChild(soloButton);
+    controls.appendChild(muteButton);
+    controls.appendChild(toggleButton);
+
+    const titleBlock = document.createElement('div');
+    titleBlock.className = 'source-title';
+    titleBlock.appendChild(nameInput);
+    titleBlock.appendChild(idTag);
+
+    header.appendChild(titleBlock);
+    header.appendChild(controls);
     row.appendChild(header);
 
     const fields = document.createElement('div');
     fields.className = 'source-fields';
-    fields.appendChild(createInlineField('Power (dB)', source.power, (value) => {
+    fields.appendChild(createInlineField('Level (dB)', source.power, (value) => {
       source.power = value;
+      pushHistory();
       renderProperties();
       computeScene();
     }));
     fields.appendChild(createInlineField('Height (m)', source.z, (value) => {
       source.z = value;
+      pushHistory();
       renderProperties();
       computeScene();
     }));
-    row.appendChild(fields);
+    if (!collapsedSources.has(source.id)) {
+      row.appendChild(fields);
+    }
 
     row.addEventListener('click', (event) => {
-      if ((event.target as HTMLElement).tagName === 'INPUT') return;
+      const target = event.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'BUTTON') return;
       setSelection({ type: 'source', id: source.id });
     });
 
     sourceTable.appendChild(row);
+  }
+
+  if (sourceSumMode) {
+    sourceSumMode.textContent = soloSourceId
+      ? `Summation: Energetic (dB) - Solo ${soloSourceId.toUpperCase()}`
+      : 'Summation: Energetic (dB)';
   }
 }
 
@@ -889,10 +1124,40 @@ function createId(prefix: string, seq: number) {
   return `${prefix}${seq}`;
 }
 
+function duplicateSource(source: Source): Source {
+  const newId = createId('s', sourceSeq++);
+  return {
+    ...source,
+    id: newId,
+    name: `${source.name || source.id.toUpperCase()} Copy`,
+  };
+}
+
+function duplicateReceiver(receiver: Receiver): Receiver {
+  const newId = createId('r', receiverSeq++);
+  return { ...receiver, id: newId };
+}
+
+function duplicatePanel(panel: Panel): Panel {
+  const newId = createId('p', panelSeq++);
+  return {
+    ...panel,
+    id: newId,
+    points: panel.points.map((pt) => ({ ...pt })),
+    sampling: { ...panel.sampling },
+  };
+}
+
 function setActiveTool(tool: Tool) {
   activeTool = tool;
   if (modeLabel) {
     modeLabel.textContent = toolLabel(tool);
+  }
+  if (modeHint) {
+    modeHint.textContent = toolLabel(tool);
+  }
+  if (toolInstruction) {
+    toolInstruction.textContent = toolInstructionFor(tool);
   }
 
   if (toolGrid) {
@@ -908,7 +1173,9 @@ function setSelection(next: Selection) {
   selection = next;
   const current = selection;
   if (selectionLabel) {
-    selectionLabel.textContent = current.type === 'none' ? 'None' : `${selectionTypeLabel(current.type)} ${current.id}`;
+    selectionLabel.textContent = current.type === 'none'
+      ? 'None'
+      : `${selectionTypeLabel(current.type)} ${current.id.toUpperCase()}`;
   }
   renderProperties();
   renderPanelLegend();
@@ -922,23 +1189,60 @@ function renderProperties() {
   const current = selection;
 
   if (current.type === 'none') {
-    propertiesBody.textContent = 'Select an item to edit its properties.';
+    const empty = document.createElement('div');
+    empty.className = 'properties-empty';
+    const title = document.createElement('div');
+    title.textContent = 'Select an item to edit.';
+    empty.appendChild(title);
+
+    if (scene.sources.length) {
+      const tip = document.createElement('button');
+      tip.type = 'button';
+      tip.className = 'text-button';
+      tip.textContent = `Click ${scene.sources[0].id.toUpperCase()} to edit level/height.`;
+      tip.addEventListener('click', () => setSelection({ type: 'source', id: scene.sources[0].id }));
+      empty.appendChild(tip);
+    }
+    if (scene.receivers.length) {
+      const tip = document.createElement('button');
+      tip.type = 'button';
+      tip.className = 'text-button';
+      tip.textContent = `Click ${scene.receivers[0].id.toUpperCase()} to edit height.`;
+      tip.addEventListener('click', () => setSelection({ type: 'receiver', id: scene.receivers[0].id }));
+      empty.appendChild(tip);
+    }
+    if (scene.panels.length) {
+      const tip = document.createElement('button');
+      tip.type = 'button';
+      tip.className = 'text-button';
+      tip.textContent = `Click ${scene.panels[0].id.toUpperCase()} to edit spacing.`;
+      tip.addEventListener('click', () => setSelection({ type: 'panel', id: scene.panels[0].id }));
+      empty.appendChild(tip);
+    }
+
+    propertiesBody.appendChild(empty);
     return;
   }
 
   const header = document.createElement('div');
-  header.textContent = `Editing ${selectionTypeLabel(current.type)} ${current.id}`;
+  header.className = 'property-header';
+  header.innerHTML = `<strong>${selectionTypeLabel(current.type)}</strong><span>${current.id.toUpperCase()}</span>`;
   propertiesBody.appendChild(header);
 
   if (current.type === 'source') {
     const source = scene.sources.find((item) => item.id === current.id);
     if (!source) return;
-    propertiesBody.appendChild(createInputRow('Height (m)', source.z, (value) => {
-      source.z = value;
+    propertiesBody.appendChild(createTextRow('Name', source.name, (value) => {
+      source.name = value;
+    }));
+    propertiesBody.appendChild(createInputRow('Level (dB)', source.power, (value) => {
+      source.power = value;
+      pushHistory();
       computeScene();
     }));
-    propertiesBody.appendChild(createInputRow('Power (dB)', source.power, (value) => {
-      source.power = value;
+    propertiesBody.appendChild(createInputRow('Height (m)', source.z, (value) => {
+      source.z = value;
+      pushHistory();
       computeScene();
     }));
   }
@@ -948,6 +1252,7 @@ function renderProperties() {
     if (!receiver) return;
     propertiesBody.appendChild(createInputRow('Height (m)', receiver.z, (value) => {
       receiver.z = value;
+      pushHistory();
       computeScene();
     }));
   }
@@ -957,10 +1262,12 @@ function renderProperties() {
     if (!panel) return;
     propertiesBody.appendChild(createInputRow('Elevation (m)', panel.elevation, (value) => {
       panel.elevation = value;
+      pushHistory();
       computeScene();
     }));
-    propertiesBody.appendChild(createInputRow('Sampling (m)', panel.sampling.resolution, (value) => {
+    propertiesBody.appendChild(createInputRow('Spacing (m)', panel.sampling.resolution, (value) => {
       panel.sampling.resolution = Math.max(1, value);
+      pushHistory();
       computeScene();
     }));
     const hint = document.createElement('div');
@@ -987,29 +1294,63 @@ function createInputRow(label: string, value: number, onChange: (value: number) 
   return row;
 }
 
-function updateComputeStatus(preference: ComputePreference) {
-  if (!computeStatus) return;
-  const resolved = resolveBackend(preference, capability);
-  const label = `Using ${resolved.effective.toUpperCase()}`;
-  if (resolved.warning) {
-    computeStatus.textContent = `${label} - ${resolved.warning}`;
-    computeStatus.dataset.warning = 'true';
-  } else {
-    computeStatus.textContent = label;
-    delete computeStatus.dataset.warning;
+function createTextRow(label: string, value: string, onChange: (value: string) => void) {
+  const row = document.createElement('div');
+  row.className = 'property-row';
+  const name = document.createElement('span');
+  name.textContent = label;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = value;
+  input.addEventListener('input', () => onChange(input.value));
+  input.addEventListener('change', () => pushHistory());
+  row.appendChild(name);
+  row.appendChild(input);
+  return row;
+}
+
+function updateComputeChip(isComputing: boolean) {
+  if (!computeChip) return;
+  if (isComputing) {
+    computeChip.textContent = 'Computing...';
+    computeChip.dataset.state = 'busy';
+    return;
   }
+
+  const preference = getComputePreference();
+  const resolved = resolveBackend(preference, capability);
+  if (resolved.warning) {
+    computeChip.textContent = 'Using CPU (GPU soon)';
+    computeChip.dataset.state = 'warning';
+    return;
+  }
+
+  computeChip.textContent = 'Ready';
+  computeChip.dataset.state = 'ready';
 }
 
 function wirePreference() {
   if (!preferenceSelect) return;
-  const initialPreference = loadPreference();
+  const storedPreference = loadPreference();
+  const gpuOption = preferenceSelect.querySelector('option[value="gpu"]') as HTMLOptionElement | null;
+  const gpuDisabled = gpuOption?.disabled ?? false;
+  let initialPreference: ComputePreference = storedPreference === 'gpu' ? 'gpu' : 'cpu';
+  if (storedPreference === 'auto') {
+    initialPreference = 'cpu';
+  }
+  if (gpuDisabled) {
+    initialPreference = 'cpu';
+  }
   preferenceSelect.value = initialPreference;
-  updateComputeStatus(initialPreference);
+  if (storedPreference !== initialPreference) {
+    savePreference(initialPreference);
+  }
+  updateComputeChip(false);
 
   preferenceSelect.addEventListener('change', () => {
     const preference = preferenceSelect.value as ComputePreference;
     savePreference(preference);
-    updateComputeStatus(preference);
+    updateComputeChip(false);
     computeScene();
   });
 }
@@ -1098,6 +1439,7 @@ function deleteSelection(target: Selection) {
   }
   setSelection({ type: 'none' });
   updateCounts();
+  pushHistory();
   computeScene();
 }
 
@@ -1118,20 +1460,24 @@ function addPanelAt(point: Point) {
   scene.panels.push(panel);
   setSelection({ type: 'panel', id: panel.id });
   updateCounts();
+  pushHistory();
   computeScene();
 }
 
 function addSourceAt(point: Point) {
   const source: Source = {
     id: createId('s', sourceSeq++),
+    name: `Source ${sourceSeq - 1}`,
     x: point.x,
     y: point.y,
     z: 1.5,
     power: 100,
+    enabled: true,
   };
   scene.sources.push(source);
   setSelection({ type: 'source', id: source.id });
   updateCounts();
+  pushHistory();
   computeScene();
 }
 
@@ -1145,6 +1491,7 @@ function addReceiverAt(point: Point) {
   scene.receivers.push(receiver);
   setSelection({ type: 'receiver', id: receiver.id });
   updateCounts();
+  pushHistory();
   computeScene();
 }
 
@@ -1369,8 +1716,33 @@ function handlePointerMove(event: MouseEvent) {
   const canvasPoint = { x: event.clientX - rect.left, y: event.clientY - rect.top };
   const worldPoint = canvasToWorld(canvasPoint);
 
+  if (panState) {
+    const dx = canvasPoint.x - panState.start.x;
+    const dy = canvasPoint.y - panState.start.y;
+    panOffset = {
+      x: panState.origin.x + dx / pixelsPerMeter,
+      y: panState.origin.y - dy / pixelsPerMeter,
+    };
+    drawScene();
+  }
+
+  const { point: snappedPoint, snapped } = snapPoint(worldPoint);
+  if (snapIndicator) {
+    if (snapped) {
+      const screen = worldToCanvas(snappedPoint);
+      snapIndicator.style.display = 'block';
+      snapIndicator.style.transform = `translate(${screen.x}px, ${screen.y}px)`;
+    } else {
+      snapIndicator.style.display = 'none';
+    }
+  }
+
   if (coordLabel) {
     coordLabel.textContent = `x: ${formatMeters(worldPoint.x)} m, y: ${formatMeters(worldPoint.y)} m`;
+  }
+
+  if (panState) {
+    return;
   }
 
   if (dragState) {
@@ -1419,6 +1791,7 @@ function handlePointerMove(event: MouseEvent) {
     } else {
       drawScene();
     }
+    dragDirty = true;
   }
 
   if (activeTool === 'measure' && measureStart && !measureLocked) {
@@ -1431,19 +1804,20 @@ function handlePointerDown(event: MouseEvent) {
   const rect = canvas.getBoundingClientRect();
   const canvasPoint = { x: event.clientX - rect.left, y: event.clientY - rect.top };
   const worldPoint = canvasToWorld(canvasPoint);
+  const { point: snappedPoint } = snapPoint(worldPoint);
 
   if (activeTool === 'add-source') {
-    addSourceAt(worldPoint);
+    addSourceAt(snappedPoint);
     return;
   }
 
   if (activeTool === 'add-receiver') {
-    addReceiverAt(worldPoint);
+    addReceiverAt(snappedPoint);
     return;
   }
 
   if (activeTool === 'add-panel') {
-    addPanelAt(worldPoint);
+    addPanelAt(snappedPoint);
     return;
   }
 
@@ -1487,9 +1861,27 @@ function handlePointerDown(event: MouseEvent) {
   if (hit) {
     setSelection(hit);
     const worldHit = canvasToWorld(canvasPoint);
+    dragDirty = false;
+
     if (hit.type === 'source') {
       const source = scene.sources.find((item) => item.id === hit.id);
       if (source) {
+        if (event.shiftKey) {
+          const duplicate = duplicateSource(source);
+          duplicate.x = source.x + 2;
+          duplicate.y = source.y - 2;
+          scene.sources.push(duplicate);
+          updateCounts();
+          setSelection({ type: 'source', id: duplicate.id });
+          dragDirty = true;
+          dragState = {
+            type: 'source',
+            id: duplicate.id,
+            offset: { x: worldHit.x - duplicate.x, y: worldHit.y - duplicate.y },
+          };
+          primeDragContribution(duplicate.id);
+          return;
+        }
         dragState = { type: 'source', id: source.id, offset: { x: worldHit.x - source.x, y: worldHit.y - source.y } };
         primeDragContribution(source.id);
       }
@@ -1497,24 +1889,60 @@ function handlePointerDown(event: MouseEvent) {
     if (hit.type === 'receiver') {
       const receiver = scene.receivers.find((item) => item.id === hit.id);
       if (receiver) {
+        if (event.shiftKey) {
+          const duplicate = duplicateReceiver(receiver);
+          duplicate.x = receiver.x + 2;
+          duplicate.y = receiver.y - 2;
+          scene.receivers.push(duplicate);
+          updateCounts();
+          setSelection({ type: 'receiver', id: duplicate.id });
+          dragDirty = true;
+          dragState = {
+            type: 'receiver',
+            id: duplicate.id,
+            offset: { x: worldHit.x - duplicate.x, y: worldHit.y - duplicate.y },
+          };
+          return;
+        }
         dragState = { type: 'receiver', id: receiver.id, offset: { x: worldHit.x - receiver.x, y: worldHit.y - receiver.y } };
       }
     }
     if (hit.type === 'panel') {
       const panel = scene.panels.find((item) => item.id === hit.id);
       if (panel) {
+        if (event.shiftKey) {
+          const duplicate = duplicatePanel(panel);
+          duplicate.points = panel.points.map((pt) => ({ x: pt.x + 2, y: pt.y - 2 }));
+          scene.panels.push(duplicate);
+          updateCounts();
+          setSelection({ type: 'panel', id: duplicate.id });
+          dragDirty = true;
+          const first = duplicate.points[0];
+          dragState = { type: 'panel', id: duplicate.id, offset: { x: worldHit.x - first.x, y: worldHit.y - first.y } };
+          return;
+        }
         const first = panel.points[0];
         dragState = { type: 'panel', id: panel.id, offset: { x: worldHit.x - first.x, y: worldHit.y - first.y } };
       }
     }
   } else {
     setSelection({ type: 'none' });
+    if (activeTool === 'select') {
+      panState = { start: canvasPoint, origin: { ...panOffset } };
+    }
   }
 }
 
 function handlePointerUp() {
+  if (panState) {
+    panState = null;
+    return;
+  }
   if (dragState) {
     dragState = null;
+    if (dragDirty) {
+      pushHistory();
+    }
     computeScene();
   }
 }
@@ -1523,6 +1951,27 @@ function wirePointer() {
   canvas.addEventListener('mousemove', handlePointerMove);
   canvas.addEventListener('mousedown', handlePointerDown);
   window.addEventListener('mouseup', handlePointerUp);
+}
+
+function handleWheel(event: WheelEvent) {
+  event.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const canvasPoint = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  const before = canvasToWorld(canvasPoint);
+  const direction = event.deltaY < 0 ? 1.1 : 0.9;
+  zoom = Math.min(4, Math.max(0.5, zoom * direction));
+  updatePixelsPerMeter();
+  const after = canvasToWorld(canvasPoint);
+  panOffset = {
+    x: panOffset.x + (before.x - after.x),
+    y: panOffset.y + (before.y - after.y),
+  };
+  updateScaleBar();
+  drawScene();
+}
+
+function wireWheel() {
+  canvas.addEventListener('wheel', handleWheel, { passive: false });
 }
 
 function wireKeyboard() {
@@ -1543,6 +1992,16 @@ function wireKeyboard() {
       return;
     }
 
+    if ((event.metaKey || event.ctrlKey) && (event.key === 'z' || event.key === 'Z')) {
+      event.preventDefault();
+      if (event.shiftKey) {
+        redo();
+      } else {
+        undo();
+      }
+      return;
+    }
+
     if (event.key === 'Escape') {
       setSelection({ type: 'none' });
       measureStart = null;
@@ -1555,12 +2014,40 @@ function wireKeyboard() {
         deleteSelection(selection);
       }
     }
+
+    if (event.key === 'v' || event.key === 'V') {
+      setActiveTool('select');
+    }
+    if (event.key === 's' || event.key === 'S') {
+      setActiveTool('add-source');
+    }
+    if (event.key === 'r' || event.key === 'R') {
+      setActiveTool('add-receiver');
+    }
+    if (event.key === 'g' || event.key === 'G') {
+      setActiveTool('add-panel');
+    }
+    if (event.key === 'm' || event.key === 'M') {
+      setActiveTool('measure');
+    }
   });
 }
 
 function wireExport() {
   if (!exportCsv) return;
   exportCsv.addEventListener('click', () => downloadCsv());
+}
+
+function wireHistory() {
+  undoButton?.addEventListener('click', () => undo());
+  redoButton?.addEventListener('click', () => redo());
+}
+
+function wireCanvasHint() {
+  if (!canvasHint || !canvasHintClose) return;
+  canvasHintClose.addEventListener('click', () => {
+    canvasHint.classList.add('is-hidden');
+  });
 }
 
 function openAbout() {
@@ -1677,12 +2164,18 @@ function init() {
   wirePreference();
   wireTools();
   wirePointer();
+  wireWheel();
   wireKeyboard();
   wireExport();
   wireAbout();
   wirePropagationControls();
+  wireHistory();
+  wireCanvasHint();
 
+  updateUndoRedoButtons();
+  setActiveTool(activeTool);
   resizeCanvas();
+  pushHistory();
   computeScene();
   window.addEventListener('resize', resizeCanvas);
 }
