@@ -217,7 +217,10 @@ export const PropagationConfigSchema = z.object({
   spreading: z.enum(['spherical', 'cylindrical']).default('spherical'),
   atmosphericAbsorption: z.enum(['none', 'simple', 'iso9613']).default('simple'),
   groundReflection: z.boolean().default(false),
+  groundModel: z.enum(['legacy', 'twoRayPhasor']).default('legacy'),
   groundType: z.enum(['hard', 'mixed', 'soft']).default('mixed'),
+  groundSigmaSoft: z.number().positive().default(20000),
+  groundMixedFactor: z.number().min(0).max(1).default(0.5),
   maxReflections: z.number().int().min(0).max(3).default(0),
   maxDistance: z.number().positive().default(2000), // meters
   includeBarriers: z.boolean().default(true),

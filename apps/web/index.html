@@ -85,6 +85,13 @@
                 <span>Ground reflection</span>
               </label>
               <div class="property-row property-row-stack">
+                <span>Ground model</span>
+                <select id="propagationGroundModel">
+                  <option value="legacy">Legacy</option>
+                  <option value="twoRayPhasor">Two-ray phasor</option>
+                </select>
+              </div>
+              <div class="property-row property-row-stack">
                 <span>Ground type</span>
                 <select id="propagationGroundType">
                   <option value="hard">Hard</option>
@@ -236,7 +243,9 @@
               <li>Geometric spreading: Adiv = 20 log10(r) + 11 (spherical) or 10 log10(r) + 8 (cylindrical).</li>
               <li>Atmospheric absorption: Aatm = alpha(f,T,RH,P) * distance, using Simple or ISO 9613-1.</li>
               <li>Broadband uses a representative frequency of 1000 Hz (no per-band propagation yet).</li>
-              <li>Ground effect: simplified ISO 9613-2 correction when enabled; the Hard surface factor returns 0 (reflective), so enabling ground reflection with Hard equals the free-field case.</li>
+              <li>Ground effect: legacy ISO 9613-2-style correction or optional two-ray phasor model; two-ray can boost or dip levels via interference.</li>
+              <li>Legacy ground: Hard surface factor returns 0 (reflective), so enabling ground reflection with Hard equals the free-field case.</li>
+              <li>Two-ray ground: direct + reflected paths are summed as complex phasors using a Delany–Bazley impedance reflection coefficient.</li>
               <li>Barrier loss: Maekawa formula is implemented but not wired without barrier geometry.</li>
             </ul>
           </div>

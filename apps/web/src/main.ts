@@ -93,6 +93,7 @@ const aboutClose = document.querySelector('#aboutClose') as HTMLButtonElement | 
 const propagationSpreading = document.querySelector('#propagationSpreading') as HTMLSelectElement | null;
 const propagationAbsorption = document.querySelector('#propagationAbsorption') as HTMLSelectElement | null;
 const propagationGroundReflection = document.querySelector('#propagationGroundReflection') as HTMLInputElement | null;
+const propagationGroundModel = document.querySelector('#propagationGroundModel') as HTMLSelectElement | null;
 const propagationGroundType = document.querySelector('#propagationGroundType') as HTMLSelectElement | null;
 const propagationMaxDistance = document.querySelector('#propagationMaxDistance') as HTMLInputElement | null;
 
@@ -1591,6 +1592,10 @@ function updatePropagationControls() {
   if (propagationSpreading) propagationSpreading.value = current.spreading;
   if (propagationAbsorption) propagationAbsorption.value = current.atmosphericAbsorption;
   if (propagationGroundReflection) propagationGroundReflection.checked = current.groundReflection;
+  if (propagationGroundModel) {
+    propagationGroundModel.value = current.groundModel;
+    propagationGroundModel.disabled = !current.groundReflection;
+  }
   if (propagationGroundType) {
     propagationGroundType.value = current.groundType;
     propagationGroundType.disabled = !current.groundReflection;
@@ -1618,6 +1623,11 @@ function wirePropagationControls() {
   propagationGroundReflection?.addEventListener('change', () => {
     updatePropagationConfig({ groundReflection: propagationGroundReflection.checked });
     updatePropagationControls();
+    computeScene();
+  });
+
+  propagationGroundModel?.addEventListener('change', () => {
+    updatePropagationConfig({ groundModel: propagationGroundModel.value as PropagationConfig['groundModel'] });
     computeScene();
   });
 

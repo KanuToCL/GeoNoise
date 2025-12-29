@@ -17,8 +17,10 @@ import {
   atmosphericAbsorptionISO9613,
   groundFactor,
   GroundType,
+  speedOfSound,
 } from '@geonoise/core';
 import type { PropagationConfig, Meteo } from '@geonoise/core';
+import { agrTwoRayDb } from './ground.js';
 
 // ============================================================================
 // Propagation Result
@@ -247,13 +249,27 @@ export function calculatePropagation(
   // Ground effect
   let Agr = 0;
   if (config.groundReflection) {
-    const gt =
-      config.groundType === 'hard'
-        ? GroundType.Hard
-        : config.groundType === 'soft'
-          ? GroundType.Soft
-          : GroundType.Mixed;
-    Agr = groundEffect(distance, sourceHeight, receiverHeight, gt, frequency);
+    if (config.groundModel === 'twoRayPhasor') {
+      const c = speedOfSound(meteo.temperature ?? 20);
+      Agr = agrTwoRayDb(
+        frequency,
+        distance,
+        sourceHeight,
+        receiverHeight,
+        config.groundType,
+        config.groundSigmaSoft ?? 20000,
+        config.groundMixedFactor ?? 0.5,
+        c
+      );
+    } else {
+      const gt =
+        config.groundType === 'hard'
+          ? GroundType.Hard
+          : config.groundType === 'soft'
+            ? GroundType.Soft
+            : GroundType.Mixed;
+      Agr = groundEffect(distance, sourceHeight, receiverHeight, gt, frequency);
+    }
   }
 
   // Barrier attenuation
