@@ -229,12 +229,12 @@ export function calculatePropagation(
   // - barrierBlocked: set by the geometry stage when the 2D line-of-sight crosses a barrier segment.
   // - barrierPathDiff: delta (meters) for the "over-the-top" surrogate path. Only meaningful when barrierBlocked=true.
   //
-  // IMPORTANT: The overall model intentionally *swaps* ground effect for barrier effect when blocked:
-  //   blocked:   Atotal = Adiv + Aatm + Abar   (Agr omitted)
+  // IMPORTANT: The overall model clamps the blocked case to avoid negative insertion loss:
+  //   blocked:   Atotal = Adiv + Aatm + max(Abar, Agr)
   //   unblocked: Atotal = Adiv + Aatm + Agr
   //
-  // This matches the ticket’s requested integration logic and avoids double-counting attenuation mechanisms
-  // for a ray that is already screened by a barrier.
+  // This avoids discontinuities where a very small barrier attenuation would otherwise
+  // replace (and reduce) a larger ground effect on soft ground.
 
   // Check distance limits
   if (distance < MIN_DISTANCE) {
@@ -259,11 +259,11 @@ export function calculatePropagation(
   // Atmospheric absorption (applied along the direct distance; barrier insertion loss is applied separately)
   const Aatm = totalAtmosphericAbsorption(distance, frequency, config, meteo);
 
-  // Ground effect (skipped when barrier blocks the path):
-  // When occluded, we do not double-count ground reflections for the blocked ray.
-  // The barrier path replaces the ground term in the total attenuation sum.
+  // Ground effect (computed regardless of barrier state for QA continuity):
+  // We still calculate Agr even when a barrier blocks the direct path so we can
+  // blend or clamp with Abar and avoid negative insertion-loss discontinuities.
   let Agr = 0;
-  if (config.groundReflection && !barrierBlocked) {
+  if (config.groundReflection) {
     if (config.groundModel === 'twoRayPhasor') {
       const c = speedOfSound(meteo.temperature ?? 20);
       Agr = agrTwoRayDb(
@@ -299,10 +299,15 @@ export function calculatePropagation(
 
   // Final attenuation switch:
   // - Unblocked: Adiv + Aatm + Agr
-  // - Blocked:   Adiv + Aatm + Abar  (Agr intentionally omitted)
-  const totalAttenuation = barrierBlocked
-    ? Adiv + Aatm + Abar
-    : Adiv + Aatm + Agr;
+  // - Blocked:   Adiv + Aatm + max(Abar, Agr)
+  //
+  // QA rationale (ISO/TR 17534-3: negative insertion loss):
+  // If a barrier is detected but its diffraction loss is small (e.g., a low garden wall),
+  // a hard swap Abar-for-Agr can *reduce* total attenuation on soft ground and make levels
+  // jump upward. Using max(Abar, Agr) ensures a barrier cannot make the result louder than
+  // the unblocked ground-effect case while still allowing larger Abar to dominate.
+  const barrierTerm = barrierBlocked ? Math.max(Abar, Agr) : Agr;
+  const totalAttenuation = Adiv + Aatm + barrierTerm;
 
   return {
     totalAttenuation,
