@@ -362,6 +362,38 @@ function renderPanelLegend() {
   `;
 }
 
+function renderPanelStats() {
+  if (!panelStats) return;
+  panelStats.innerHTML = '';
+  const current = selection;
+  if (current.type !== 'panel') {
+    panelStats.innerHTML = '<span class="legend-empty">Select a measure grid to view stats.</span>';
+    return;
+  }
+
+  const result = results.panels.find((panel) => panel.panelId === current.id);
+  if (!result) {
+    panelStats.innerHTML = '<span class="legend-empty">Measure grid results pending.</span>';
+    return;
+  }
+
+  const rows: Array<[string, string]> = [
+    ['Average', `${formatLevel(result.LAeq_avg)} dB`],
+    ['L50', `${formatLevel(result.LAeq_p50)} dB`],
+    ['L95', `${formatLevel(result.LAeq_p95)} dB`],
+    ['Min', `${formatLevel(result.LAeq_min)} dB`],
+    ['Max', `${formatLevel(result.LAeq_max)} dB`],
+    ['Samples', `${result.sampleCount}`],
+  ];
+
+  for (const [label, value] of rows) {
+    const row = document.createElement('div');
+    row.className = 'stat-row';
+    row.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
+    panelStats.appendChild(row);
+  }
+}
+
 function selectionTypeLabel(type: Selection['type']) {
   if (type === 'panel') return 'Measure grid';
   if (type === 'source') return 'Source';
@@ -761,20 +793,8 @@ function renderResults() {
     }
   }
 
-  if (panelStats) {
-    panelStats.innerHTML = '';
-    if (!results.panels.length) {
-      panelStats.textContent = 'No measure grids.';
-    } else {
-      for (const panel of results.panels) {
-        const stat = document.createElement('div');
-        stat.innerHTML = `<strong>${panel.panelId.toUpperCase()}</strong> min ${formatLevel(panel.LAeq_min)} / p50 ${formatLevel(panel.LAeq_p50)} / max ${formatLevel(panel.LAeq_max)} / avg ${formatLevel(panel.LAeq_avg)} / p95 ${formatLevel(panel.LAeq_p95)} (${panel.sampleCount} pts)`;
-        panelStats.appendChild(stat);
-      }
-    }
-  }
-
   renderPanelLegend();
+  renderPanelStats();
 }
 
 function createId(prefix: string, seq: number) {
@@ -804,6 +824,7 @@ function setSelection(next: Selection) {
   }
   renderProperties();
   renderPanelLegend();
+  renderPanelStats();
   drawScene();
 }
 

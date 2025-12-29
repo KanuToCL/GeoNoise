@@ -451,6 +451,27 @@ button.primary {
   color: var(--accent-dark);
 }
 
+.stat-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--panel-border);
+  font-size: 13px;
+}
+
+.stat-row span {
+  color: #6a5a4b;
+}
+
+.stat-row strong {
+  color: var(--accent-dark);
+  font-weight: 600;
+}
+
 .panel-legend {
   display: flex;
   flex-direction: column;
