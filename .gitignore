@@ -7,6 +7,11 @@ dist/
 build/
 *.tsbuildinfo
 
+# TypeScript emit artifacts accidentally written into source folders
+packages/*/src/**/*.js
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.map
+
 # Test & coverage
 coverage/
 .nyc_output/
