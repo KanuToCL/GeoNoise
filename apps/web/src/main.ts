@@ -148,6 +148,7 @@ let selection: Selection = { type: 'none' };
 let dragState: DragState = null;
 let measureStart: Point | null = null;
 let measureEnd: Point | null = null;
+let measureLocked = false;
 let lastComputeAt = 0;
 let results: SceneResults = { receivers: [], panels: [] };
 let receiverEnergyTotals = new Map<string, number>();
@@ -1165,7 +1166,7 @@ function handlePointerMove(event: MouseEvent) {
     }
   }
 
-  if (activeTool === 'measure' && measureStart) {
+  if (activeTool === 'measure' && measureStart && !measureLocked) {
     measureEnd = worldPoint;
     drawScene();
   }
@@ -1192,11 +1193,13 @@ function handlePointerDown(event: MouseEvent) {
   }
 
   if (activeTool === 'measure') {
-    if (!measureStart) {
+    if (!measureStart || measureLocked) {
       measureStart = worldPoint;
       measureEnd = worldPoint;
+      measureLocked = false;
     } else {
       measureEnd = worldPoint;
+      measureLocked = true;
     }
     drawScene();
     return;
@@ -1255,6 +1258,7 @@ function wireKeyboard() {
       setSelection({ type: 'none' });
       measureStart = null;
       measureEnd = null;
+      measureLocked = false;
       drawScene();
     }
     if (event.key === 'Delete' || event.key === 'Backspace') {
