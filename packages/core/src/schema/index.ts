@@ -1,0 +1,342 @@
+/**
+ * Scene Schema v1 - GeoNoise2
+ * Runtime validation with Zod + TypeScript types
+ */
+
+import { z } from 'zod';
+import { SCENE_SCHEMA_VERSION } from '@geonoise/shared';
+
+// ============================================================================
+// Base Schemas
+// ============================================================================
+
+/** Lat/Lon coordinate schema */
+export const LatLonSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lon: z.number().min(-180).max(180),
+});
+
+/** Local meters (ENU) coordinate schema */
+export const LocalMetersSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  z: z.number().default(0),
+});
+
+/** 2D Point schema */
+export const Point2DSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+});
+
+/** RGB Color schema */
+export const ColorSchema = z.object({
+  r: z.number().min(0).max(255),
+  g: z.number().min(0).max(255),
+  b: z.number().min(0).max(255),
+  a: z.number().min(0).max(1).default(1),
+});
+
+// ============================================================================
+// Source Schemas
+// ============================================================================
+
+/** Sound power spectrum (per octave band) */
+export const SpectrumSchema = z.object({
+  '63': z.number().optional(),
+  '125': z.number().optional(),
+  '250': z.number().optional(),
+  '500': z.number().optional(),
+  '1000': z.number().optional(),
+  '2000': z.number().optional(),
+  '4000': z.number().optional(),
+  '8000': z.number().optional(),
+  overall: z.number().optional(),
+});
+
+/** Directivity pattern stub */
+export const DirectivitySchema = z.object({
+  type: z.enum(['omnidirectional', 'cardioid', 'custom']).default('omnidirectional'),
+  orientation: z.number().default(0), // degrees from north
+  data: z.record(z.number()).optional(), // custom directivity data
+});
+
+/** Point source schema */
+export const PointSourceSchema = z.object({
+  id: z.string(),
+  type: z.literal('point'),
+  name: z.string().default('Source'),
+  position: LocalMetersSchema,
+  soundPowerLevel: z.number(), // Overall Lw in dB
+  spectrum: SpectrumSchema.optional(),
+  directivity: DirectivitySchema.optional(),
+  enabled: z.boolean().default(true),
+  color: ColorSchema.optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+/** Source union - extensible for future source types */
+export const SourceSchema = z.discriminatedUnion('type', [PointSourceSchema]);
+
+// ============================================================================
+// Receiver Schemas
+// ============================================================================
+
+/** Point receiver schema */
+export const PointReceiverSchema = z.object({
+  id: z.string(),
+  type: z.literal('point'),
+  name: z.string().default('Receiver'),
+  position: LocalMetersSchema,
+  enabled: z.boolean().default(true),
+  color: ColorSchema.optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+/** Receiver union */
+export const ReceiverSchema = z.discriminatedUnion('type', [PointReceiverSchema]);
+
+// ============================================================================
+// Panel Schemas (Listening Panels/Areas)
+// ============================================================================
+
+/** Panel sampling strategy */
+export const PanelSamplingSchema = z.object({
+  type: z.enum(['grid', 'random', 'adaptive']).default('grid'),
+  resolution: z.number().positive().default(5), // meters
+  pointCount: z.number().int().positive().optional(),
+});
+
+/** Rectangular panel schema */
+export const RectangularPanelSchema = z.object({
+  id: z.string(),
+  type: z.literal('rectangular'),
+  name: z.string().default('Panel'),
+  center: LocalMetersSchema,
+  width: z.number().positive(), // meters (along x)
+  height: z.number().positive(), // meters (along y)
+  rotation: z.number().default(0), // degrees
+  elevation: z.number().default(1.5), // height above ground
+  sampling: PanelSamplingSchema.optional(),
+  enabled: z.boolean().default(true),
+  color: ColorSchema.optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+/** Polygon panel schema */
+export const PolygonPanelSchema = z.object({
+  id: z.string(),
+  type: z.literal('polygon'),
+  name: z.string().default('Panel'),
+  vertices: z.array(Point2DSchema).min(3),
+  elevation: z.number().default(1.5),
+  sampling: PanelSamplingSchema.optional(),
+  enabled: z.boolean().default(true),
+  color: ColorSchema.optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+/** Panel union */
+export const PanelSchema = z.discriminatedUnion('type', [
+  RectangularPanelSchema,
+  PolygonPanelSchema,
+]);
+
+// ============================================================================
+// Obstacle Schemas (Buildings/Barriers) - Stub for v1
+// ============================================================================
+
+/** Building/obstacle schema */
+export const BuildingSchema = z.object({
+  id: z.string(),
+  type: z.literal('building'),
+  name: z.string().default('Building'),
+  footprint: z.array(Point2DSchema).min(3),
+  height: z.number().positive().default(10),
+  groundElevation: z.number().default(0),
+  attenuationDb: z.number().default(25), // Barrier attenuation
+  enabled: z.boolean().default(true),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+/** Barrier schema */
+export const BarrierSchema = z.object({
+  id: z.string(),
+  type: z.literal('barrier'),
+  name: z.string().default('Barrier'),
+  vertices: z.array(Point2DSchema).min(2),
+  height: z.number().positive().default(3),
+  groundElevation: z.number().default(0),
+  attenuationDb: z.number().default(20),
+  enabled: z.boolean().default(true),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+/** Obstacle union */
+export const ObstacleSchema = z.discriminatedUnion('type', [BuildingSchema, BarrierSchema]);
+
+// ============================================================================
+// Grid Configuration
+// ============================================================================
+
+/** Noise map grid configuration */
+export const GridConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  bounds: z
+    .object({
+      minX: z.number(),
+      minY: z.number(),
+      maxX: z.number(),
+      maxY: z.number(),
+    })
+    .optional(),
+  resolution: z.number().positive().default(10), // meters
+  elevation: z.number().default(1.5), // height above ground
+  maxPoints: z.number().int().positive().optional(),
+});
+
+// ============================================================================
+// Meteorological Conditions - Stub for v1
+// ============================================================================
+
+/** Meteo conditions schema */
+export const MeteoSchema = z.object({
+  temperature: z.number().default(20), // Celsius
+  relativeHumidity: z.number().min(0).max(100).default(50),
+  pressure: z.number().positive().default(101.325), // kPa
+  windSpeed: z.number().min(0).default(0), // m/s (stub)
+  windDirection: z.number().min(0).max(360).default(0), // degrees from north (stub)
+});
+
+// ============================================================================
+// Engine Configuration
+// ============================================================================
+
+/** Propagation model configuration */
+export const PropagationConfigSchema = z.object({
+  spreading: z.enum(['spherical', 'cylindrical']).default('spherical'),
+  atmosphericAbsorption: z.enum(['none', 'simple', 'iso9613']).default('simple'),
+  groundReflection: z.boolean().default(false),
+  groundType: z.enum(['hard', 'mixed', 'soft']).default('mixed'),
+  maxReflections: z.number().int().min(0).max(3).default(0),
+  maxDistance: z.number().positive().default(2000), // meters
+  includeBarriers: z.boolean().default(true),
+});
+
+/** Engine configuration schema */
+export const EngineConfigSchema = z.object({
+  mode: z.enum(['festival_fast', 'standards_strict']).default('festival_fast'),
+  outputMetric: z.enum(['LAeq', 'LCeq', 'Leq_bands']).default('LAeq'),
+  propagation: PropagationConfigSchema.optional(),
+  meteo: MeteoSchema.optional(),
+});
+
+// ============================================================================
+// Coordinate System Configuration
+// ============================================================================
+
+/** Scene origin definition */
+export const OriginSchema = z.object({
+  latLon: LatLonSchema,
+  altitude: z.number().default(0),
+});
+
+// ============================================================================
+// Complete Scene Schema
+// ============================================================================
+
+/** Complete scene schema v1 */
+export const SceneSchemaV1 = z.object({
+  version: z.literal(SCENE_SCHEMA_VERSION),
+  name: z.string().default('Untitled Scene'),
+  description: z.string().optional(),
+  createdAt: z.string().datetime().optional(),
+  modifiedAt: z.string().datetime().optional(),
+  
+  // Coordinate system
+  origin: OriginSchema,
+  
+  // Scene elements
+  sources: z.array(SourceSchema).default([]),
+  receivers: z.array(ReceiverSchema).default([]),
+  panels: z.array(PanelSchema).default([]),
+  obstacles: z.array(ObstacleSchema).default([]),
+  
+  // Configuration
+  grid: GridConfigSchema.optional(),
+  engineConfig: EngineConfigSchema.optional(),
+  
+  // Metadata
+  metadata: z.record(z.unknown()).optional(),
+});
+
+/** Type alias for latest scene schema */
+export const SceneSchema = SceneSchemaV1;
+
+// ============================================================================
+// TypeScript Type Exports
+// ============================================================================
+
+export type LatLon = z.infer<typeof LatLonSchema>;
+export type LocalMeters = z.infer<typeof LocalMetersSchema>;
+export type Point2D = z.infer<typeof Point2DSchema>;
+export type Color = z.infer<typeof ColorSchema>;
+export type Spectrum = z.infer<typeof SpectrumSchema>;
+export type Directivity = z.infer<typeof DirectivitySchema>;
+export type PointSource = z.infer<typeof PointSourceSchema>;
+export type Source = z.infer<typeof SourceSchema>;
+export type PointReceiver = z.infer<typeof PointReceiverSchema>;
+export type Receiver = z.infer<typeof ReceiverSchema>;
+export type PanelSampling = z.infer<typeof PanelSamplingSchema>;
+export type RectangularPanel = z.infer<typeof RectangularPanelSchema>;
+export type PolygonPanel = z.infer<typeof PolygonPanelSchema>;
+export type Panel = z.infer<typeof PanelSchema>;
+export type Building = z.infer<typeof BuildingSchema>;
+export type Barrier = z.infer<typeof BarrierSchema>;
+export type Obstacle = z.infer<typeof ObstacleSchema>;
+export type GridConfig = z.infer<typeof GridConfigSchema>;
+export type Meteo = z.infer<typeof MeteoSchema>;
+export type PropagationConfig = z.infer<typeof PropagationConfigSchema>;
+export type EngineConfig = z.infer<typeof EngineConfigSchema>;
+export type Origin = z.infer<typeof OriginSchema>;
+export type Scene = z.infer<typeof SceneSchema>;
+export type SceneV1 = z.infer<typeof SceneSchemaV1>;
+
+// ============================================================================
+// Validation Functions
+// ============================================================================
+
+/**
+ * Validate a scene object against the schema
+ */
+export function validateScene(data: unknown): { success: true; data: Scene } | { success: false; errors: z.ZodError } {
+  const result = SceneSchema.safeParse(data);
+  if (result.success) {
+    return { success: true, data: result.data };
+  }
+  return { success: false, errors: result.error };
+}
+
+/**
+ * Parse and validate a scene, throwing on error
+ */
+export function parseScene(data: unknown): Scene {
+  return SceneSchema.parse(data);
+}
+
+/**
+ * Create an empty scene with defaults
+ */
+export function createEmptyScene(origin: Origin, name = 'Untitled Scene'): Scene {
+  return {
+    version: SCENE_SCHEMA_VERSION,
+    name,
+    createdAt: new Date().toISOString(),
+    modifiedAt: new Date().toISOString(),
+    origin,
+    sources: [],
+    receivers: [],
+    panels: [],
+    obstacles: [],
+  };
+}

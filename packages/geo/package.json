@@ -1,0 +1,43 @@
+{
+  "name": "@geonoise/geo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./geom": {
+      "import": "./dist/geom/index.js",
+      "types": "./dist/geom/index.d.ts"
+    },
+    "./map": {
+      "import": "./dist/map/index.js",
+      "types": "./dist/map/index.d.ts"
+    },
+    "./spatial": {
+      "import": "./dist/spatial/index.js",
+      "types": "./dist/spatial/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@geonoise/core": "*",
+    "@geonoise/shared": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  }
+}
