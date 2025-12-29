@@ -111,6 +111,7 @@
                 <div class="tool-grid">
                   <button class="tool-button ui-button" data-tool="add-source" type="button">Add Source (S)</button>
                   <button class="tool-button ui-button" data-tool="add-receiver" type="button">Add Receiver (R)</button>
+                  <button class="tool-button ui-button" data-tool="add-barrier" type="button">Add Barrier (B)</button>
                   <button class="tool-button ui-button" data-tool="add-panel" type="button">Add Measure Grid (G)</button>
                 </div>
               </div>
@@ -213,7 +214,7 @@
                 <input class="ui-inset" id="propagationMaxDistance" type="number" min="1" step="1" />
               </div>
             </div>
-            <div class="tool-note">Ground + absorption affect results today. Barriers + multi-reflections are still TODO.</div>
+            <div class="tool-note">Ground + absorption affect results today. Barriers support simple screen attenuation; multi-reflections are still TODO.</div>
           </section>
 
           <section class="panel ui-surface">
@@ -378,7 +379,7 @@
               <li>Legacy ground: ISO 9613-2 Eq. (10) with hm=(hs+hr)/2, dd=max(r1,1), 300/dd term, and negative values clamped to 0; applied only for soft ground; Dn is intentionally omitted.</li>
               <li>Two-ray ground: direct + reflected paths are summed as complex phasors using Delany–Bazley impedance (not Miki) and numerical distance w.</li>
               <li>Two-ray guards: asymptotic F(w) for |w|>=4 with plane-wave fallback for small |w|, cosθ clamp, |Γ| cap, and |R| floor.</li>
-              <li>Barrier loss: Maekawa formula is implemented but not wired without barrier geometry.</li>
+              <li>Barrier loss: Simple line barriers use a Maekawa-style screen attenuation.</li>
             </ul>
           </div>
           <div class="about-block">

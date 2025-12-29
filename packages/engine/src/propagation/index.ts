@@ -164,7 +164,7 @@ export function groundEffect(
 // ============================================================================
 
 /**
- * Calculate barrier insertion loss using Maekawa's formula
+ * Calculate barrier insertion loss using Maekawa-style screen attenuation.
  * @param pathDifference - Path length difference in meters (delta)
  * @param frequency - Frequency in Hz
  * @param wavelength - Wavelength in meters
@@ -174,24 +174,38 @@ export function barrierAttenuation(
   frequency: number,
   wavelength?: number
 ): number {
-  if (pathDifference <= 0) {
-    return 0; // No barrier effect if path difference is negative or zero
-  }
-
+  // ISO 9613-2 / Kurze-Anderson / Maekawa-style single-screen approximation.
+  //
+  // Inputs:
+  //   - pathDifference (delta) in meters, computed as (A + B - d) where:
+  //       A = distance3D(source, barrier-top-point)
+  //       B = distance3D(barrier-top-point, receiver)
+  //       d = direct distance3D(source, receiver)
+  //   - frequency in Hz
+  //
+  // Fresnel number:
+  //   N = 2 * delta / lambda
+  //
+  // Insertion loss approximation:
+  //   Abar = 10 * log10( 3 + 20 * N )
+  //
+  // Clamps:
+  //   - If N < -0.1, return 0 dB (prevents non-physical negative insertion loss and keeps log argument safe).
+  //   - Cap at 20 dB to model a “single screen” limit (avoids unrealistic infinite attenuation).
+  //
+  // Note: delta is computed in the CPU engine (packages/engine/src/compute/index.ts) from 2D intersection + 3D heights.
   // Calculate wavelength if not provided
   const lambda = wavelength ?? 343 / frequency;
 
-  // Fresnel number
+  // Fresnel number (dimensionless)
   const N = (2 * pathDifference) / lambda;
 
-  // Maekawa's approximation
-  if (N < 0) return 0;
-  if (N === 0) return 5;
+  if (N < -0.1) return 0;
 
   const attenuation = 10 * Math.log10(3 + 20 * N);
 
-  // Cap at reasonable maximum
-  return Math.min(attenuation, 25);
+  // Cap at single-screen limit
+  return Math.min(attenuation, 20);
 }
 
 // ============================================================================
@@ -208,8 +222,20 @@ export function calculatePropagation(
   config: PropagationConfig,
   meteo: Meteo,
   barrierPathDiff = 0,
+  barrierBlocked = false,
   frequency = 1000
 ): PropagationResult {
+  // Barrier parameters:
+  // - barrierBlocked: set by the geometry stage when the 2D line-of-sight crosses a barrier segment.
+  // - barrierPathDiff: delta (meters) for the "over-the-top" surrogate path. Only meaningful when barrierBlocked=true.
+  //
+  // IMPORTANT: The overall model intentionally *swaps* ground effect for barrier effect when blocked:
+  //   blocked:   Atotal = Adiv + Aatm + Abar   (Agr omitted)
+  //   unblocked: Atotal = Adiv + Aatm + Agr
+  //
+  // This matches the ticket’s requested integration logic and avoids double-counting attenuation mechanisms
+  // for a ray that is already screened by a barrier.
+
   // Check distance limits
   if (distance < MIN_DISTANCE) {
     distance = MIN_DISTANCE;
@@ -227,15 +253,17 @@ export function calculatePropagation(
     };
   }
 
-  // Spreading loss
+  // Spreading loss (always referenced to the direct source-receiver distance)
   const Adiv = spreadingLoss(distance, config.spreading);
 
-  // Atmospheric absorption
+  // Atmospheric absorption (applied along the direct distance; barrier insertion loss is applied separately)
   const Aatm = totalAtmosphericAbsorption(distance, frequency, config, meteo);
 
-  // Ground effect
+  // Ground effect (skipped when barrier blocks the path):
+  // When occluded, we do not double-count ground reflections for the blocked ray.
+  // The barrier path replaces the ground term in the total attenuation sum.
   let Agr = 0;
-  if (config.groundReflection) {
+  if (config.groundReflection && !barrierBlocked) {
     if (config.groundModel === 'twoRayPhasor') {
       const c = speedOfSound(meteo.temperature ?? 20);
       Agr = agrTwoRayDb(
@@ -260,13 +288,21 @@ export function calculatePropagation(
     }
   }
 
-  // Barrier attenuation
+  // Barrier attenuation (enabled only when the SR line crosses a barrier).
+  // Uses temperature-dependent speed of sound for lambda = c / f.
   let Abar = 0;
-  if (config.includeBarriers && barrierPathDiff > 0) {
-    Abar = barrierAttenuation(barrierPathDiff, frequency);
+  if (config.includeBarriers && barrierBlocked) {
+    const c = speedOfSound(meteo.temperature ?? 20);
+    const lambda = c / frequency;
+    Abar = barrierAttenuation(barrierPathDiff, frequency, lambda);
   }
 
-  const totalAttenuation = Adiv + Aatm + Agr + Abar;
+  // Final attenuation switch:
+  // - Unblocked: Adiv + Aatm + Agr
+  // - Blocked:   Adiv + Aatm + Abar  (Agr intentionally omitted)
+  const totalAttenuation = barrierBlocked
+    ? Adiv + Aatm + Abar
+    : Adiv + Aatm + Agr;
 
   return {
     totalAttenuation,
@@ -288,7 +324,8 @@ export function calculateBandedPropagation(
   receiverHeight: number,
   config: PropagationConfig,
   meteo: Meteo,
-  barrierPathDiff = 0
+  barrierPathDiff = 0,
+  barrierBlocked = false
 ): BandedPropagationResult {
   const bands = new Map<number, PropagationResult>();
 
@@ -300,6 +337,7 @@ export function calculateBandedPropagation(
       config,
       meteo,
       barrierPathDiff,
+      barrierBlocked,
       freq
     );
     bands.set(freq, result);
@@ -313,6 +351,7 @@ export function calculateBandedPropagation(
     config,
     meteo,
     barrierPathDiff,
+    barrierBlocked,
     1000
   );
 

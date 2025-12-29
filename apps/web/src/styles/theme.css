@@ -79,6 +79,9 @@
   --canvas-panel-handle-stroke: var(--accent-dark);
   --canvas-sample-stroke: rgba(31, 28, 24, 0.2);
 
+  --canvas-barrier-stroke: var(--accent-dark);
+  --canvas-barrier-selected: var(--accent);
+
   --canvas-source-fill: var(--accent);
   --canvas-source-stroke: #aa4e37;
   --canvas-source-muted-fill: rgba(31, 28, 24, 0.12);
@@ -176,6 +179,9 @@
   --canvas-panel-handle-fill: var(--surface-2);
   --canvas-panel-handle-stroke: var(--accent-dark);
   --canvas-sample-stroke: rgba(31, 39, 51, 0.2);
+
+  --canvas-barrier-stroke: var(--accent-dark);
+  --canvas-barrier-selected: var(--accent);
 
   --canvas-source-fill: var(--accent);
   --canvas-source-stroke: var(--accent-strong);

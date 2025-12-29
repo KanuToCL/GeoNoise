@@ -37,6 +37,7 @@ describe('Propagation v1 behavior', () => {
         config.propagation!,
         config.meteo!,
         0,
+        false,
         1000
       );
       return calculateSPL(100, prop);

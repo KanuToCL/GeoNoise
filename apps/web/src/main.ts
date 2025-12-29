@@ -46,19 +46,38 @@ type Panel = {
   sampling: { resolution: number; pointCap: number };
 };
 
+type Barrier = {
+  // UI barrier primitive (matches the feature ticket’s intent):
+  // - p1/p2 are endpoints in the 2D editor plane (x,y) in local meters (ENU).
+  // - height is the vertical screen height (meters). In physics, this becomes the Z of the barrier top edge.
+  // - transmissionLoss is reserved for future “through-wall” modeling (currently unused by the engine).
+  //
+  // Important: The UI is 2D, but the engine computes 3D acoustics:
+  //   - source z = hs
+  //   - receiver z = hr
+  //   - barrier height = hb
+  // The CPU engine checks 2D intersection (SR crosses barrier segment) and then uses hb/hs/hr to compute
+  // the 3D "over the top" path difference delta that drives the barrier insertion loss term.
+  id: string;
+  p1: Point;
+  p2: Point;
+  height: number;
+  transmissionLoss?: number;
+};
 
-type Tool = 'select' | 'add-source' | 'add-receiver' | 'add-panel' | 'measure' | 'delete';
+type Tool = 'select' | 'add-source' | 'add-receiver' | 'add-panel' | 'add-barrier' | 'measure' | 'delete';
 
 type Selection =
   | { type: 'none' }
   | { type: 'source'; id: string }
   | { type: 'receiver'; id: string }
-  | { type: 'panel'; id: string };
+  | { type: 'panel'; id: string }
+  | { type: 'barrier'; id: string };
 
 type DragState =
   | null
   | {
-      type: 'source' | 'receiver' | 'panel';
+      type: 'source' | 'receiver' | 'panel' | 'barrier';
       id: string;
       offset: Point;
     }
@@ -85,6 +104,8 @@ type CanvasTheme = {
   panelHandleFill: string;
   panelHandleStroke: string;
   sampleStroke: string;
+  barrierStroke: string;
+  barrierSelected: string;
   sourceFill: string;
   sourceStroke: string;
   sourceMutedFill: string;
@@ -215,6 +236,7 @@ const scene = {
       sampling: { resolution: 10, pointCap: 300 },
     },
   ] as Panel[],
+  barriers: [] as Barrier[],
 };
 
 const layers = {
@@ -232,6 +254,14 @@ let dragState: DragState = null;
 let measureStart: Point | null = null;
 let measureEnd: Point | null = null;
 let measureLocked = false;
+// Barrier tool workflow:
+// - First click anchors p1 (start).
+// - Drag or move to preview p2 (end) as a dashed line.
+// - Mouse up commits if distance is non-trivial; otherwise waits for a second click.
+// This mirrors "click to start, drag/click to finish" while still allowing click+click creation.
+let barrierDraft: { p1: Point; p2: Point } | null = null;
+let barrierDraftAnchored = false;
+let barrierDragActive = false;
 let lastComputeAt = 0;
 let results: SceneResults = { receivers: [], panels: [] };
 let receiverEnergyTotals = new Map<string, number>();
@@ -262,9 +292,11 @@ type SceneSnapshot = {
   sources: Source[];
   receivers: Receiver[];
   panels: Panel[];
+  barriers: Barrier[];
   sourceSeq: number;
   receiverSeq: number;
   panelSeq: number;
+  barrierSeq: number;
   selection: Selection;
   soloSourceId: string | null;
   panOffset: Point;
@@ -277,6 +309,7 @@ let historyIndex = -1;
 let sourceSeq = 3;
 let receiverSeq = 3;
 let panelSeq = 2;
+let barrierSeq = 1;
 
 function getPropagationConfig(): PropagationConfig {
   if (engineConfig.propagation) return engineConfig.propagation;
@@ -313,6 +346,8 @@ function readCanvasTheme(): CanvasTheme {
     panelHandleFill: readCssVar('--canvas-panel-handle-fill'),
     panelHandleStroke: readCssVar('--canvas-panel-handle-stroke'),
     sampleStroke: readCssVar('--canvas-sample-stroke'),
+    barrierStroke: readCssVar('--canvas-barrier-stroke'),
+    barrierSelected: readCssVar('--canvas-barrier-selected'),
     sourceFill: readCssVar('--canvas-source-fill'),
     sourceStroke: readCssVar('--canvas-source-stroke'),
     sourceMutedFill: readCssVar('--canvas-source-muted-fill'),
@@ -417,9 +452,15 @@ function snapshotScene(): SceneSnapshot {
       points: panel.points.map((pt) => ({ ...pt })),
       sampling: { ...panel.sampling },
     })),
+    barriers: scene.barriers.map((barrier) => ({
+      ...barrier,
+      p1: { ...barrier.p1 },
+      p2: { ...barrier.p2 },
+    })),
     sourceSeq,
     receiverSeq,
     panelSeq,
+    barrierSeq,
     selection: { ...selection } as Selection,
     soloSourceId,
     panOffset: { ...panOffset },
@@ -446,9 +487,15 @@ function applySnapshot(snap: SceneSnapshot) {
     points: panel.points.map((pt) => ({ ...pt })),
     sampling: { ...panel.sampling },
   }));
+  scene.barriers = snap.barriers.map((barrier) => ({
+    ...barrier,
+    p1: { ...barrier.p1 },
+    p2: { ...barrier.p2 },
+  }));
   sourceSeq = snap.sourceSeq;
   receiverSeq = snap.receiverSeq;
   panelSeq = snap.panelSeq;
+  barrierSeq = snap.barrierSeq;
   selection = snap.selection;
   soloSourceId = snap.soloSourceId;
   panOffset = { ...snap.panOffset };
@@ -531,6 +578,16 @@ function distance(a: Point, b: Point) {
   const dx = a.x - b.x;
   const dy = a.y - b.y;
   return Math.sqrt(dx * dx + dy * dy);
+}
+
+function distanceToSegment(point: Point, a: Point, b: Point) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  if (dx === 0 && dy === 0) return distance(point, a);
+  const t = ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy);
+  const clamped = Math.max(0, Math.min(1, t));
+  const proj = { x: a.x + clamped * dx, y: a.y + clamped * dy };
+  return distance(point, proj);
 }
 
 function lerp(a: number, b: number, t: number) {
@@ -707,6 +764,7 @@ function selectionTypeLabel(type: Selection['type']) {
   if (type === 'panel') return 'Measure grid';
   if (type === 'source') return 'Source';
   if (type === 'receiver') return 'Receiver';
+  if (type === 'barrier') return 'Barrier';
   return 'None';
 }
 
@@ -714,6 +772,8 @@ function toolLabel(tool: Tool) {
   switch (tool) {
     case 'add-panel':
       return 'Add Measure Grid';
+    case 'add-barrier':
+      return 'Add Barrier';
     case 'add-source':
       return 'Add Source';
     case 'add-receiver':
@@ -733,6 +793,8 @@ function toolInstructionFor(tool: Tool) {
       return 'Click to place a source. Drag to reposition.';
     case 'add-receiver':
       return 'Click to place a receiver. Drag to reposition.';
+    case 'add-barrier':
+      return 'Click to set the start, then drag or click to place the end.';
     case 'add-panel':
       return 'Click to place a measure grid.';
     case 'measure':
@@ -790,6 +852,29 @@ function buildEngineScene() {
     vertices: panel.points.map((pt) => ({ x: pt.x, y: pt.y })),
     elevation: panel.elevation,
     sampling: { type: 'grid', resolution: panel.sampling.resolution, pointCount: panel.sampling.pointCap },
+    enabled: true,
+  }));
+
+  // Map UI barriers to engine obstacles for propagation.
+  //
+  // The engine stores barriers as ObstacleSchema(type='barrier') with a list of vertices.
+  // For now, the UI only supports a single straight segment, so we write exactly two vertices.
+  //
+  // The CPU engine then:
+  // 1) checks if each source->receiver segment intersects this barrier segment in 2D, and if so
+  // 2) computes a 3D top-edge path difference delta using barrier.height (hb) and source/receiver z (hs/hr).
+  // That delta is turned into insertion loss (Abar) by the propagation model and replaces ground effect when blocked.
+  engineScene.obstacles = scene.barriers.map((barrier) => ({
+    id: barrier.id,
+    type: 'barrier',
+    name: `Barrier ${barrier.id.toUpperCase()}`,
+    vertices: [
+      { x: barrier.p1.x, y: barrier.p1.y },
+      { x: barrier.p2.x, y: barrier.p2.y },
+    ],
+    height: barrier.height,
+    groundElevation: 0,
+    attenuationDb: Number.isFinite(barrier.transmissionLoss ?? Infinity) ? barrier.transmissionLoss ?? 20 : 20,
     enabled: true,
   }));
 
@@ -1346,8 +1431,23 @@ function duplicatePanel(panel: Panel): Panel {
   };
 }
 
+function duplicateBarrier(barrier: Barrier): Barrier {
+  const newId = createId('b', barrierSeq++);
+  return {
+    ...barrier,
+    id: newId,
+    p1: { ...barrier.p1 },
+    p2: { ...barrier.p2 },
+  };
+}
+
 function setActiveTool(tool: Tool) {
   activeTool = tool;
+  if (tool !== 'add-barrier') {
+    barrierDraft = null;
+    barrierDraftAnchored = false;
+    barrierDragActive = false;
+  }
   if (modeLabel) {
     modeLabel.textContent = toolLabel(tool);
   }
@@ -1421,6 +1521,14 @@ function renderProperties() {
       tip.addEventListener('click', () => setSelection({ type: 'panel', id: scene.panels[0].id }));
       empty.appendChild(tip);
     }
+    if (scene.barriers.length) {
+      const tip = document.createElement('button');
+      tip.type = 'button';
+      tip.className = 'text-button';
+      tip.textContent = `Click ${scene.barriers[0].id.toUpperCase()} to edit height.`;
+      tip.addEventListener('click', () => setSelection({ type: 'barrier', id: scene.barriers[0].id }));
+      empty.appendChild(tip);
+    }
 
     propertiesBody.appendChild(empty);
     return;
@@ -1476,6 +1584,16 @@ function renderProperties() {
     hint.className = 'property-hint';
     hint.textContent = 'Drag corner handles on the measure grid to reshape.';
     propertiesBody.appendChild(hint);
+  }
+
+  if (current.type === 'barrier') {
+    const barrier = scene.barriers.find((item) => item.id === current.id);
+    if (!barrier) return;
+    propertiesBody.appendChild(createInputRow('Wall height (m)', barrier.height, (value) => {
+      barrier.height = Math.max(0.1, value);
+      pushHistory();
+      computeScene();
+    }));
   }
 }
 
@@ -1661,6 +1779,14 @@ function hitTest(point: Point) {
   });
   if (hitReceiver) return { type: 'receiver' as const, id: hitReceiver.id };
 
+  const hitBarrier = scene.barriers.find((barrier) => {
+    // Barrier hit-test uses point-to-segment distance in screen space so selection is ergonomic even for thin lines.
+    const p1 = worldToCanvas(barrier.p1);
+    const p2 = worldToCanvas(barrier.p2);
+    return distanceToSegment(point, p1, p2) <= 10;
+  });
+  if (hitBarrier) return { type: 'barrier' as const, id: hitBarrier.id };
+
   const world = canvasToWorld(point);
   const hitPanel = scene.panels.find((panel) => pointInPolygon(world, panel.points));
   if (hitPanel) return { type: 'panel' as const, id: hitPanel.id };
@@ -1678,7 +1804,35 @@ function deleteSelection(target: Selection) {
   if (target.type === 'panel') {
     scene.panels = scene.panels.filter((item) => item.id !== target.id);
   }
+  if (target.type === 'barrier') {
+    scene.barriers = scene.barriers.filter((item) => item.id !== target.id);
+  }
   setSelection({ type: 'none' });
+  updateCounts();
+  pushHistory();
+  computeScene();
+}
+
+function commitBarrierDraft() {
+  if (!barrierDraft) return;
+  // Commit the in-progress barrier draft into the scene list.
+  //
+  // Defaults:
+  // - height: 3m, a typical small screen / fence / wall height for quick iteration.
+  // - transmissionLoss: Infinity (placeholder). We currently model barriers as diffracting screens only;
+  //   future work can incorporate transmissionLoss / attenuationDb as “through-barrier” energy reduction.
+  const barrier: Barrier = {
+    id: createId('b', barrierSeq++),
+    p1: { ...barrierDraft.p1 },
+    p2: { ...barrierDraft.p2 },
+    height: 3,
+    transmissionLoss: Number.POSITIVE_INFINITY,
+  };
+  scene.barriers.push(barrier);
+  barrierDraft = null;
+  barrierDraftAnchored = false;
+  barrierDragActive = false;
+  setSelection({ type: 'barrier', id: barrier.id });
   updateCounts();
   pushHistory();
   computeScene();
@@ -1841,6 +1995,44 @@ function drawPanels() {
   }
 }
 
+function drawBarriers() {
+  // Render barriers as thick screen lines; selection adds a halo for visibility.
+  // - Solid stroke: committed barriers in the scene.
+  // - Dashed stroke: in-progress barrierDraft while the user is placing endpoints.
+  const drawLine = (start: Point, end: Point, stroke: string, width: number, dash?: number[]) => {
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = width;
+    ctx.setLineDash(dash ?? []);
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+    if (dash) {
+      ctx.setLineDash([]);
+    }
+  };
+
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  for (const barrier of scene.barriers) {
+    const start = worldToCanvas(barrier.p1);
+    const end = worldToCanvas(barrier.p2);
+    if (selection.type === 'barrier' && selection.id === barrier.id) {
+      drawLine(start, end, canvasTheme.selectionHalo, 12);
+      drawLine(start, end, canvasTheme.barrierSelected, 6);
+    } else {
+      drawLine(start, end, canvasTheme.barrierStroke, 6);
+    }
+  }
+
+  if (barrierDraft) {
+    const start = worldToCanvas(barrierDraft.p1);
+    const end = worldToCanvas(barrierDraft.p2);
+    drawLine(start, end, canvasTheme.barrierStroke, 4, [6, 6]);
+  }
+}
+
 function drawSources() {
   const activeFill = canvasTheme.sourceFill;
   const activeStroke = canvasTheme.sourceStroke;
@@ -1977,6 +2169,8 @@ function drawScene() {
     }
   }
 
+  drawBarriers();
+
   if (layers.sources) {
     drawSources();
   }
@@ -2025,6 +2219,12 @@ function handlePointerMove(event: MouseEvent) {
     return;
   }
 
+  if (activeTool === 'add-barrier' && barrierDragActive && barrierDraft) {
+    barrierDraft.p2 = snappedPoint;
+    drawScene();
+    return;
+  }
+
   if (!dragState && (activeTool === 'select' || activeTool === 'delete')) {
     const nextHover = hitTest(canvasPoint);
     if (!sameSelection(hoverSelection, nextHover)) {
@@ -2062,6 +2262,15 @@ function handlePointerMove(event: MouseEvent) {
         const dx = targetPoint.x - panel.points[0].x;
         const dy = targetPoint.y - panel.points[0].y;
         panel.points = panel.points.map((pt) => ({ x: pt.x + dx, y: pt.y + dy }));
+      }
+    }
+    if (activeDrag.type === 'barrier') {
+      const barrier = scene.barriers.find((item) => item.id === activeDrag.id);
+      if (barrier) {
+        const dx = targetPoint.x - barrier.p1.x;
+        const dy = targetPoint.y - barrier.p1.y;
+        barrier.p1 = { x: barrier.p1.x + dx, y: barrier.p1.y + dy };
+        barrier.p2 = { x: barrier.p2.x + dx, y: barrier.p2.y + dy };
       }
     }
     if (activeDrag.type === 'panel-vertex') {
@@ -2105,6 +2314,18 @@ function handlePointerDown(event: MouseEvent) {
 
   if (activeTool === 'add-receiver') {
     addReceiverAt(snappedPoint);
+    return;
+  }
+
+  if (activeTool === 'add-barrier') {
+    if (!barrierDraft) {
+      barrierDraft = { p1: snappedPoint, p2: snappedPoint };
+      barrierDraftAnchored = false;
+    } else {
+      barrierDraft.p2 = snappedPoint;
+    }
+    barrierDragActive = true;
+    drawScene();
     return;
   }
 
@@ -2217,6 +2438,27 @@ function handlePointerDown(event: MouseEvent) {
         dragState = { type: 'panel', id: panel.id, offset: { x: worldHit.x - first.x, y: worldHit.y - first.y } };
       }
     }
+    if (hit.type === 'barrier') {
+      const barrier = scene.barriers.find((item) => item.id === hit.id);
+      if (barrier) {
+        if (event.shiftKey) {
+          const duplicate = duplicateBarrier(barrier);
+          duplicate.p1 = { x: barrier.p1.x + 2, y: barrier.p1.y - 2 };
+          duplicate.p2 = { x: barrier.p2.x + 2, y: barrier.p2.y - 2 };
+          scene.barriers.push(duplicate);
+          updateCounts();
+          setSelection({ type: 'barrier', id: duplicate.id });
+          dragDirty = true;
+          dragState = {
+            type: 'barrier',
+            id: duplicate.id,
+            offset: { x: worldHit.x - duplicate.p1.x, y: worldHit.y - duplicate.p1.y },
+          };
+          return;
+        }
+        dragState = { type: 'barrier', id: barrier.id, offset: { x: worldHit.x - barrier.p1.x, y: worldHit.y - barrier.p1.y } };
+      }
+    }
   } else {
     setSelection({ type: 'none' });
     if (activeTool === 'select') {
@@ -2236,6 +2478,20 @@ function handlePointerLeave() {
 }
 
 function handlePointerUp() {
+  if (barrierDragActive && barrierDraft) {
+    // If user dragged a visible length, commit immediately; otherwise wait for a second click.
+    const draftDistance = distance(barrierDraft.p1, barrierDraft.p2);
+    if (barrierDraftAnchored || draftDistance > 0.5) {
+      commitBarrierDraft();
+    } else {
+      // First click without a meaningful drag:
+      // keep the draft around so the next click can set p2 (classic click-then-click placement).
+      barrierDraftAnchored = true;
+      barrierDragActive = false;
+      drawScene();
+    }
+    return;
+  }
   if (panState) {
     panState = null;
     return;
@@ -2310,6 +2566,9 @@ function wireKeyboard() {
       measureStart = null;
       measureEnd = null;
       measureLocked = false;
+      barrierDraft = null;
+      barrierDraftAnchored = false;
+      barrierDragActive = false;
       drawScene();
     }
     if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -2326,6 +2585,9 @@ function wireKeyboard() {
     }
     if (event.key === 'r' || event.key === 'R') {
       setActiveTool('add-receiver');
+    }
+    if (event.key === 'b' || event.key === 'B') {
+      setActiveTool('add-barrier');
     }
     if (event.key === 'g' || event.key === 'G') {
       setActiveTool('add-panel');
@@ -2375,6 +2637,15 @@ function buildScenePayload() {
       points: panel.points.map((point) => ({ ...point })),
       sampling: { ...panel.sampling },
     })),
+    // UI save format extension (v1 payload still; this is not the core Scene schema yet):
+    // - barriers are persisted so users can save/load screen geometry.
+    // - older files without `barriers` remain loadable (see applyLoadedScene()).
+    barriers: scene.barriers.map((barrier) => ({
+      ...barrier,
+      p1: { ...barrier.p1 },
+      p2: { ...barrier.p2 },
+      transmissionLoss: Number.isFinite(barrier.transmissionLoss ?? Infinity) ? barrier.transmissionLoss : undefined,
+    })),
     propagation: getPropagationConfig(),
   };
 }
@@ -2413,9 +2684,16 @@ function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
     points: panel.points.map((point) => ({ ...point })),
     sampling: { ...panel.sampling },
   }));
+  // Backwards-compatible load: scenes saved before barriers existed simply omit this field.
+  scene.barriers = (payload.barriers ?? []).map((barrier) => ({
+    ...barrier,
+    p1: { ...barrier.p1 },
+    p2: { ...barrier.p2 },
+  }));
   sourceSeq = nextSequence('s', scene.sources);
   receiverSeq = nextSequence('r', scene.receivers);
   panelSeq = nextSequence('p', scene.panels);
+  barrierSeq = nextSequence('b', scene.barriers);
   collapsedSources.clear();
   soloSourceId = null;
   selection = { type: 'none' };
@@ -2425,6 +2703,9 @@ function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
   measureStart = null;
   measureEnd = null;
   measureLocked = false;
+  barrierDraft = null;
+  barrierDraftAnchored = false;
+  barrierDragActive = false;
   if (payload.propagation) {
     updatePropagationConfig(payload.propagation);
     updatePropagationControls();
