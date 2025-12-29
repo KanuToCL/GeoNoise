@@ -4,6 +4,7 @@
   --radius-lg: 24px;
   --focus-ring: 0 0 0 3px rgba(122, 166, 161, 0.35);
   --font: "Space Grotesk", "IBM Plex Sans", "Fira Sans", "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
   --brand-bg: #e0e5ec;
   --brand-shadow-light: rgba(255, 255, 255, 0.7);
   --brand-shadow-dark: rgba(163, 177, 198, 0.6);
@@ -64,9 +65,9 @@
   --status-led-ok: #74b79c;
   --status-led-busy: #c5b06b;
   --status-led-error: #c38a82;
-  --toggle-on: #7dcf8a;
-  --toggle-on-dark: #5fb975;
-  --toggle-on-glow: rgba(125, 207, 138, 0.5);
+  --toggle-on: var(--brand-accent);
+  --toggle-on-dark: var(--brand-accent);
+  --toggle-on-glow: rgba(0, 255, 0, 0.45);
 
   --surface-glass: rgba(237, 242, 248, 0.88);
   --surface-glass-soft: rgba(237, 242, 248, 0.7);
@@ -178,9 +179,9 @@
   --status-led-ok: #3b9c90;
   --status-led-busy: #d7b464;
   --status-led-error: #e56e57;
-  --toggle-on: #79d09a;
-  --toggle-on-dark: #56b982;
-  --toggle-on-glow: rgba(121, 208, 154, 0.45);
+  --toggle-on: var(--brand-accent);
+  --toggle-on-dark: var(--brand-accent);
+  --toggle-on-glow: rgba(0, 255, 0, 0.45);
 
   --surface-glass: rgba(255, 255, 255, 0.78);
   --surface-glass-soft: rgba(255, 255, 255, 0.6);

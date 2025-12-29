@@ -33,32 +33,12 @@
         <div class="topbar-center">
           <div class="brand brand--debossed">
             <div class="brand-icon" aria-hidden="true">
-              <svg class="brand-rings" viewBox="0 0 100 100" focusable="false" aria-hidden="true">
-                <defs>
-                  <filter id="brand-inner-shadow" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
-                    <feOffset dx="-2" dy="-2" in="SourceAlpha" result="shadow1" />
-                    <feGaussianBlur in="shadow1" stdDeviation="2" result="shadow1-blur" />
-                    <feComposite in="shadow1-blur" in2="SourceAlpha" operator="arithmetic" k2="-1" k3="1" result="shadow1-inner" />
-                    <feFlood flood-color="rgb(163, 177, 198)" flood-opacity="0.6" result="shadow1-color" />
-                    <feComposite in="shadow1-color" in2="shadow1-inner" operator="in" result="shadow1-final" />
-                    <feOffset dx="2" dy="2" in="SourceAlpha" result="shadow2" />
-                    <feGaussianBlur in="shadow2" stdDeviation="2" result="shadow2-blur" />
-                    <feComposite in="shadow2-blur" in2="SourceAlpha" operator="arithmetic" k2="-1" k3="1" result="shadow2-inner" />
-                    <feFlood flood-color="white" flood-opacity="0.7" result="shadow2-color" />
-                    <feComposite in="shadow2-color" in2="shadow2-inner" operator="in" result="shadow2-final" />
-                    <feComposite in="shadow1-final" in2="shadow2-final" operator="over" result="shadow-combined" />
-                    <feComposite in="SourceGraphic" in2="shadow-combined" operator="over" />
-                  </filter>
-                </defs>
-                <g class="brand-ring-group" filter="url(#brand-inner-shadow)">
-                  <circle class="brand-ring" cx="50" cy="50" r="36" />
-                  <circle class="brand-ring" cx="50" cy="50" r="26" />
-                  <circle class="brand-ring" cx="50" cy="50" r="16" />
-                </g>
-              </svg>
+              <span class="brand-ring ring-1"></span>
+              <span class="brand-ring ring-2"></span>
+              <span class="brand-ring ring-3"></span>
               <span class="brand-core"></span>
             </div>
-            <div class="brand-title">GeoNoise</div>
+            <div class="brand-title">geonoise</div>
           </div>
         </div>
         <div class="topbar-right">
