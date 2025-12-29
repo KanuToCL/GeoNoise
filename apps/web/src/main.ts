@@ -6,8 +6,8 @@ import {
   type ComputePreference,
 } from './computePreference.js';
 import { engineCompute } from '@geonoise/engine-backends';
-import { createEmptyScene } from '@geonoise/core';
-import type { ComputePanelResponse, ComputeReceiversResponse } from '@geonoise/engine';
+import { createEmptyScene, type EngineConfig, type PropagationConfig } from '@geonoise/core';
+import { getDefaultEngineConfig, type ComputePanelResponse, type ComputeReceiversResponse } from '@geonoise/engine';
 import { panelId, MIN_LEVEL } from '@geonoise/shared';
 import { buildCsv } from './export.js';
 import type { SceneResults, PanelResult } from './export.js';
@@ -86,6 +86,16 @@ const panelStats = document.querySelector('#panelStats') as HTMLDivElement | nul
 const panelLegend = document.querySelector('#panelLegend') as HTMLDivElement | null;
 const exportCsv = document.querySelector('#exportCsv') as HTMLButtonElement | null;
 
+const aboutButton = document.querySelector('#aboutButton') as HTMLButtonElement | null;
+const aboutModal = document.querySelector('#aboutModal') as HTMLDivElement | null;
+const aboutClose = document.querySelector('#aboutClose') as HTMLButtonElement | null;
+
+const propagationSpreading = document.querySelector('#propagationSpreading') as HTMLSelectElement | null;
+const propagationAbsorption = document.querySelector('#propagationAbsorption') as HTMLSelectElement | null;
+const propagationGroundReflection = document.querySelector('#propagationGroundReflection') as HTMLInputElement | null;
+const propagationGroundType = document.querySelector('#propagationGroundType') as HTMLSelectElement | null;
+const propagationMaxDistance = document.querySelector('#propagationMaxDistance') as HTMLInputElement | null;
+
 const layerSources = document.querySelector('#layerSources') as HTMLInputElement | null;
 const layerReceivers = document.querySelector('#layerReceivers') as HTMLInputElement | null;
 const layerPanels = document.querySelector('#layerPanels') as HTMLInputElement | null;
@@ -162,10 +172,23 @@ let results: SceneResults = { receivers: [], panels: [] };
 let receiverEnergyTotals = new Map<string, number>();
 let panelEnergyTotals = new Map<string, Float64Array>();
 let dragContribution: DragContribution | null = null;
+let engineConfig: EngineConfig = getDefaultEngineConfig('festival_fast');
+let aboutOpen = false;
 
 let sourceSeq = 3;
 let receiverSeq = 3;
 let panelSeq = 2;
+
+function getPropagationConfig(): PropagationConfig {
+  if (engineConfig.propagation) return engineConfig.propagation;
+  const fallback = getDefaultEngineConfig('festival_fast');
+  engineConfig = { ...engineConfig, propagation: fallback.propagation };
+  return engineConfig.propagation!;
+}
+
+function updatePropagationConfig(next: Partial<PropagationConfig>) {
+  engineConfig = { ...engineConfig, propagation: { ...getPropagationConfig(), ...next } };
+}
 
 function niceDistance(value: number): number {
   const options = [5, 10, 20, 50, 100, 200, 500, 1000];
@@ -517,7 +540,7 @@ function updatePanelResult(panelResult: PanelResult) {
 async function computeReceivers(engineScene: ReturnType<typeof buildEngineScene>, preference: ComputePreference) {
   try {
     const response = (await engineCompute(
-      { kind: 'receivers', scene: engineScene, payload: {} },
+      { kind: 'receivers', scene: engineScene, payload: {}, engineConfig },
       preference,
       'receivers'
     )) as ComputeReceiversResponse;
@@ -552,6 +575,7 @@ async function computePanel(
       {
         kind: 'panel',
         scene: engineScene,
+        engineConfig,
         payload: buildPanelPayload(panel),
       },
       preference,
@@ -632,7 +656,7 @@ async function primeReceiverContribution(
 ) {
   try {
     const response = (await engineCompute(
-      { kind: 'receivers', scene: engineScene, payload: {} },
+      { kind: 'receivers', scene: engineScene, payload: {}, engineConfig },
       preference,
       `drag:${sourceId}:receivers`
     )) as ComputeReceiversResponse;
@@ -657,7 +681,7 @@ async function primePanelContribution(
 ) {
   try {
     const response = (await engineCompute(
-      { kind: 'panel', scene: engineScene, payload: buildPanelPayload(panel) },
+      { kind: 'panel', scene: engineScene, payload: buildPanelPayload(panel), engineConfig },
       preference,
       `drag:${sourceId}:panel:${panel.id}`
     )) as ComputePanelResponse;
@@ -724,7 +748,7 @@ async function computeReceiversIncremental(
   if (!receiverBaselineReady(sourceId)) return;
   try {
     const response = (await engineCompute(
-      { kind: 'receivers', scene: engineScene, payload: {} },
+      { kind: 'receivers', scene: engineScene, payload: {}, engineConfig },
       preference,
       `drag:${sourceId}:receivers`
     )) as ComputeReceiversResponse;
@@ -753,7 +777,7 @@ async function computePanelIncremental(
   if (!dragContribution.panelEnergy.has(panel.id)) return;
   try {
     const response = (await engineCompute(
-      { kind: 'panel', scene: engineScene, payload: buildPanelPayload(panel) },
+      { kind: 'panel', scene: engineScene, payload: buildPanelPayload(panel), engineConfig },
       preference,
       `drag:${sourceId}:panel:${panel.id}`
     )) as ComputePanelResponse;
@@ -1499,6 +1523,11 @@ function wirePointer() {
 
 function wireKeyboard() {
   window.addEventListener('keydown', (event) => {
+    if (aboutOpen && event.key === 'Escape') {
+      closeAbout();
+      return;
+    }
+
     const activeEl = document.activeElement as HTMLElement | null;
     const target = event.target as HTMLElement | null;
     const isEditableTarget = (el: HTMLElement | null) => {
@@ -1530,6 +1559,85 @@ function wireExport() {
   exportCsv.addEventListener('click', () => downloadCsv());
 }
 
+function openAbout() {
+  if (!aboutModal) return;
+  aboutOpen = true;
+  aboutModal.classList.add('is-open');
+  aboutModal.setAttribute('aria-hidden', 'false');
+  aboutClose?.focus();
+}
+
+function closeAbout() {
+  if (!aboutModal) return;
+  aboutOpen = false;
+  aboutModal.classList.remove('is-open');
+  aboutModal.setAttribute('aria-hidden', 'true');
+}
+
+function wireAbout() {
+  if (!aboutModal) return;
+  aboutButton?.addEventListener('click', () => openAbout());
+  aboutClose?.addEventListener('click', () => closeAbout());
+  aboutModal.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('[data-modal-close]')) {
+      closeAbout();
+    }
+  });
+}
+
+function updatePropagationControls() {
+  const current = getPropagationConfig();
+  if (propagationSpreading) propagationSpreading.value = current.spreading;
+  if (propagationAbsorption) propagationAbsorption.value = current.atmosphericAbsorption;
+  if (propagationGroundReflection) propagationGroundReflection.checked = current.groundReflection;
+  if (propagationGroundType) {
+    propagationGroundType.value = current.groundType;
+    propagationGroundType.disabled = !current.groundReflection;
+  }
+  if (propagationMaxDistance) propagationMaxDistance.value = current.maxDistance.toString();
+}
+
+function wirePropagationControls() {
+  if (!propagationSpreading && !propagationAbsorption && !propagationGroundReflection && !propagationGroundType && !propagationMaxDistance) {
+    return;
+  }
+
+  updatePropagationControls();
+
+  propagationSpreading?.addEventListener('change', () => {
+    updatePropagationConfig({ spreading: propagationSpreading.value as PropagationConfig['spreading'] });
+    computeScene();
+  });
+
+  propagationAbsorption?.addEventListener('change', () => {
+    updatePropagationConfig({ atmosphericAbsorption: propagationAbsorption.value as PropagationConfig['atmosphericAbsorption'] });
+    computeScene();
+  });
+
+  propagationGroundReflection?.addEventListener('change', () => {
+    updatePropagationConfig({ groundReflection: propagationGroundReflection.checked });
+    updatePropagationControls();
+    computeScene();
+  });
+
+  propagationGroundType?.addEventListener('change', () => {
+    updatePropagationConfig({ groundType: propagationGroundType.value as PropagationConfig['groundType'] });
+    computeScene();
+  });
+
+  propagationMaxDistance?.addEventListener('change', () => {
+    const next = Number(propagationMaxDistance.value);
+    if (!Number.isFinite(next) || next <= 0) {
+      updatePropagationControls();
+      return;
+    }
+    updatePropagationConfig({ maxDistance: Math.max(1, Math.round(next)) });
+    updatePropagationControls();
+    computeScene();
+  });
+}
+
 function init() {
   updateCounts();
   wireLayerToggle(layerSources, 'sources');
@@ -1541,6 +1649,8 @@ function init() {
   wirePointer();
   wireKeyboard();
   wireExport();
+  wireAbout();
+  wirePropagationControls();
 
   resizeCanvas();
   computeScene();

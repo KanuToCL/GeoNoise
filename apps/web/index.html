@@ -42,6 +42,7 @@
         <div class="actions">
           <button class="ghost" type="button">Load</button>
           <button class="ghost" type="button">Save</button>
+          <button class="ghost" id="aboutButton" type="button">About</button>
           <button class="primary" type="button">Compute</button>
         </div>
       </header>
@@ -59,6 +60,44 @@
               <button class="tool-button" data-tool="delete" type="button">Delete</button>
             </div>
             <div class="tool-note">Click or drag on the canvas in local meters.</div>
+          </section>
+
+          <section class="panel">
+            <h2>Propagation</h2>
+            <div class="properties">
+              <div class="property-row property-row-stack">
+                <span>Spreading</span>
+                <select id="propagationSpreading">
+                  <option value="spherical">Spherical</option>
+                  <option value="cylindrical">Cylindrical</option>
+                </select>
+              </div>
+              <div class="property-row property-row-stack">
+                <span>Atmospheric</span>
+                <select id="propagationAbsorption">
+                  <option value="none">None</option>
+                  <option value="simple">Simple</option>
+                  <option value="iso9613">ISO 9613-1</option>
+                </select>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="propagationGroundReflection" />
+                <span>Ground reflection</span>
+              </label>
+              <div class="property-row property-row-stack">
+                <span>Ground type</span>
+                <select id="propagationGroundType">
+                  <option value="hard">Hard</option>
+                  <option value="mixed">Mixed</option>
+                  <option value="soft">Soft</option>
+                </select>
+              </div>
+              <div class="property-row">
+                <span>Max distance (m)</span>
+                <input id="propagationMaxDistance" type="number" min="1" step="1" />
+              </div>
+            </div>
+            <div class="tool-note">Ground + absorption affect results today. Barriers + multi-reflections are still TODO.</div>
           </section>
 
           <section class="panel">
@@ -177,6 +216,47 @@
             <p class="note">Drag nodes and measure grids to trigger recompute once wired.</p>
           </section>
         </aside>
+      </div>
+    </div>
+
+    <div class="modal" id="aboutModal" aria-hidden="true">
+      <div class="modal-backdrop" data-modal-close></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+        <div class="modal-header">
+          <h2 id="aboutTitle">About the Engine</h2>
+          <button class="ghost" id="aboutClose" type="button">Close</button>
+        </div>
+        <p class="note">
+          This phase uses a simplified outdoor propagation model intended for fast iteration, not compliance.
+        </p>
+        <div class="about-grid">
+          <div class="about-block">
+            <h3>Physics</h3>
+            <ul>
+              <li>Geometric spreading: Adiv = 20 log10(r) + 11 (spherical) or 10 log10(r) + 8 (cylindrical).</li>
+              <li>Atmospheric absorption: Aatm = alpha(f,T,RH,P) * distance, using Simple or ISO 9613-1.</li>
+              <li>Broadband uses a representative frequency of 1000 Hz (no per-band propagation yet).</li>
+              <li>Ground effect: simplified ISO 9613-2 correction when enabled; the Hard surface factor returns 0 (reflective), so enabling ground reflection with Hard equals the free-field case.</li>
+              <li>Barrier loss: Maekawa formula is implemented but not wired without barrier geometry.</li>
+            </ul>
+          </div>
+          <div class="about-block">
+            <h3>Assumptions</h3>
+            <ul>
+              <li>Free-field, no buildings or terrain occlusion.</li>
+              <li>No scattering, diffraction, or multi-reflections.</li>
+              <li>Default mode is fast, not standards-accurate.</li>
+            </ul>
+          </div>
+          <div class="about-block">
+            <h3>Method</h3>
+            <ul>
+              <li>For each source-target: L = Lw - (Adiv + Aatm + Agr + Abar).</li>
+              <li>Source summation is energetic: 10 log10(sum 10^(Li/10)).</li>
+              <li>Measure grid stats use min/max/avg/L50/L95 of sample points.</li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
 
