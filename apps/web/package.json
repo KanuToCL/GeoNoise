@@ -1,0 +1,14 @@
+{
+  "name": "@geonoise/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "build:ts": "tsc -b",
+    "dev": "node ./scripts/dev.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts"
+  }
+}

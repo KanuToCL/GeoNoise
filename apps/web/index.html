@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GeoNoise</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark"></span>
+          <div>
+            <div class="brand-title">GeoNoise</div>
+            <div class="brand-sub">Phase 1 Console</div>
+          </div>
+        </div>
+        <div class="status" id="computeStatus">Using CPU</div>
+        <div class="preference">
+          <label for="computePreference">Compute</label>
+          <select id="computePreference">
+            <option value="auto">Auto</option>
+            <option value="cpu">CPU</option>
+            <option value="gpu">GPU</option>
+          </select>
+        </div>
+        <div class="actions">
+          <button class="ghost" type="button">Load</button>
+          <button class="ghost" type="button">Save</button>
+          <button class="primary" type="button">Compute</button>
+        </div>
+      </header>
+
+      <div class="content">
+        <aside class="sidebar">
+          <section class="panel">
+            <h2>Layers</h2>
+            <label class="toggle">
+              <input type="checkbox" id="layerSources" checked />
+              <span>Sources</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="layerReceivers" checked />
+              <span>Receivers</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="layerPanels" checked />
+              <span>Panels</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="layerGrid" />
+              <span>Grid Overlay</span>
+            </label>
+          </section>
+
+          <section class="panel">
+            <h2>Ruler</h2>
+            <div class="ruler-card">
+              <div class="ruler-label" id="rulerLabel">50 m</div>
+              <div class="ruler-line" id="rulerLine"></div>
+            </div>
+            <div class="ruler-note">Uses local meters ENU.</div>
+          </section>
+
+          <section class="panel">
+            <h2>Scene</h2>
+            <div class="scene-meta">
+              <div>Sources: <span id="countSources">2</span></div>
+              <div>Receivers: <span id="countReceivers">2</span></div>
+              <div>Panels: <span id="countPanels">1</span></div>
+            </div>
+          </section>
+        </aside>
+
+        <main class="canvas-shell">
+          <div class="canvas-frame">
+            <canvas id="mapCanvas"></canvas>
+            <div class="canvas-hud">
+              <div class="hud-card">
+                <div class="hud-title">Pointer</div>
+                <div class="hud-value" id="coordLabel">x: 0.0 m, y: 0.0 m</div>
+              </div>
+              <div class="hud-card">
+                <div class="hud-title">Active Layer</div>
+                <div class="hud-value" id="layerLabel">Sources</div>
+              </div>
+            </div>
+            <div class="scale-bar">
+              <div class="scale-line" id="scaleLine"></div>
+              <div class="scale-text" id="scaleText">100 m</div>
+            </div>
+          </div>
+          <div class="canvas-footer">
+            <div class="footer-pill">Canvas: Local meters</div>
+            <div class="footer-pill" id="statusPill">Ready</div>
+          </div>
+        </main>
+
+        <aside class="inspector">
+          <section class="panel">
+            <h2>Inspector</h2>
+            <div class="inspector-body">
+              <div class="inspector-row">
+                <span>Selection</span>
+                <strong>None</strong>
+              </div>
+              <div class="inspector-row">
+                <span>Mode</span>
+                <strong>Drag</strong>
+              </div>
+              <div class="inspector-row">
+                <span>Snap</span>
+                <strong>5 m</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Notes</h2>
+            <p class="note">Drag nodes and panels to trigger recompute once wired.</p>
+          </section>
+        </aside>
+      </div>
+    </div>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
