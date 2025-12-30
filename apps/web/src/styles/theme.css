@@ -5,6 +5,7 @@
   --focus-ring: 0 0 0 3px rgba(122, 166, 161, 0.35);
   --font: "Work Sans", "IBM Plex Sans", "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --ui-letter-spacing: 0.14em;
   --brand-bg: #e0e5ec;
   --brand-shadow-light: rgba(255, 255, 255, 0.7);
   --brand-shadow-dark: rgba(163, 177, 198, 0.6);

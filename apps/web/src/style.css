@@ -31,6 +31,9 @@ body {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-raised);
   color: var(--text);
+  font-weight: 500;
+  letter-spacing: var(--ui-letter-spacing);
+  text-transform: lowercase;
   transition: transform 120ms ease, box-shadow 120ms ease;
 }
 
@@ -197,8 +200,8 @@ body {
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
 }
 
 .scene-dot {
@@ -245,8 +248,8 @@ body {
   gap: 8px;
   font-size: 11px;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 1.4px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
   font-weight: 600;
 }
 
@@ -392,8 +395,8 @@ body {
 
 .theme-label {
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
 }
 
 .theme-segmented {
@@ -422,8 +425,8 @@ body {
 
 .theme-option .tag {
   font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
   padding: 2px 6px;
   border-radius: var(--radius-sm);
   background: var(--accent-soft);
@@ -486,8 +489,8 @@ body {
 
 .overflow-title {
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
   color: var(--text-muted);
 }
 
@@ -512,8 +515,8 @@ button.primary {
   background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
   color: var(--text);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
   font-size: 12px;
   box-shadow: var(--shadow-raised);
 }
@@ -576,8 +579,8 @@ button.primary.is-cancel {
 
 .panel h2 {
   font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: 1.4px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
   color: var(--text-soft);
   font-weight: 600;
 }
@@ -624,8 +627,8 @@ button.primary.is-cancel {
 
 .tool-group-title {
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
   color: var(--text-soft);
   font-weight: 600;
 }
@@ -644,7 +647,7 @@ button.primary.is-cancel {
   box-shadow: var(--shadow-raised);
   font-size: 12px;
   text-transform: lowercase;
-  letter-spacing: 0.14em;
+  letter-spacing: var(--ui-letter-spacing);
   width: 100%;
   position: relative;
 }
@@ -833,8 +836,8 @@ button.primary.is-cancel {
 
 .hud-title {
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
   color: var(--text-soft);
   font-weight: 600;
 }
@@ -1008,6 +1011,8 @@ button.primary.is-cancel {
   text-align: left;
   padding: 0;
   font-size: 12px;
+  letter-spacing: var(--ui-letter-spacing);
+  text-transform: lowercase;
 }
 
 .property-row {
@@ -1189,8 +1194,8 @@ textarea:focus-visible,
 
 .results-title {
   font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
   color: var(--text-muted);
 }
 
@@ -1461,8 +1466,8 @@ textarea:focus-visible,
 
 .modal-subtitle {
   font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 1.4px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
   color: var(--text-muted);
 }
 
@@ -1473,8 +1478,8 @@ textarea:focus-visible,
   padding: 0;
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
+  letter-spacing: var(--ui-letter-spacing);
+  text-transform: lowercase;
   background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
   box-shadow: var(--shadow-raised);
   color: #7a8288;
@@ -1498,8 +1503,8 @@ textarea:focus-visible,
 
 .spec-heading {
   font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
   color: #6b727a;
   text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.7), -1px -1px 1px rgba(0, 0, 0, 0.2);
 }
@@ -1522,8 +1527,8 @@ textarea:focus-visible,
 
 .spec-subhead {
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
   color: #6b727a;
   margin-top: 6px;
 }
