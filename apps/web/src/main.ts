@@ -70,6 +70,153 @@ type Barrier = {
   transmissionLoss?: number;
 };
 
+type BuildingData = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  z_height: number;
+  color: string;
+};
+
+const DEFAULT_BUILDING_COLOR = '#9aa3ad';
+const BUILDING_MIN_SIZE = 2;
+const BUILDING_HANDLE_RADIUS = 4;
+const BUILDING_HANDLE_HIT_RADIUS = 10;
+const BUILDING_ROTATION_HANDLE_OFFSET_PX = 20;
+const BUILDING_ROTATION_HANDLE_RADIUS = 5;
+
+class Building {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  z_height: number;
+  color: string;
+  selected: boolean;
+
+  constructor(data: Partial<BuildingData> & { id: string }) {
+    this.id = data.id;
+    this.x = data.x ?? 0;
+    this.y = data.y ?? 0;
+    this.width = data.width ?? 10;
+    this.height = data.height ?? 10;
+    this.rotation = data.rotation ?? 0;
+    this.z_height = data.z_height ?? 10;
+    this.color = data.color ?? DEFAULT_BUILDING_COLOR;
+    this.selected = false;
+  }
+
+  toData(): BuildingData {
+    return {
+      id: this.id,
+      x: this.x,
+      y: this.y,
+      width: this.width,
+      height: this.height,
+      rotation: this.rotation,
+      z_height: this.z_height,
+      color: this.color,
+    };
+  }
+
+  getVertices(): Point[] {
+    const halfWidth = this.width / 2;
+    const halfHeight = this.height / 2;
+    const corners = [
+      { x: -halfWidth, y: halfHeight },
+      { x: halfWidth, y: halfHeight },
+      { x: halfWidth, y: -halfHeight },
+      { x: -halfWidth, y: -halfHeight },
+    ];
+    const cos = Math.cos(this.rotation);
+    const sin = Math.sin(this.rotation);
+    return corners.map((corner) => ({
+      x: this.x + corner.x * cos - corner.y * sin,
+      y: this.y + corner.x * sin + corner.y * cos,
+    }));
+  }
+
+  getRotationHandlePosition(handleOffset: number) {
+    const localX = 0;
+    const localY = this.height / 2 + handleOffset;
+    const cos = Math.cos(this.rotation);
+    const sin = Math.sin(this.rotation);
+    return {
+      x: this.x + localX * cos - localY * sin,
+      y: this.y + localX * sin + localY * cos,
+    };
+  }
+
+  renderControls(
+    ctx: CanvasRenderingContext2D,
+    toCanvas: (point: Point) => Point,
+    options: {
+      stroke: string;
+      lineWidth: number;
+      dash: number[];
+      handleFill: string;
+      handleStroke: string;
+      handleRadius: number;
+      rotationHandleOffset: number;
+      rotationHandleRadius: number;
+      rotationHandleStroke: string;
+    }
+  ) {
+    if (!this.selected) return;
+    const vertices = this.getVertices();
+    const first = toCanvas(vertices[0]);
+    ctx.save();
+    ctx.strokeStyle = options.stroke;
+    ctx.lineWidth = options.lineWidth;
+    ctx.setLineDash(options.dash);
+    ctx.beginPath();
+    ctx.moveTo(first.x, first.y);
+    for (const corner of vertices.slice(1)) {
+      const point = toCanvas(corner);
+      ctx.lineTo(point.x, point.y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = options.handleFill;
+    ctx.strokeStyle = options.handleStroke;
+    ctx.lineWidth = 1.5;
+    for (const corner of vertices) {
+      const point = toCanvas(corner);
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, options.handleRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    const handleOffset = options.rotationHandleOffset;
+    const handleWorld = this.getRotationHandlePosition(handleOffset);
+    const topCenterWorld = this.getRotationHandlePosition(0);
+    const handleCanvas = toCanvas(handleWorld);
+    const topCenterCanvas = toCanvas(topCenterWorld);
+    ctx.strokeStyle = options.rotationHandleStroke;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(topCenterCanvas.x, topCenterCanvas.y);
+    ctx.lineTo(handleCanvas.x, handleCanvas.y);
+    ctx.stroke();
+
+    ctx.fillStyle = options.handleFill;
+    ctx.strokeStyle = options.handleStroke;
+    ctx.beginPath();
+    ctx.arc(handleCanvas.x, handleCanvas.y, options.rotationHandleRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 // Whole-scene noise map ("Mesh All") visualization:
 // - A grid is computed in the engine (as a temporary receiver lattice).
 // - Values are mapped to a color ramp and drawn as a scaled texture in world coordinates.
@@ -84,19 +231,20 @@ type NoiseMap = {
   texture: HTMLCanvasElement;
 };
 
-type Tool = 'select' | 'add-source' | 'add-receiver' | 'add-panel' | 'add-barrier' | 'measure' | 'delete';
+type Tool = 'select' | 'add-source' | 'add-receiver' | 'add-panel' | 'add-barrier' | 'add-building' | 'measure' | 'delete';
 
 type Selection =
   | { type: 'none' }
   | { type: 'source'; id: string }
   | { type: 'receiver'; id: string }
   | { type: 'panel'; id: string }
-  | { type: 'barrier'; id: string };
+  | { type: 'barrier'; id: string }
+  | { type: 'building'; id: string };
 
 type DragState =
   | null
   | {
-      type: 'source' | 'receiver' | 'panel' | 'barrier';
+      type: 'source' | 'receiver' | 'panel' | 'barrier' | 'building';
       id: string;
       offset: Point;
     }
@@ -105,6 +253,16 @@ type DragState =
       id: string;
       index: number;
       offset: Point;
+    }
+  | {
+      type: 'building-resize';
+      id: string;
+    }
+  | {
+      type: 'building-rotate';
+      id: string;
+      startAngle: number;
+      startRotation: number;
     };
 
 type DragContribution = {
@@ -258,6 +416,9 @@ const scene = {
       sampling: { resolution: 10, pointCap: 300 },
     },
   ] as Panel[],
+  buildings: [
+    new Building({ id: 'bd1', x: 0, y: 0, width: 18, height: 12, rotation: 0.2, z_height: 12 }),
+  ] as Building[],
   barriers: [] as Barrier[],
 };
 
@@ -320,10 +481,12 @@ type SceneSnapshot = {
   sources: Source[];
   receivers: Receiver[];
   panels: Panel[];
+  buildings: BuildingData[];
   barriers: Barrier[];
   sourceSeq: number;
   receiverSeq: number;
   panelSeq: number;
+  buildingSeq: number;
   barrierSeq: number;
   selection: Selection;
   soloSourceId: string | null;
@@ -337,6 +500,7 @@ let historyIndex = -1;
 let sourceSeq = 3;
 let receiverSeq = 3;
 let panelSeq = 2;
+let buildingSeq = 2;
 let barrierSeq = 1;
 
 function getPropagationConfig(): PropagationConfig {
@@ -480,6 +644,7 @@ function snapshotScene(): SceneSnapshot {
       points: panel.points.map((pt) => ({ ...pt })),
       sampling: { ...panel.sampling },
     })),
+    buildings: scene.buildings.map((building) => building.toData()),
     barriers: scene.barriers.map((barrier) => ({
       ...barrier,
       p1: { ...barrier.p1 },
@@ -488,6 +653,7 @@ function snapshotScene(): SceneSnapshot {
     sourceSeq,
     receiverSeq,
     panelSeq,
+    buildingSeq,
     barrierSeq,
     selection: { ...selection } as Selection,
     soloSourceId,
@@ -516,6 +682,7 @@ function applySnapshot(snap: SceneSnapshot) {
     points: panel.points.map((pt) => ({ ...pt })),
     sampling: { ...panel.sampling },
   }));
+  scene.buildings = snap.buildings.map((building) => new Building(building));
   scene.barriers = snap.barriers.map((barrier) => ({
     ...barrier,
     p1: { ...barrier.p1 },
@@ -524,6 +691,7 @@ function applySnapshot(snap: SceneSnapshot) {
   sourceSeq = snap.sourceSeq;
   receiverSeq = snap.receiverSeq;
   panelSeq = snap.panelSeq;
+  buildingSeq = snap.buildingSeq;
   barrierSeq = snap.barrierSeq;
   selection = snap.selection;
   soloSourceId = snap.soloSourceId;
@@ -844,6 +1012,7 @@ function selectionTypeLabel(type: Selection['type']) {
   if (type === 'source') return 'Source';
   if (type === 'receiver') return 'Receiver';
   if (type === 'barrier') return 'Barrier';
+  if (type === 'building') return 'Building';
   return 'None';
 }
 
@@ -853,6 +1022,8 @@ function toolLabel(tool: Tool) {
       return 'Add Measure Grid';
     case 'add-barrier':
       return 'Add Barrier';
+    case 'add-building':
+      return 'Add Building';
     case 'add-source':
       return 'Add Source';
     case 'add-receiver':
@@ -876,6 +1047,8 @@ function toolInstructionFor(tool: Tool) {
       return 'Click to set the start, then drag or click to place the end.';
     case 'add-panel':
       return 'Click to place a measure grid.';
+    case 'add-building':
+      return 'Click to place a building. Drag corners to resize and the lollipop to rotate.';
     case 'measure':
       return 'Click two points to measure distance.';
     case 'delete':
@@ -935,18 +1108,19 @@ function buildEngineScene() {
     enabled: true,
   }));
 
-  // Map UI barriers to engine obstacles for propagation.
+  // Map UI barriers + buildings to engine obstacles for propagation.
   //
-  // The engine stores barriers as ObstacleSchema(type='barrier') with a list of vertices.
-  // For now, the UI only supports a single straight segment, so we write exactly two vertices.
+  // The engine stores:
+  // - barriers as ObstacleSchema(type='barrier') with a list of vertices (polyline).
+  // - buildings as ObstacleSchema(type='building') with a polygon footprint.
   //
   // The CPU engine then:
-  // 1) checks if each source->receiver segment intersects this barrier segment in 2D, and if so
-  // 2) computes a 3D top-edge path difference delta using barrier.height (hb) and source/receiver z (hs/hr).
+  // 1) checks if each source->receiver segment intersects obstacle edges in 2D, and if so
+  // 2) computes a 3D top-edge path difference delta using obstacle.height (hb) and source/receiver z (hs/hr).
   // That delta is turned into insertion loss (Abar) by the propagation model and replaces ground effect when blocked.
-  engineScene.obstacles = scene.barriers.map((barrier) => ({
+  const barrierObstacles = scene.barriers.map((barrier) => ({
     id: barrier.id,
-    type: 'barrier',
+    type: 'barrier' as const,
     name: `Barrier ${barrier.id.toUpperCase()}`,
     vertices: [
       { x: barrier.p1.x, y: barrier.p1.y },
@@ -958,6 +1132,19 @@ function buildEngineScene() {
     enabled: true,
   }));
 
+  const buildingObstacles = scene.buildings.map((building) => ({
+    id: building.id,
+    type: 'building' as const,
+    name: `Building ${building.id.toUpperCase()}`,
+    footprint: building.getVertices().map((pt) => ({ x: pt.x, y: pt.y })),
+    height: building.z_height,
+    groundElevation: 0,
+    attenuationDb: 25,
+    enabled: true,
+  }));
+
+  engineScene.obstacles = [...barrierObstacles, ...buildingObstacles];
+
   return engineScene;
 }
 
@@ -965,7 +1152,7 @@ function getSceneBounds() {
   // Scene bounds for "Generate Map" are based on *active* geometry primitives.
   // Notes:
   // - sources are filtered through solo/mute so the map reflects what will be computed.
-  // - barriers contribute their endpoints; buildings/footprints are not yet exposed in the UI.
+  // - barriers contribute their endpoints; buildings contribute footprint vertices.
   const points: Point[] = [];
   for (const source of scene.sources) {
     if (!isSourceEnabled(source)) continue;
@@ -977,6 +1164,11 @@ function getSceneBounds() {
   for (const barrier of scene.barriers) {
     points.push({ x: barrier.p1.x, y: barrier.p1.y });
     points.push({ x: barrier.p2.x, y: barrier.p2.y });
+  }
+  for (const building of scene.buildings) {
+    for (const vertex of building.getVertices()) {
+      points.push({ x: vertex.x, y: vertex.y });
+    }
   }
 
   if (!points.length) return null;
@@ -1720,6 +1912,11 @@ function duplicateBarrier(barrier: Barrier): Barrier {
   };
 }
 
+function duplicateBuilding(building: Building): Building {
+  const newId = createId('bd', buildingSeq++);
+  return new Building({ ...building.toData(), id: newId });
+}
+
 function setActiveTool(tool: Tool) {
   activeTool = tool;
   if (tool !== 'add-barrier') {
@@ -1748,6 +1945,9 @@ function setActiveTool(tool: Tool) {
 
 function setSelection(next: Selection) {
   selection = next;
+  for (const building of scene.buildings) {
+    building.selected = selection.type === 'building' && selection.id === building.id;
+  }
   const current = selection;
   if (selectionLabel) {
     selectionLabel.textContent = current.type === 'none'
@@ -1806,6 +2006,14 @@ function renderProperties() {
       tip.className = 'text-button';
       tip.textContent = `Click ${scene.barriers[0].id.toUpperCase()} to edit height.`;
       tip.addEventListener('click', () => setSelection({ type: 'barrier', id: scene.barriers[0].id }));
+      empty.appendChild(tip);
+    }
+    if (scene.buildings.length) {
+      const tip = document.createElement('button');
+      tip.type = 'button';
+      tip.className = 'text-button';
+      tip.textContent = `Click ${scene.buildings[0].id.toUpperCase()} to edit size.`;
+      tip.addEventListener('click', () => setSelection({ type: 'building', id: scene.buildings[0].id }));
       empty.appendChild(tip);
     }
 
@@ -1873,6 +2081,35 @@ function renderProperties() {
       pushHistory();
       computeScene();
     }));
+  }
+
+  if (current.type === 'building') {
+    const building = scene.buildings.find((item) => item.id === current.id);
+    if (!building) return;
+    propertiesBody.appendChild(createInputRow('Width (m)', building.width, (value) => {
+      building.width = Math.max(BUILDING_MIN_SIZE, value);
+      pushHistory();
+      computeScene();
+    }));
+    propertiesBody.appendChild(createInputRow('Depth (m)', building.height, (value) => {
+      building.height = Math.max(BUILDING_MIN_SIZE, value);
+      pushHistory();
+      computeScene();
+    }));
+    propertiesBody.appendChild(createInputRow('Height (m)', building.z_height, (value) => {
+      building.z_height = Math.max(0.1, value);
+      pushHistory();
+      computeScene();
+    }));
+    propertiesBody.appendChild(createInputRow('Rotation (deg)', (building.rotation * 180) / Math.PI, (value) => {
+      building.rotation = (value * Math.PI) / 180;
+      pushHistory();
+      computeScene();
+    }));
+    const hint = document.createElement('div');
+    hint.className = 'property-hint';
+    hint.textContent = 'Drag corner handles to resize. Drag the lollipop to rotate.';
+    propertiesBody.appendChild(hint);
   }
 }
 
@@ -2075,6 +2312,27 @@ function hitTestPanelHandle(point: Point) {
   return null;
 }
 
+function hitTestBuildingHandle(point: Point) {
+  const current = selection;
+  if (current.type !== 'building') return null;
+  const building = scene.buildings.find((item) => item.id === current.id);
+  if (!building) return null;
+  const vertices = building.getVertices();
+  for (let i = 0; i < vertices.length; i += 1) {
+    const screen = worldToCanvas(vertices[i]);
+    if (distance(screen, point) <= BUILDING_HANDLE_HIT_RADIUS) {
+      return { type: 'corner' as const, index: i };
+    }
+  }
+  const handleOffset = BUILDING_ROTATION_HANDLE_OFFSET_PX / pixelsPerMeter;
+  const handleWorld = building.getRotationHandlePosition(handleOffset);
+  const handleCanvas = worldToCanvas(handleWorld);
+  if (distance(handleCanvas, point) <= BUILDING_HANDLE_HIT_RADIUS) {
+    return { type: 'rotate' as const };
+  }
+  return null;
+}
+
 function hitTest(point: Point) {
   const threshold = 12;
   const hitSource = scene.sources.find((source) => {
@@ -2098,6 +2356,9 @@ function hitTest(point: Point) {
   if (hitBarrier) return { type: 'barrier' as const, id: hitBarrier.id };
 
   const world = canvasToWorld(point);
+  const hitBuilding = scene.buildings.find((building) => pointInPolygon(world, building.getVertices()));
+  if (hitBuilding) return { type: 'building' as const, id: hitBuilding.id };
+
   const hitPanel = scene.panels.find((panel) => pointInPolygon(world, panel.points));
   if (hitPanel) return { type: 'panel' as const, id: hitPanel.id };
 
@@ -2116,6 +2377,9 @@ function deleteSelection(target: Selection) {
   }
   if (target.type === 'barrier') {
     scene.barriers = scene.barriers.filter((item) => item.id !== target.id);
+  }
+  if (target.type === 'building') {
+    scene.buildings = scene.buildings.filter((item) => item.id !== target.id);
   }
   setSelection({ type: 'none' });
   updateCounts();
@@ -2164,6 +2428,23 @@ function addPanelAt(point: Point) {
   };
   scene.panels.push(panel);
   setSelection({ type: 'panel', id: panel.id });
+  updateCounts();
+  pushHistory();
+  computeScene();
+}
+
+function addBuildingAt(point: Point) {
+  const building = new Building({
+    id: createId('bd', buildingSeq++),
+    x: point.x,
+    y: point.y,
+    width: 12,
+    height: 10,
+    rotation: 0,
+    z_height: 10,
+  });
+  scene.buildings.push(building);
+  setSelection({ type: 'building', id: building.id });
   updateCounts();
   pushHistory();
   computeScene();
@@ -2319,6 +2600,39 @@ function drawPanels() {
         ctx.stroke();
       }
     }
+  }
+}
+
+function drawBuildings() {
+  ctx.lineWidth = 2;
+  for (const building of scene.buildings) {
+    const vertices = building.getVertices();
+    if (vertices.length < 3) continue;
+    const first = worldToCanvas(vertices[0]);
+    ctx.beginPath();
+    ctx.moveTo(first.x, first.y);
+    for (const vertex of vertices.slice(1)) {
+      const point = worldToCanvas(vertex);
+      ctx.lineTo(point.x, point.y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = building.color;
+    ctx.strokeStyle = canvasTheme.panelStroke;
+    ctx.fill();
+    ctx.stroke();
+
+    const handleOffset = BUILDING_ROTATION_HANDLE_OFFSET_PX / pixelsPerMeter;
+    building.renderControls(ctx, worldToCanvas, {
+      stroke: canvasTheme.panelSelected,
+      lineWidth: 2,
+      dash: [6, 6],
+      handleFill: '#ffffff',
+      handleStroke: canvasTheme.panelStroke,
+      handleRadius: BUILDING_HANDLE_RADIUS,
+      rotationHandleOffset: handleOffset,
+      rotationHandleRadius: BUILDING_ROTATION_HANDLE_RADIUS,
+      rotationHandleStroke: canvasTheme.panelStroke,
+    });
   }
 }
 
@@ -2500,6 +2814,7 @@ function drawScene() {
     }
   }
 
+  drawBuildings();
   drawBarriers();
 
   if (layers.sources) {
@@ -2569,10 +2884,12 @@ function handlePointerMove(event: MouseEvent) {
 
   if (dragState) {
     const activeDrag = dragState;
-    const targetPoint = {
-      x: worldPoint.x - activeDrag.offset.x,
-      y: worldPoint.y - activeDrag.offset.y,
-    };
+    const targetPoint = 'offset' in activeDrag
+      ? {
+          x: worldPoint.x - activeDrag.offset.x,
+          y: worldPoint.y - activeDrag.offset.y,
+        }
+      : worldPoint;
     if (activeDrag.type === 'source') {
       const source = scene.sources.find((item) => item.id === activeDrag.id);
       if (source) {
@@ -2602,6 +2919,33 @@ function handlePointerMove(event: MouseEvent) {
         const dy = targetPoint.y - barrier.p1.y;
         barrier.p1 = { x: barrier.p1.x + dx, y: barrier.p1.y + dy };
         barrier.p2 = { x: barrier.p2.x + dx, y: barrier.p2.y + dy };
+      }
+    }
+    if (activeDrag.type === 'building') {
+      const building = scene.buildings.find((item) => item.id === activeDrag.id);
+      if (building) {
+        building.x = targetPoint.x;
+        building.y = targetPoint.y;
+      }
+    }
+    if (activeDrag.type === 'building-resize') {
+      const building = scene.buildings.find((item) => item.id === activeDrag.id);
+      if (building) {
+        const dx = worldPoint.x - building.x;
+        const dy = worldPoint.y - building.y;
+        const cos = Math.cos(building.rotation);
+        const sin = Math.sin(building.rotation);
+        const localX = dx * cos + dy * sin;
+        const localY = -dx * sin + dy * cos;
+        building.width = Math.max(BUILDING_MIN_SIZE, Math.abs(localX) * 2);
+        building.height = Math.max(BUILDING_MIN_SIZE, Math.abs(localY) * 2);
+      }
+    }
+    if (activeDrag.type === 'building-rotate') {
+      const building = scene.buildings.find((item) => item.id === activeDrag.id);
+      if (building) {
+        const angle = Math.atan2(worldPoint.y - building.y, worldPoint.x - building.x);
+        building.rotation = activeDrag.startRotation + (angle - activeDrag.startAngle);
       }
     }
     if (activeDrag.type === 'panel-vertex') {
@@ -2665,6 +3009,11 @@ function handlePointerDown(event: MouseEvent) {
     return;
   }
 
+  if (activeTool === 'add-building') {
+    addBuildingAt(snappedPoint);
+    return;
+  }
+
   if (activeTool === 'measure') {
     if (!measureStart || measureLocked) {
       measureStart = worldPoint;
@@ -2679,6 +3028,28 @@ function handlePointerDown(event: MouseEvent) {
   }
 
   if (activeTool === 'select') {
+    const buildingHandle = hitTestBuildingHandle(canvasPoint);
+    if (buildingHandle) {
+      const current = selection;
+      if (current.type === 'building') {
+        const building = scene.buildings.find((item) => item.id === current.id);
+        if (building) {
+          dragDirty = false;
+          if (buildingHandle.type === 'rotate') {
+            const startAngle = Math.atan2(worldPoint.y - building.y, worldPoint.x - building.x);
+            dragState = {
+              type: 'building-rotate',
+              id: building.id,
+              startAngle,
+              startRotation: building.rotation,
+            };
+          } else {
+            dragState = { type: 'building-resize', id: building.id };
+          }
+          return;
+        }
+      }
+    }
     const handleHit = hitTestPanelHandle(canvasPoint);
     if (handleHit) {
       setSelection({ type: 'panel', id: handleHit.panelId });
@@ -2788,6 +3159,27 @@ function handlePointerDown(event: MouseEvent) {
           return;
         }
         dragState = { type: 'barrier', id: barrier.id, offset: { x: worldHit.x - barrier.p1.x, y: worldHit.y - barrier.p1.y } };
+      }
+    }
+    if (hit.type === 'building') {
+      const building = scene.buildings.find((item) => item.id === hit.id);
+      if (building) {
+        if (event.shiftKey) {
+          const duplicate = duplicateBuilding(building);
+          duplicate.x = building.x + 2;
+          duplicate.y = building.y - 2;
+          scene.buildings.push(duplicate);
+          updateCounts();
+          setSelection({ type: 'building', id: duplicate.id });
+          dragDirty = true;
+          dragState = {
+            type: 'building',
+            id: duplicate.id,
+            offset: { x: worldHit.x - duplicate.x, y: worldHit.y - duplicate.y },
+          };
+          return;
+        }
+        dragState = { type: 'building', id: building.id, offset: { x: worldHit.x - building.x, y: worldHit.y - building.y } };
       }
     }
   } else {
@@ -2920,6 +3312,9 @@ function wireKeyboard() {
     if (event.key === 'b' || event.key === 'B') {
       setActiveTool('add-barrier');
     }
+    if (event.key === 'h' || event.key === 'H') {
+      setActiveTool('add-building');
+    }
     if (event.key === 'g' || event.key === 'G') {
       setActiveTool('add-panel');
     }
@@ -2975,6 +3370,7 @@ function buildScenePayload() {
       points: panel.points.map((point) => ({ ...point })),
       sampling: { ...panel.sampling },
     })),
+    buildings: scene.buildings.map((building) => building.toData()),
     // UI save format extension (v1 payload still; this is not the core Scene schema yet):
     // - barriers are persisted so users can save/load screen geometry.
     // - older files without `barriers` remain loadable (see applyLoadedScene()).
@@ -3022,6 +3418,7 @@ function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
     points: panel.points.map((point) => ({ ...point })),
     sampling: { ...panel.sampling },
   }));
+  scene.buildings = (payload.buildings ?? []).map((building) => new Building(building));
   // Backwards-compatible load: scenes saved before barriers existed simply omit this field.
   scene.barriers = (payload.barriers ?? []).map((barrier) => ({
     ...barrier,
@@ -3031,6 +3428,7 @@ function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
   sourceSeq = nextSequence('s', scene.sources);
   receiverSeq = nextSequence('r', scene.receivers);
   panelSeq = nextSequence('p', scene.panels);
+  buildingSeq = nextSequence('bd', scene.buildings);
   barrierSeq = nextSequence('b', scene.barriers);
   collapsedSources.clear();
   soloSourceId = null;

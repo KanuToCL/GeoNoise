@@ -109,20 +109,32 @@ function segmentIntersection(p1: Point2D, p2: Point2D, q1: Point2D, q2: Point2D)
 
 // Build linear barrier segments from scene obstacles:
 // - Barriers are stored as polylines; each pair of consecutive vertices is a segment.
-// - Buildings are ignored here; only line barriers participate in this simple screen model.
+// - Buildings contribute their footprint edges so rotated rectangles participate in occlusion.
 function buildBarrierSegments(scene: Scene): BarrierSegment[] {
   const segments: BarrierSegment[] = [];
   for (const obstacle of scene.obstacles ?? []) {
-    if (obstacle.type !== 'barrier' || obstacle.enabled === false) continue;
-    if (!obstacle.vertices || obstacle.vertices.length < 2) continue;
+    if (obstacle.enabled === false) continue;
     // `height` here is the screen’s top Z (hb) in meters, in the same coordinate system as source/receiver z.
     // We intentionally ignore obstacle.groundElevation for now (flat ground assumption).
     const height = obstacle.height;
-    for (let i = 0; i < obstacle.vertices.length - 1; i += 1) {
-      const p1 = obstacle.vertices[i];
-      const p2 = obstacle.vertices[i + 1];
-      if (distance2D(p1, p2) < EPSILON) continue;
-      segments.push({ p1, p2, height });
+    if (obstacle.type === 'barrier') {
+      if (!obstacle.vertices || obstacle.vertices.length < 2) continue;
+      for (let i = 0; i < obstacle.vertices.length - 1; i += 1) {
+        const p1 = obstacle.vertices[i];
+        const p2 = obstacle.vertices[i + 1];
+        if (distance2D(p1, p2) < EPSILON) continue;
+        segments.push({ p1, p2, height });
+      }
+    }
+    if (obstacle.type === 'building') {
+      const footprint = obstacle.footprint ?? [];
+      if (footprint.length < 3) continue;
+      for (let i = 0; i < footprint.length; i += 1) {
+        const p1 = footprint[i];
+        const p2 = footprint[(i + 1) % footprint.length];
+        if (distance2D(p1, p2) < EPSILON) continue;
+        segments.push({ p1, p2, height });
+      }
     }
   }
   return segments;
