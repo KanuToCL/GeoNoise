@@ -632,8 +632,8 @@ button.primary.is-cancel {
 
 .tool-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: 1fr;
+  gap: 6px;
 }
 
 .tool-button {
@@ -643,8 +643,9 @@ button.primary.is-cancel {
   background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
   box-shadow: var(--shadow-raised);
   font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
+  text-transform: lowercase;
+  letter-spacing: 0.14em;
+  width: 100%;
   position: relative;
 }
 

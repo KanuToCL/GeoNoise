@@ -2258,7 +2258,7 @@ function drawMeasurement() {
   const label = `${formatMeters(dist)} m`;
   const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
   ctx.fillStyle = canvasTheme.measureText;
-  ctx.font = '12px "Space Grotesk", sans-serif';
+  ctx.font = '12px "Work Sans", sans-serif';
   ctx.fillText(label, mid.x + 6, mid.y - 6);
 }
 
@@ -2398,13 +2398,13 @@ function drawSources() {
     }
 
     ctx.fillStyle = isDimmed ? mutedText : labelText;
-    ctx.font = '12px "Space Grotesk", sans-serif';
+    ctx.font = '12px "Work Sans", sans-serif';
     ctx.fillText(source.id.toUpperCase(), p.x + 14, p.y - 6);
 
     const isHovered = hoverSelection?.type === 'source' && hoverSelection.id === source.id;
     if (isHovered && isMuted) {
       const label = 'Muted';
-      ctx.font = '11px "Space Grotesk", sans-serif';
+      ctx.font = '11px "Work Sans", sans-serif';
       const paddingX = 6;
       const boxWidth = ctx.measureText(label).width + paddingX * 2;
       const boxHeight = 18;
@@ -2451,7 +2451,7 @@ function drawReceivers() {
     }
 
     ctx.fillStyle = canvasTheme.receiverLabel;
-    ctx.font = '12px "Space Grotesk", sans-serif';
+    ctx.font = '12px "Work Sans", sans-serif';
     ctx.fillText(receiver.id.toUpperCase(), p.x + 14, p.y + 4);
     ctx.fillStyle = canvasTheme.receiverFill;
   }
@@ -2464,7 +2464,7 @@ function drawReceiverBadges() {
     if (!result) continue;
     const p = worldToCanvas(receiver);
     const label = `${formatLevel(result.LAeq)} dB`;
-    ctx.font = '12px "Space Grotesk", sans-serif';
+    ctx.font = '12px "Work Sans", sans-serif';
     ctx.fillStyle = canvasTheme.badgeBg;
     ctx.strokeStyle = canvasTheme.badgeBorder;
     ctx.lineWidth = 1;
