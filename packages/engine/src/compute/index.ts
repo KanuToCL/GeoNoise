@@ -33,8 +33,8 @@ import type { Scene } from '@geonoise/core';
 //   For each Source S and Receiver R we check if the 2D segment SR intersects a barrier segment P1P2.
 //   If there is no intersection, the path is treated as unoccluded (ground effects may apply).
 //
-// Step B (3D "top edge" path and path-length difference delta):
-//   For each intersecting barrier, we compute the intersection point I in the XY plane.
+// Step B (3D "top edge" path for thin barriers):
+//   For each intersecting line barrier, we compute the intersection point I in the XY plane.
 //   We then place an imaginary diffraction point B at the barrier’s top edge directly above I:
 //     B = (Ix, Iy, hb)
 //
@@ -46,9 +46,17 @@ import type { Scene } from '@geonoise/core';
 //   Path difference:
 //     delta = A + B - d
 //
-// We take the *largest* delta across all intersecting barrier segments. This is a pragmatic choice:
+// Step C (3D roof path for buildings, thick barrier):
+//   For each intersecting building footprint, collect all edge intersections along SR, sort by
+//   distance from S, and choose entry/exit points I_in / I_out. Then:
+//     A = sqrt( dist2D(S,I_in)^2 + (hb - hs)^2 )
+//     B = dist2D(I_in, I_out)
+//     C = sqrt( dist2D(I_out,R)^2 + (hb - hr)^2 )
+//     delta = A + B + C - d
+//
+// We take the *largest* delta across all intersecting obstacles. This is a pragmatic choice:
 // the Maekawa-style insertion loss increases monotonically with delta (for N > ~0), so the
-// strongest obstruction dominates when multiple segments cross the SR line.
+// strongest obstruction dominates when multiple obstacles cross the SR line.
 //
 // IMPORTANT integration detail:
 //   This module does not convert delta -> attenuation in dB. It only computes:
@@ -60,7 +68,8 @@ import type { Scene } from '@geonoise/core';
 //
 // Known limitations (by design for v0.2.x):
 //   - No diffraction around barrier ends (only an "over the top" surrogate path).
-//   - Barrier thickness ignored (infinitely thin vertical screen).
+//   - Barrier thickness ignored for line barriers (infinitely thin vertical screen).
+//   - Building diffraction uses entry/exit edges for a simple roof traversal.
 //   - Collinear/grazing cases are treated as "no intersection" for numerical stability.
 //   - Barrier groundElevation is ignored; hb is treated as absolute Z in the local frame.
 //   - No transmission loss through the barrier (future: use obstacle.attenuationDb / TL).
@@ -70,6 +79,16 @@ type BarrierSegment = {
   p1: Point2D;
   p2: Point2D;
   height: number;
+};
+
+type BuildingObstacle = {
+  segments: BarrierSegment[];
+  height: number;
+};
+
+type BarrierGeometry = {
+  barrierSegments: BarrierSegment[];
+  buildings: BuildingObstacle[];
 };
 
 // 2D cross product helper (scalar z-component) for segment intersection math.
@@ -107,11 +126,37 @@ function segmentIntersection(p1: Point2D, p2: Point2D, q1: Point2D, q2: Point2D)
   return { x: p1.x + t * r.x, y: p1.y + t * r.y };
 }
 
-// Build linear barrier segments from scene obstacles:
+function collectIntersections(
+  source: Point2D,
+  receiver: Point2D,
+  segments: BarrierSegment[]
+): Point2D[] {
+  const hits: { point: Point2D; distance: number }[] = [];
+  for (const segment of segments) {
+    const intersection = segmentIntersection(source, receiver, segment.p1, segment.p2);
+    if (!intersection) continue;
+    hits.push({ point: intersection, distance: distance2D(source, intersection) });
+  }
+
+  hits.sort((a, b) => a.distance - b.distance);
+
+  const unique: Point2D[] = [];
+  for (const hit of hits) {
+    const last = unique[unique.length - 1];
+    if (!last || distance2D(last, hit.point) > EPSILON) {
+      unique.push(hit.point);
+    }
+  }
+
+  return unique;
+}
+
+// Build obstacle geometry from scene obstacles:
 // - Barriers are stored as polylines; each pair of consecutive vertices is a segment.
-// - Buildings contribute their footprint edges so rotated rectangles participate in occlusion.
-function buildBarrierSegments(scene: Scene): BarrierSegment[] {
-  const segments: BarrierSegment[] = [];
+// - Buildings keep their footprint edges grouped to compute entry/exit intersections.
+function buildBarrierGeometry(scene: Scene): BarrierGeometry {
+  const barrierSegments: BarrierSegment[] = [];
+  const buildings: BuildingObstacle[] = [];
   for (const obstacle of scene.obstacles ?? []) {
     if (obstacle.enabled === false) continue;
     // `height` here is the screen’s top Z (hb) in meters, in the same coordinate system as source/receiver z.
@@ -123,38 +168,96 @@ function buildBarrierSegments(scene: Scene): BarrierSegment[] {
         const p1 = obstacle.vertices[i];
         const p2 = obstacle.vertices[i + 1];
         if (distance2D(p1, p2) < EPSILON) continue;
-        segments.push({ p1, p2, height });
+        barrierSegments.push({ p1, p2, height });
       }
     }
     if (obstacle.type === 'building') {
       const footprint = obstacle.footprint ?? [];
       if (footprint.length < 3) continue;
+      const segments: BarrierSegment[] = [];
       for (let i = 0; i < footprint.length; i += 1) {
         const p1 = footprint[i];
         const p2 = footprint[(i + 1) % footprint.length];
         if (distance2D(p1, p2) < EPSILON) continue;
         segments.push({ p1, p2, height });
       }
+      if (segments.length) {
+        buildings.push({ segments, height });
+      }
     }
   }
-  return segments;
+  return { barrierSegments, buildings };
+}
+
+function computeThinBarrierDelta(
+  source: Point3D,
+  receiver: Point3D,
+  source2D: Point2D,
+  receiver2D: Point2D,
+  segments: BarrierSegment[],
+  direct3D: number
+): number | null {
+  let maxDelta: number | null = null;
+
+  for (const segment of segments) {
+    const intersection = segmentIntersection(source2D, receiver2D, segment.p1, segment.p2);
+    if (!intersection) continue;
+
+    // Split SR at the intersection point in 2D, then "lift" to the barrier top height in 3D.
+    // Note: This is a surrogate diffraction path; it is NOT a full ISO 9613-2 diffraction implementation.
+    const distSI = distance2D(source2D, intersection);
+    const distIR = distance2D(intersection, receiver2D);
+    const pathA = Math.hypot(distSI, segment.height - source.z);
+    const pathB = Math.hypot(distIR, segment.height - receiver.z);
+    const delta = pathA + pathB - direct3D;
+
+    if (maxDelta === null || delta > maxDelta) {
+      maxDelta = delta;
+    }
+  }
+
+  return maxDelta;
+}
+
+function computeBuildingDelta(
+  source: Point3D,
+  receiver: Point3D,
+  source2D: Point2D,
+  receiver2D: Point2D,
+  building: BuildingObstacle,
+  direct3D: number
+): number | null {
+  const intersections = collectIntersections(source2D, receiver2D, building.segments);
+  if (intersections.length < 2) {
+    return computeThinBarrierDelta(source, receiver, source2D, receiver2D, building.segments, direct3D);
+  }
+
+  const entry = intersections[0];
+  const exit = intersections[intersections.length - 1];
+  const distSourceToIn = distance2D(source2D, entry);
+  const distAcrossRoof = distance2D(entry, exit);
+  const distOutToRecv = distance2D(exit, receiver2D);
+  const pathUp = Math.hypot(distSourceToIn, building.height - source.z);
+  const pathRoof = distAcrossRoof;
+  const pathDown = Math.hypot(distOutToRecv, building.height - receiver.z);
+
+  return pathUp + pathRoof + pathDown - direct3D;
 }
 
 // Compute barrier path difference for a source->receiver path.
-// Step A: check 2D intersection between SR and each barrier segment.
-// Step B: if intersecting, place a "top edge" point at the intersection with height hb.
-//         A = sqrt(dist2D(S,I)^2 + (hb-hs)^2)
-//         B = sqrt(dist2D(I,R)^2 + (hb-hr)^2)
-//         d = sqrt(dist2D(S,R)^2 + (hs-hr)^2)
-//         delta = A + B - d
-// Step C: choose the largest delta across intersecting segments (strongest screen effect).
+// Step A: check 2D intersection between SR and each obstacle segment.
+// Step B (barriers): use a single "top edge" point at the intersection with height hb.
+// Step C (buildings): use entry/exit points to traverse across the roof.
+// Step D: choose the largest delta across intersecting obstacles (strongest screen effect).
 // The caller uses `blocked` to swap ground effect out and apply barrier attenuation instead.
 function computeBarrierPathDiff(
   source: Point3D,
   receiver: Point3D,
-  segments: BarrierSegment[]
+  geometry: BarrierGeometry
 ): { blocked: boolean; pathDifference: number } {
-  if (!segments.length) return { blocked: false, pathDifference: 0 };
+  if (!geometry.barrierSegments.length && !geometry.buildings.length) {
+    return { blocked: false, pathDifference: 0 };
+  }
 
   // Keep intersection math in 2D (plan view), but keep heights for the 3D distance terms.
   const s2 = { x: source.x, y: source.y };
@@ -164,18 +267,14 @@ function computeBarrierPathDiff(
 
   let maxDelta: number | null = null;
 
-  for (const segment of segments) {
-    const intersection = segmentIntersection(s2, r2, segment.p1, segment.p2);
-    if (!intersection) continue;
+  const thinDelta = computeThinBarrierDelta(source, receiver, s2, r2, geometry.barrierSegments, direct3D);
+  if (thinDelta !== null) {
+    maxDelta = thinDelta;
+  }
 
-    // Split SR at the intersection point in 2D, then "lift" to the barrier top height in 3D.
-    // Note: This is a surrogate diffraction path; it is NOT a full ISO 9613-2 diffraction implementation.
-    const distSI = distance2D(s2, intersection);
-    const distIR = distance2D(intersection, r2);
-    const pathA = Math.hypot(distSI, segment.height - source.z);
-    const pathB = Math.hypot(distIR, segment.height - receiver.z);
-    const delta = pathA + pathB - direct3D;
-
+  for (const building of geometry.buildings) {
+    const delta = computeBuildingDelta(source, receiver, s2, r2, building, direct3D);
+    if (delta === null) continue;
     if (maxDelta === null || delta > maxDelta) {
       maxDelta = delta;
     }
@@ -203,8 +302,8 @@ export class CPUEngine implements Engine {
     const config = request.engineConfig ?? getDefaultEngineConfig('festival_fast');
     const meteo = config.meteo ?? { temperature: 20, relativeHumidity: 50, pressure: 101.325, windSpeed: 0, windDirection: 0 };
     const propConfig = config.propagation ?? getDefaultEngineConfig('festival_fast').propagation!;
-    // Precompute barrier segments once per request (cheap) so the inner SR loop only does intersection + delta math.
-    const barrierSegments = propConfig.includeBarriers ? buildBarrierSegments(scene) : [];
+    // Precompute barrier geometry once per request (cheap) so the inner SR loop only does intersection + delta math.
+    const barrierGeometry = propConfig.includeBarriers ? buildBarrierGeometry(scene) : null;
 
     const enabledSources = scene.sources.filter(s => s.enabled);
     let receivers = scene.receivers.filter(r => r.enabled);
@@ -221,8 +320,8 @@ export class CPUEngine implements Engine {
         const dist = distance3D(src.position, recv.position);
         // Barrier geometry stage: 2D intersection test + 3D path-difference delta.
         // `blocked` toggles which attenuation terms are applied in calculatePropagation().
-        const barrier = barrierSegments.length
-          ? computeBarrierPathDiff(src.position, recv.position, barrierSegments)
+        const barrier = barrierGeometry
+          ? computeBarrierPathDiff(src.position, recv.position, barrierGeometry)
           : { blocked: false, pathDifference: 0 };
         const prop = calculatePropagation(
           dist,
@@ -257,7 +356,7 @@ export class CPUEngine implements Engine {
     const meteo = config.meteo ?? { temperature: 20, relativeHumidity: 50, pressure: 101.325, windSpeed: 0, windDirection: 0 };
     const propConfig = config.propagation ?? getDefaultEngineConfig('festival_fast').propagation!;
     // Same barrier preprocessing as computeReceivers(): reuse across all sample points in this panel compute.
-    const barrierSegments = propConfig.includeBarriers ? buildBarrierSegments(scene) : [];
+    const barrierGeometry = propConfig.includeBarriers ? buildBarrierGeometry(scene) : null;
 
     const panel = scene.panels.find(p => p.id === request.payload.panelId);
     if (!panel || !panel.enabled) {
@@ -297,8 +396,8 @@ export class CPUEngine implements Engine {
       const levels = enabledSources.map(src => {
         const dist = distance3D(src.position, pt);
         // Barrier logic is applied per source->sample path.
-        const barrier = barrierSegments.length
-          ? computeBarrierPathDiff(src.position, pt, barrierSegments)
+        const barrier = barrierGeometry
+          ? computeBarrierPathDiff(src.position, pt, barrierGeometry)
           : { blocked: false, pathDifference: 0 };
         return calculateSPL(
           src.soundPowerLevel,
@@ -332,7 +431,7 @@ export class CPUEngine implements Engine {
     const meteo = config.meteo ?? { temperature: 20, relativeHumidity: 50, pressure: 101.325, windSpeed: 0, windDirection: 0 };
     const propConfig = config.propagation ?? getDefaultEngineConfig('festival_fast').propagation!;
     // Same barrier preprocessing as computeReceivers()/computePanel().
-    const barrierSegments = propConfig.includeBarriers ? buildBarrierSegments(scene) : [];
+    const barrierGeometry = propConfig.includeBarriers ? buildBarrierGeometry(scene) : null;
     const gridConfig = request.payload.gridConfig;
 
     if (!gridConfig.bounds) {
@@ -346,8 +445,8 @@ export class CPUEngine implements Engine {
       const levels = enabledSources.map(src => {
         const dist = distance3D(src.position, pt);
         // Barrier logic is applied per source->grid-point path.
-        const barrier = barrierSegments.length
-          ? computeBarrierPathDiff(src.position, pt, barrierSegments)
+        const barrier = barrierGeometry
+          ? computeBarrierPathDiff(src.position, pt, barrierGeometry)
           : { blocked: false, pathDifference: 0 };
         return calculateSPL(
           src.soundPowerLevel,
