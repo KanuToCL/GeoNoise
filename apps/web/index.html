@@ -346,43 +346,88 @@
 
     <div class="modal" id="aboutModal" aria-hidden="true">
       <div class="modal-backdrop" data-modal-close></div>
-      <div class="modal-card ui-surface" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+      <div class="modal-card modal-plate" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
         <div class="modal-header">
-          <h2 id="aboutTitle">About the Engine</h2>
-          <button class="ghost ui-button" id="aboutClose" type="button">Close</button>
+          <div class="modal-title">
+            <h2 id="aboutTitle">GeoNoise Propagation Engine (Phase 1)</h2>
+            <p class="modal-subtitle">Real-time outdoor acoustic simulation</p>
+          </div>
+          <button class="modal-close ui-button" id="aboutClose" type="button" aria-label="Close">X</button>
         </div>
-        <p class="note">
-          This phase uses a simplified outdoor propagation model intended for fast iteration, not compliance.
-        </p>
-        <div class="about-grid">
-          <div class="about-block">
-            <h3>Physics</h3>
-            <ul>
-              <li>Geometric spreading: Adiv = 20 log10(r) + 11 (spherical) or 10 log10(r) + 8 (cylindrical).</li>
-              <li>Atmospheric absorption: Aatm = alpha(f,T,RH,P) * distance, using Simple or ISO 9613-1.</li>
-              <li>Broadband uses a representative frequency of 1000 Hz (no per-band propagation yet).</li>
-              <li>Ground effect: legacy ISO 9613-2-style correction or optional two-ray phasor model; two-ray can boost or dip levels via interference.</li>
-              <li>Legacy ground: ISO 9613-2 Eq. (10) with hm=(hs+hr)/2, dd=max(r1,1), 300/dd term, and negative values clamped to 0; applied only for soft ground; Dn is intentionally omitted.</li>
-              <li>Two-ray ground: direct + reflected paths are summed as complex phasors using Delany–Bazley impedance (not Miki) and numerical distance w.</li>
-              <li>Two-ray guards: asymptotic F(w) for |w|>=4 with plane-wave fallback for small |w|, cosθ clamp, |Γ| cap, and |R| floor.</li>
-              <li>Barrier loss: Simple line barriers use a Maekawa-style screen attenuation.</li>
-            </ul>
+        <div class="spec-grid">
+          <div class="spec-section spec-section--full">
+            <div class="spec-heading">GOVERNING PHYSICS</div>
+            <div class="spec-tray">
+              <p class="spec-text">
+                The sound pressure level (L<sub>p</sub>) is calculated by subtracting cumulative attenuation factors
+                from the source sound power level (L<sub>W</sub>).
+              </p>
+              <div class="equation-pill">
+                L<sub>p</sub> = L<sub>W</sub> - A<sub>div</sub> - A<sub>atm</sub> - A<sub>gr</sub> - A<sub>bar</sub>
+              </div>
+            </div>
           </div>
-          <div class="about-block">
-            <h3>Assumptions</h3>
-            <ul>
-              <li>Free-field, no buildings or terrain occlusion.</li>
-              <li>No scattering, diffraction, or multi-reflections.</li>
-              <li>Default mode is fast, not standards-accurate.</li>
-            </ul>
+          <div class="spec-section">
+            <div class="spec-heading">ATTENUATION COMPONENTS</div>
+            <div class="spec-tray">
+              <div class="spec-subhead">Geometric divergence (A<sub>div</sub>)</div>
+              <div class="spec-text">Standard spherical spreading for point sources.</div>
+              <div class="equation-pill">A<sub>div</sub> = 20 log<sub>10</sub>(d) + 11</div>
+              <div class="spec-subhead">Atmospheric absorption (A<sub>atm</sub>)</div>
+              <div class="spec-text">
+                A<sub>atm</sub> = &#945; d / 1000. The coefficient &#945; is computed analytically per ISO 9613-1,
+                summing classical losses with molecular relaxation of nitrogen and oxygen.
+              </div>
+              <div class="equation-pill">
+                &#945; = &#945;<sub>cl</sub> + (b<sub>N</sub> &#183; f<sup>2</sup>) / (f<sub>r,N</sub> + f<sup>2</sup> /
+                f<sub>r,N</sub>) + (b<sub>O</sub> &#183; f<sup>2</sup>) / (f<sub>r,O</sub> + f<sup>2</sup> / f<sub>r,O</sub>)
+              </div>
+              <div class="spec-text">&#945;<sub>cl</sub>: Classical viscothermal losses.</div>
+              <div class="spec-text">
+                f<sub>r,N</sub>, f<sub>r,O</sub>: Relaxation frequencies for N<sub>2</sub> and O<sub>2</sub>,
+                derived dynamically from molar water vapor concentration (h), temperature, and pressure.
+              </div>
+              <div class="spec-subhead">Ground effects (A<sub>gr</sub>)</div>
+              <div class="spec-text">
+                The engine supports two interaction modes:
+              </div>
+              <div class="spec-text">
+                Precision (Two-Ray Phasor): sums direct and reflected paths as complex phasors using Delany-Bazley
+                impedance to capture interference (comb filtering).
+              </div>
+              <div class="equation-pill">
+                p<sub>tot</sub> = e<sup>-jkr<sub>1</sub></sup> / r<sub>1</sub> + Q e<sup>-jkr<sub>2</sub></sup> / r<sub>2</sub>
+              </div>
+              <div class="spec-text">
+                Where Q is the spherical reflection coefficient and k is the wavenumber.
+              </div>
+              <div class="spec-text">
+                Legacy (ISO 9613-2): implements the Alternative Method (Eq. 10) for porous ground. Attenuation is
+                calculated using mean path height h<sub>m</sub>.
+              </div>
+              <div class="equation-pill">
+                A<sub>gr</sub> = 4.8 - (2h<sub>m</sub> / d) (17 + 300 / d) &ge; 0 dB
+              </div>
+              <div class="spec-subhead">Barrier diffraction (A<sub>bar</sub>)</div>
+              <div class="spec-text">Maekawa-style approximation based on the Fresnel number (N).</div>
+              <div class="equation-pill">A<sub>bar</sub> &#8776; 10 log<sub>10</sub>(3 + 20N)</div>
+            </div>
           </div>
-          <div class="about-block">
-            <h3>Method</h3>
-            <ul>
-              <li>For each source-target: L = Lw - (Adiv + Aatm + Agr + Abar).</li>
-              <li>Source summation is energetic: 10 log10(sum 10^(Li/10)).</li>
-              <li>Measure grid stats use min/max/avg/L50/L95 of sample points.</li>
-            </ul>
+          <div class="spec-section">
+            <div class="spec-heading">NUMERICAL STABILITY &amp; CONSTRAINTS</div>
+            <div class="spec-tray">
+              <div class="spec-subhead">Algorithmic guards (QA)</div>
+              <ul class="spec-list">
+                <li>Two-ray asymptotes: for |w| &ge; 4, F(w) uses a plane-wave approximation.</li>
+                <li>Angle limits: cos &#952; is clamped to prevent grazing-incidence singularities.</li>
+                <li>Impedance cap: |Z| is capped to avoid runaway reflection coefficients.</li>
+              </ul>
+              <div class="spec-subhead">Assumptions</div>
+              <ul class="spec-list">
+                <li>Broadband: representative center frequency of 1000 Hz.</li>
+                <li>Field: free-field propagation with first-order ground and simple barrier screening.</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
