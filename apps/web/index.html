@@ -368,106 +368,266 @@
       <div class="modal-card modal-plate" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
         <div class="modal-header">
           <div class="modal-title">
-            <h2 id="aboutTitle">GeoNoise Propagation Engine (Phase 1.5)</h2>
+            <h2 id="aboutTitle">Details</h2>
             <p class="modal-subtitle">Real-time outdoor acoustic simulation</p>
           </div>
           <button class="modal-close ui-button" id="aboutClose" type="button" aria-label="Close">X</button>
         </div>
-        <div class="spec-grid">
-          <div class="spec-section spec-section--full">
-            <div class="spec-heading">GOVERNING PHYSICS</div>
-            <div class="spec-tray">
-              <p class="spec-text">
-                The sound pressure level (L<sub>p</sub>) is calculated by subtracting cumulative attenuation factors
-                from the source sound power level (L<sub>W</sub>).
-              </p>
-              <div class="equation-pill">
-                L<sub>p</sub> = L<sub>W</sub> - A<sub>div</sub> - A<sub>atm</sub> - A<sub>gr</sub> - A<sub>bar</sub>
+        <div class="about-tabs" role="tablist" aria-label="About tabs">
+          <button
+            class="about-tab is-active"
+            type="button"
+            role="tab"
+            id="aboutTabCurrent"
+            aria-selected="true"
+            aria-controls="aboutPanelCurrent"
+            data-about-tab="current"
+          >
+            Current
+          </button>
+          <button
+            class="about-tab"
+            type="button"
+            role="tab"
+            id="aboutTabEquations"
+            aria-selected="false"
+            aria-controls="aboutPanelEquations"
+            data-about-tab="equations"
+          >
+            Full Equations
+          </button>
+        </div>
+        <div
+          class="about-panel is-active"
+          role="tabpanel"
+          id="aboutPanelCurrent"
+          aria-labelledby="aboutTabCurrent"
+          aria-hidden="false"
+          data-about-panel="current"
+        >
+          <div class="spec-grid">
+            <div class="spec-section spec-section--full">
+              <div class="spec-heading">GOVERNING PHYSICS</div>
+              <div class="spec-tray">
+                <p class="spec-text">
+                  The sound pressure level (L<sub>p</sub>) is calculated by subtracting cumulative attenuation factors
+                  from the source sound power level (L<sub>W</sub>).
+                </p>
+                <div class="equation-pill">
+                  L<sub>p</sub> = L<sub>W</sub> - A<sub>div</sub> - A<sub>atm</sub> - A<sub>gr</sub> - A<sub>bar</sub>
+                </div>
+              </div>
+            </div>
+            <div class="spec-section">
+              <div class="spec-heading">ATTENUATION COMPONENTS</div>
+              <div class="spec-tray">
+                <div class="spec-subhead">Geometric divergence (A<sub>div</sub>)</div>
+                <div class="spec-text">Standard spherical spreading for point sources.</div>
+                <div class="equation-pill">A<sub>div</sub> = 20 log<sub>10</sub>(d) + 11</div>
+                <div class="spec-subhead">Atmospheric absorption (A<sub>atm</sub>)</div>
+                <div class="spec-text">
+                  A<sub>atm</sub> = &#945; d / 1000. The coefficient &#945; is computed analytically per ISO 9613-1,
+                  summing classical losses with molecular relaxation of nitrogen and oxygen.
+                </div>
+                <div class="equation-pill">
+                  &#945; = &#945;<sub>cl</sub> + (b<sub>N</sub> &#183; f<sup>2</sup>) / (f<sub>r,N</sub> + f<sup>2</sup> /
+                  f<sub>r,N</sub>) + (b<sub>O</sub> &#183; f<sup>2</sup>) / (f<sub>r,O</sub> + f<sup>2</sup> / f<sub>r,O</sub>)
+                </div>
+                <div class="spec-text">&#945;<sub>cl</sub>: Classical viscothermal losses.</div>
+                <div class="spec-text">
+                  f<sub>r,N</sub>, f<sub>r,O</sub>: Relaxation frequencies for N<sub>2</sub> and O<sub>2</sub>,
+                  derived dynamically from molar water vapor concentration (h), temperature, and pressure.
+                </div>
+                <div class="spec-subhead">Ground effects (A<sub>gr</sub>)</div>
+                <div class="spec-text">
+                  The engine supports two interaction modes:
+                </div>
+                <div class="spec-text">
+                  Precision (Two-Ray Phasor): sums direct and reflected paths as complex phasors using Delany-Bazley
+                  impedance to capture interference (comb filtering).
+                </div>
+                <div class="equation-pill">
+                  p<sub>tot</sub> = e<sup>-jkr<sub>1</sub></sup> / r<sub>1</sub> + Q e<sup>-jkr<sub>2</sub></sup> / r<sub>2</sub>
+                </div>
+                <div class="spec-text">
+                  Where Q is the spherical reflection coefficient and k is the wavenumber.
+                </div>
+                <div class="spec-text">
+                  Legacy (ISO 9613-2): implements the Alternative Method (Eq. 10) for porous ground. Attenuation is
+                  calculated using mean path height h<sub>m</sub>.
+                </div>
+                <div class="equation-pill">
+                  A<sub>gr</sub> = 4.8 - (2h<sub>m</sub> / d) (17 + 300 / d) &ge; 0 dB
+                </div>
+                <div class="spec-subhead">Barrier diffraction (A<sub>bar</sub>)</div>
+                <div class="spec-text">
+                  The engine implements a 2.5D convex-hull path method to handle both thin walls and
+                  finite-thickness buildings.
+                </div>
+                <div class="spec-text">
+                  Path logic: attenuation is determined by the path difference (&delta;) between the direct
+                  line-of-sight and the shortest diffracted path over the obstacle.
+                </div>
+                <div class="spec-text">Thin barriers: single-edge diffraction (S &rarr; Edge &rarr; R).</div>
+                <div class="spec-text">
+                  Thick barriers (buildings): double-edge diffraction accounting for roof width.
+                </div>
+                <div class="equation-pill">
+                  &delta; = (d<sub>up</sub> + d<sub>roof</sub> + d<sub>down</sub>) - d<sub>direct</sub>
+                </div>
+                <div class="spec-text">
+                  Calculation: Maekawa-style logarithmic approximation based on the Fresnel number
+                  (N = 2&delta; / &lambda;).
+                </div>
+                <div class="equation-pill">A<sub>bar</sub> &#8776; 10 log<sub>10</sub>(3 + 20N)</div>
+              </div>
+            </div>
+            <div class="spec-section">
+              <div class="spec-heading">NUMERICAL STABILITY &amp; CONSTRAINTS</div>
+              <div class="spec-tray">
+                <div class="spec-subhead">Algorithmic guards (QA)</div>
+                <ul class="spec-list">
+                  <li>Two-ray asymptotes: for |w| &ge; 4, F(w) uses a plane-wave approximation.</li>
+                  <li>Angle limits: cos &#952; is clamped to prevent grazing-incidence singularities.</li>
+                  <li>Impedance cap: |Z| is capped to avoid runaway reflection coefficients.</li>
+                </ul>
+                <div class="spec-subhead">Assumptions</div>
+                <ul class="spec-list">
+                  <li>Broadband: representative center frequency of 1000 Hz.</li>
+                  <li>Field: free-field propagation with first-order ground and simple barrier screening.</li>
+                  <li>
+                    Geometry: 2.5D vertical profile approximation. Terrain is treated as flat (Z=0),
+                    while obstacles utilize full height (Z<sub>obs</sub>) and roof geometry for vertical diffraction.
+                  </li>
+                </ul>
               </div>
             </div>
           </div>
-          <div class="spec-section">
-            <div class="spec-heading">ATTENUATION COMPONENTS</div>
-            <div class="spec-tray">
-              <div class="spec-subhead">Geometric divergence (A<sub>div</sub>)</div>
-              <div class="spec-text">Standard spherical spreading for point sources.</div>
-              <div class="equation-pill">A<sub>div</sub> = 20 log<sub>10</sub>(d) + 11</div>
-              <div class="spec-subhead">Atmospheric absorption (A<sub>atm</sub>)</div>
-              <div class="spec-text">
-                A<sub>atm</sub> = &#945; d / 1000. The coefficient &#945; is computed analytically per ISO 9613-1,
-                summing classical losses with molecular relaxation of nitrogen and oxygen.
+        </div>
+        <div
+          class="about-panel"
+          role="tabpanel"
+          id="aboutPanelEquations"
+          aria-labelledby="aboutTabEquations"
+          aria-hidden="true"
+          data-about-panel="equations"
+        >
+          <div class="spec-grid equations-grid">
+            <div class="spec-section spec-section--full">
+              <div class="spec-heading">CORE LEVELS</div>
+              <div class="spec-tray">
+                <div class="spec-text">Overall level at receiver:</div>
+                <div class="equation-pill">
+                  L<sub>p</sub> = L<sub>W</sub> - A<sub>div</sub> - A<sub>atm</sub> - A<sub>gr</sub> - A<sub>bar</sub>
+                </div>
+                <div class="spec-text">Energetic summation of multiple sources:</div>
+                <div class="equation-pill">
+                  L<sub>sum</sub> = 10 log<sub>10</sub>( &Sigma; 10<sup>L<sub>i</sub>/10</sup> )
+                </div>
+                <div class="spec-text">Sound power conversions:</div>
+                <div class="equation-pill">L<sub>W</sub> = 10 log<sub>10</sub>(P / 10<sup>-12</sup>)</div>
+                <div class="equation-pill">P = 10<sup>-12</sup> &#183; 10<sup>L<sub>W</sub>/10</sup></div>
               </div>
-              <div class="equation-pill">
-                &#945; = &#945;<sub>cl</sub> + (b<sub>N</sub> &#183; f<sup>2</sup>) / (f<sub>r,N</sub> + f<sup>2</sup> /
-                f<sub>r,N</sub>) + (b<sub>O</sub> &#183; f<sup>2</sup>) / (f<sub>r,O</sub> + f<sup>2</sup> / f<sub>r,O</sub>)
-              </div>
-              <div class="spec-text">&#945;<sub>cl</sub>: Classical viscothermal losses.</div>
-              <div class="spec-text">
-                f<sub>r,N</sub>, f<sub>r,O</sub>: Relaxation frequencies for N<sub>2</sub> and O<sub>2</sub>,
-                derived dynamically from molar water vapor concentration (h), temperature, and pressure.
-              </div>
-              <div class="spec-subhead">Ground effects (A<sub>gr</sub>)</div>
-              <div class="spec-text">
-                The engine supports two interaction modes:
-              </div>
-              <div class="spec-text">
-                Precision (Two-Ray Phasor): sums direct and reflected paths as complex phasors using Delany-Bazley
-                impedance to capture interference (comb filtering).
-              </div>
-              <div class="equation-pill">
-                p<sub>tot</sub> = e<sup>-jkr<sub>1</sub></sup> / r<sub>1</sub> + Q e<sup>-jkr<sub>2</sub></sup> / r<sub>2</sub>
-              </div>
-              <div class="spec-text">
-                Where Q is the spherical reflection coefficient and k is the wavenumber.
-              </div>
-              <div class="spec-text">
-                Legacy (ISO 9613-2): implements the Alternative Method (Eq. 10) for porous ground. Attenuation is
-                calculated using mean path height h<sub>m</sub>.
-              </div>
-              <div class="equation-pill">
-                A<sub>gr</sub> = 4.8 - (2h<sub>m</sub> / d) (17 + 300 / d) &ge; 0 dB
-              </div>
-              <div class="spec-subhead">Barrier diffraction (A<sub>bar</sub>)</div>
-              <div class="spec-text">
-                The engine implements a 2.5D convex-hull path method to handle both thin walls and
-                finite-thickness buildings.
-              </div>
-              <div class="spec-text">
-                Path logic: attenuation is determined by the path difference (&delta;) between the direct
-                line-of-sight and the shortest diffracted path over the obstacle.
-              </div>
-              <div class="spec-text">Thin barriers: single-edge diffraction (S &rarr; Edge &rarr; R).</div>
-              <div class="spec-text">
-                Thick barriers (buildings): double-edge diffraction accounting for roof width.
-              </div>
-              <div class="equation-pill">
-                &delta; = (d<sub>up</sub> + d<sub>roof</sub> + d<sub>down</sub>) - d<sub>direct</sub>
-              </div>
-              <div class="spec-text">
-                Calculation: Maekawa-style logarithmic approximation based on the Fresnel number
-                (N = 2&delta; / &lambda;).
-              </div>
-              <div class="equation-pill">A<sub>bar</sub> &#8776; 10 log<sub>10</sub>(3 + 20N)</div>
             </div>
-          </div>
-          <div class="spec-section">
-            <div class="spec-heading">NUMERICAL STABILITY &amp; CONSTRAINTS</div>
-            <div class="spec-tray">
-              <div class="spec-subhead">Algorithmic guards (QA)</div>
-              <ul class="spec-list">
-                <li>Two-ray asymptotes: for |w| &ge; 4, F(w) uses a plane-wave approximation.</li>
-                <li>Angle limits: cos &#952; is clamped to prevent grazing-incidence singularities.</li>
-                <li>Impedance cap: |Z| is capped to avoid runaway reflection coefficients.</li>
-              </ul>
-              <div class="spec-subhead">Assumptions</div>
-              <ul class="spec-list">
-                <li>Broadband: representative center frequency of 1000 Hz.</li>
-                <li>Field: free-field propagation with first-order ground and simple barrier screening.</li>
-                <li>
-                  Geometry: 2.5D vertical profile approximation. Terrain is treated as flat (Z=0),
-                  while obstacles utilize full height (Z<sub>obs</sub>) and roof geometry for vertical diffraction.
-                </li>
-              </ul>
+            <div class="spec-section">
+              <div class="spec-heading">GEOMETRY</div>
+              <div class="spec-tray">
+                <div class="spec-text">Plan distance:</div>
+                <div class="equation-pill">d<sub>2D</sub> = &radic;((x<sub>2</sub>-x<sub>1</sub>)<sup>2</sup> + (y<sub>2</sub>-y<sub>1</sub>)<sup>2</sup>)</div>
+                <div class="spec-text">3D distance:</div>
+                <div class="equation-pill">
+                  d<sub>3D</sub> = &radic;((x<sub>2</sub>-x<sub>1</sub>)<sup>2</sup> + (y<sub>2</sub>-y<sub>1</sub>)<sup>2</sup> + (z<sub>2</sub>-z<sub>1</sub>)<sup>2</sup>)
+                </div>
+                <div class="spec-text">Direct path used for diffraction reference:</div>
+                <div class="equation-pill">d<sub>direct</sub> = &radic;(d<sub>2D</sub><sup>2</sup> + (h<sub>s</sub> - h<sub>r</sub>)<sup>2</sup>)</div>
+              </div>
+            </div>
+            <div class="spec-section">
+              <div class="spec-heading">SPREADING</div>
+              <div class="spec-tray">
+                <div class="spec-text">Point source (spherical):</div>
+                <div class="equation-pill">A<sub>div</sub> = 20 log<sub>10</sub>(d) + 11</div>
+                <div class="spec-text">Line source (cylindrical):</div>
+                <div class="equation-pill">A<sub>div</sub> = 10 log<sub>10</sub>(d) + 8</div>
+              </div>
+            </div>
+            <div class="spec-section spec-section--full">
+              <div class="spec-heading">ATMOSPHERIC ABSORPTION</div>
+              <div class="spec-tray">
+                <div class="spec-text">Path loss:</div>
+                <div class="equation-pill">A<sub>atm</sub> = &alpha; &#183; d</div>
+                <div class="spec-text">Speed of sound and wavelength:</div>
+                <div class="equation-pill">c = 331.3 + 0.606 T<sub>C</sub></div>
+                <div class="equation-pill">&lambda; = c / f</div>
+                <div class="spec-text">ISO 9613-1 absorption coefficient:</div>
+                <div class="equation-block">
+                  <div>&alpha; = 8.686 f<sup>2</sup> [ (1.84e-11 (p/p<sub>0</sub>)<sup>-1</sup> (T/T<sub>0</sub>)<sup>1/2</sup>)</div>
+                  <div>+ (T/T<sub>0</sub>)<sup>-2.5</sup> (0.01275 e<sup>-2239.1/T</sup> (f<sub>r,O</sub>/(f<sub>r,O</sub><sup>2</sup> + f<sup>2</sup>))</div>
+                  <div>+ 0.1068 e<sup>-3352/T</sup> (f<sub>r,N</sub>/(f<sub>r,N</sub><sup>2</sup> + f<sup>2</sup>))) ]</div>
+                </div>
+                <div class="equation-block">
+                  <div>C = -6.8346 (T<sub>01</sub>/T)<sup>1.261</sup> + 4.6151</div>
+                  <div>p<sub>sat</sub> = p<sub>0</sub> &#183; 10<sup>C</sup>, h = RH &#183; p<sub>sat</sub> / p</div>
+                  <div>f<sub>r,O</sub> = (p/p<sub>0</sub>) [24 + 4.04e4 h ((0.02 + h)/(0.391 + h))]</div>
+                  <div>f<sub>r,N</sub> = (p/p<sub>0</sub>) (T/T<sub>0</sub>)<sup>-1/2</sup> [9 + 280 h e<sup>-4.17((T/T<sub>0</sub>)<sup>-1/3</sup> - 1)</sup>]</div>
+                </div>
+              </div>
+            </div>
+            <div class="spec-section spec-section--full">
+              <div class="spec-heading">GROUND EFFECTS</div>
+              <div class="spec-tray">
+                <div class="spec-text">Legacy ISO 9613-2 Eq. 10 (soft ground):</div>
+                <div class="equation-pill">
+                  A<sub>gr</sub> = max(0, 4.8 - (2h<sub>m</sub> / d) (17 + 300 / d))
+                </div>
+                <div class="spec-text">Two-ray phasor geometry:</div>
+                <div class="equation-pill">
+                  r<sub>1</sub> = &radic;(d<sup>2</sup> + (h<sub>s</sub> - h<sub>r</sub>)<sup>2</sup>),
+                  r<sub>2</sub> = &radic;(d<sup>2</sup> + (h<sub>s</sub> + h<sub>r</sub>)<sup>2</sup>)
+                </div>
+                <div class="spec-text">Normalized impedance (Delany-Bazley):</div>
+                <div class="equation-pill">
+                  &zeta; = 1 + 9.08 (f/&sigma;)<sup>-0.75</sup> - j 11.9 (f/&sigma;)<sup>-0.73</sup>
+                </div>
+                <div class="spec-text">Reflection coefficient (locally reacting):</div>
+                <div class="equation-pill">
+                  &Gamma; = (&zeta; cos&#952; - 1) / (&zeta; cos&#952; + 1)
+                </div>
+                <div class="spec-text">Two-ray ratio and attenuation:</div>
+                <div class="equation-block">
+                  <div>ratio = 1 + &Gamma; (r<sub>1</sub>/r<sub>2</sub>) e<sup>-jk(r<sub>2</sub> - r<sub>1</sub>)</sup></div>
+                  <div>A<sub>gr</sub> = -20 log<sub>10</sub>(max(|ratio|, 10<sup>-6</sup>))</div>
+                </div>
+              </div>
+            </div>
+            <div class="spec-section spec-section--full">
+              <div class="spec-heading">BARRIER DIFFRACTION</div>
+              <div class="spec-tray">
+                <div class="spec-text">Thin barrier (single edge):</div>
+                <div class="equation-block">
+                  <div>A = &radic;(d(S,I)<sup>2</sup> + (h<sub>b</sub> - h<sub>s</sub>)<sup>2</sup>)</div>
+                  <div>B = &radic;(d(I,R)<sup>2</sup> + (h<sub>b</sub> - h<sub>r</sub>)<sup>2</sup>)</div>
+                  <div>&delta; = A + B - d<sub>direct</sub></div>
+                </div>
+                <div class="spec-text">Thick barrier (building roof):</div>
+                <div class="equation-block">
+                  <div>A = &radic;(d(S,I<sub>in</sub>)<sup>2</sup> + (h<sub>b</sub> - h<sub>s</sub>)<sup>2</sup>)</div>
+                  <div>B = d(I<sub>in</sub>, I<sub>out</sub>)</div>
+                  <div>C = &radic;(d(I<sub>out</sub>,R)<sup>2</sup> + (h<sub>b</sub> - h<sub>r</sub>)<sup>2</sup>)</div>
+                  <div>&delta; = A + B + C - d<sub>direct</sub></div>
+                </div>
+                <div class="spec-text">Maekawa-style insertion loss:</div>
+                <div class="equation-pill">N = 2&delta; / &lambda;</div>
+                <div class="equation-pill">A<sub>bar</sub> &#8776; 10 log<sub>10</sub>(3 + 20N)</div>
+              </div>
+            </div>
+            <div class="spec-section">
+              <div class="spec-heading">WEIGHTING</div>
+              <div class="spec-tray">
+                <div class="spec-text">Octave-band weighting:</div>
+                <div class="equation-pill">L<sub>A</sub> = L<sub>band</sub> + A(f)</div>
+                <div class="equation-pill">L<sub>C</sub> = L<sub>band</sub> + C(f)</div>
+              </div>
             </div>
           </div>
         </div>

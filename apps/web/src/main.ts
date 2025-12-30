@@ -347,6 +347,8 @@ const redoButton = document.querySelector('#redoButton') as HTMLButtonElement | 
 const aboutButton = document.querySelector('#aboutButton') as HTMLButtonElement | null;
 const aboutModal = document.querySelector('#aboutModal') as HTMLDivElement | null;
 const aboutClose = document.querySelector('#aboutClose') as HTMLButtonElement | null;
+const aboutTabs = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-about-tab]'));
+const aboutPanels = Array.from(document.querySelectorAll<HTMLDivElement>('[data-about-panel]'));
 const actionSecondary = document.querySelector('#actionSecondary') as HTMLDivElement | null;
 const actionOverflowToggle = document.querySelector('#actionOverflowToggle') as HTMLButtonElement | null;
 
@@ -3558,9 +3560,25 @@ function wireActionOverflow() {
   });
 }
 
+function setAboutTab(tabId: string) {
+  if (!aboutTabs.length || !aboutPanels.length) return;
+  aboutTabs.forEach((tab) => {
+    const isActive = tab.dataset.aboutTab === tabId;
+    tab.classList.toggle('is-active', isActive);
+    tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    tab.tabIndex = isActive ? 0 : -1;
+  });
+  aboutPanels.forEach((panel) => {
+    const isActive = panel.dataset.aboutPanel === tabId;
+    panel.classList.toggle('is-active', isActive);
+    panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+  });
+}
+
 function openAbout() {
   if (!aboutModal) return;
   aboutOpen = true;
+  setAboutTab('current');
   aboutModal.classList.add('is-open');
   aboutModal.setAttribute('aria-hidden', 'false');
   aboutClose?.focus();
@@ -3577,6 +3595,14 @@ function wireAbout() {
   if (!aboutModal) return;
   aboutButton?.addEventListener('click', () => openAbout());
   aboutClose?.addEventListener('click', () => closeAbout());
+  if (aboutTabs.length && aboutPanels.length) {
+    aboutTabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const tabId = tab.dataset.aboutTab ?? 'current';
+        setAboutTab(tabId);
+      });
+    });
+  }
   aboutModal.addEventListener('click', (event) => {
     const target = event.target as HTMLElement | null;
     if (target?.closest('[data-modal-close]')) {
