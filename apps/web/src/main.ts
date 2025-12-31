@@ -313,6 +313,7 @@ const debugX = document.querySelector('#debug-x') as HTMLSpanElement | null;
 const debugY = document.querySelector('#debug-y') as HTMLSpanElement | null;
 const debugMode = document.querySelector('#debug-mode') as HTMLSpanElement | null;
 const debugLayer = document.querySelector('#debug-layer') as HTMLSpanElement | null;
+const refineButton = document.querySelector('#refineButton') as HTMLButtonElement | null;
 const computeButton = document.querySelector('#computeButton') as HTMLButtonElement | null;
 const meshButton = document.querySelector('#meshButton') as HTMLButtonElement | null;
 const saveButton = document.querySelector('#saveButton') as HTMLButtonElement | null;
@@ -334,11 +335,15 @@ const selectionLabel = document.querySelector('#selectionLabel') as HTMLSpanElem
 const selectionHint = document.querySelector('#selectionHint') as HTMLDivElement | null;
 const modeLabel = document.querySelector('#modeLabel') as HTMLSpanElement | null;
 const propertiesBody = document.querySelector('#propertiesBody') as HTMLDivElement | null;
+const contextPanel = document.querySelector('#contextPanel') as HTMLDivElement | null;
+const contextHeader = document.querySelector('#contextHeader') as HTMLDivElement | null;
+const contextClose = document.querySelector('#contextClose') as HTMLButtonElement | null;
 const sourceTable = document.querySelector('#sourceTable') as HTMLDivElement | null;
 const sourceSumMode = document.querySelector('#sourceSumMode') as HTMLDivElement | null;
 const receiverTable = document.querySelector('#receiverTable') as HTMLDivElement | null;
 const panelStats = document.querySelector('#panelStats') as HTMLDivElement | null;
 const panelLegend = document.querySelector('#panelLegend') as HTMLDivElement | null;
+const panelStatsSection = document.querySelector('#panelStatsSection') as HTMLDivElement | null;
 const dbLegend = document.querySelector('#dbLegend') as HTMLDivElement | null;
 const dbLegendGradient = document.querySelector('#dbLegendGradient') as HTMLDivElement | null;
 const dbLegendLabels = document.querySelector('#dbLegendLabels') as HTMLDivElement | null;
@@ -346,6 +351,10 @@ const mapRenderStyleToggle = document.querySelector('#mapRenderStyle') as HTMLIn
 const mapBandStepRow = document.querySelector('#mapBandStepRow') as HTMLDivElement | null;
 const mapBandStepInput = document.querySelector('#mapBandStep') as HTMLInputElement | null;
 const mapAutoScaleToggle = document.querySelector('#mapAutoScale') as HTMLInputElement | null;
+const layersButton = document.querySelector('#layersButton') as HTMLButtonElement | null;
+const layersPopover = document.querySelector('#layersPopover') as HTMLDivElement | null;
+const settingsButton = document.querySelector('#settingsButton') as HTMLButtonElement | null;
+const settingsPopover = document.querySelector('#settingsPopover') as HTMLDivElement | null;
 const exportCsv = document.querySelector('#exportCsv') as HTMLButtonElement | null;
 const snapIndicator = document.querySelector('#snapIndicator') as HTMLDivElement | null;
 const canvasHelp = document.querySelector('#canvasHelp') as HTMLDivElement | null;
@@ -449,7 +458,7 @@ const DEFAULT_MAP_BAND_STEP = 5;
 const MAX_MAP_LEGEND_LABELS = 7;
 // Noise map render steps (px) for preview vs. final quality.
 const RES_HIGH = 2;
-const RES_LOW = 16;
+const RES_LOW = 4;
 // Cap drag updates to ~33 FPS.
 const DRAG_FRAME_MS = 30;
 
@@ -770,7 +779,7 @@ function resizeCanvas() {
 }
 
 function updateScaleBar() {
-  if (!scaleLine || !scaleText || !rulerLabel || !rulerLine) return;
+  if (!scaleLine || !scaleText) return;
   const linePixels = 120;
   const meters = niceDistance(linePixels / pixelsPerMeter);
   const pixels = meters * pixelsPerMeter;
@@ -778,8 +787,8 @@ function updateScaleBar() {
   scaleLine.style.width = `${pixels}px`;
   scaleText.textContent = `${meters} m`;
 
-  rulerLine.style.width = `${pixels}px`;
-  rulerLabel.textContent = `${meters} m`;
+  if (rulerLine) rulerLine.style.width = `${pixels}px`;
+  if (rulerLabel) rulerLabel.textContent = `${meters} m`;
 }
 
 function worldToCanvas(point: Point): Point {
@@ -1695,10 +1704,8 @@ async function computeNoiseMapInternal(options: NoiseMapComputeOptions = {}) {
     // Ensure silent map updates still trigger a frame.
     needsUpdate = true;
     requestRender();
-    const timing = response.timings?.totalMs;
-    const timingLabel = typeof timing === 'number' ? `${timing.toFixed(0)} ms` : 'ready';
     if (!silent) {
-      setMapToast(`Map ready (${timingLabel})`, 'ready', 2000);
+      setMapToast(null);
     }
   } catch (error) {
     if (isStaleError(error)) return;
@@ -2238,6 +2245,15 @@ function setSelection(next: Selection) {
     building.selected = selection.type === 'building' && selection.id === building.id;
   }
   const current = selection;
+  // Reveal the context inspector only when there's an active selection.
+  if (contextPanel) {
+    const isOpen = current.type !== 'none';
+    contextPanel.classList.toggle('is-open', isOpen);
+    contextPanel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+  }
+  if (panelStatsSection) {
+    panelStatsSection.classList.toggle('is-hidden', current.type !== 'panel');
+  }
   if (selectionLabel) {
     selectionLabel.textContent = current.type === 'none'
       ? 'None'
@@ -2560,6 +2576,82 @@ function wireMapSettings() {
     mapAutoScale = mapAutoScaleToggle.checked;
     refreshNoiseMapVisualization();
   });
+}
+
+function wireRefineButton() {
+  if (!refineButton) return;
+  refineButton.addEventListener('click', () => {
+    // Manual refine overrides any queued low-res update.
+    queuedMapResolutionPx = null;
+    setInteractionActive(false);
+    ctx.imageSmoothingEnabled = false;
+    recalculateNoiseMap(RES_HIGH);
+    needsUpdate = true;
+    requestRender();
+  });
+}
+
+function wireLayersPopover() {
+  if (!layersButton || !layersPopover) return;
+  const container = layersButton.closest('.layers-toggle') as HTMLDivElement | null;
+  if (!container) return;
+
+  // Keep the popover lightweight: no modal, just a click-away dropdown.
+  const close = () => {
+    container.classList.remove('is-open');
+    layersButton.setAttribute('aria-expanded', 'false');
+    layersPopover.setAttribute('aria-hidden', 'true');
+  };
+
+  const toggle = () => {
+    const isOpen = container.classList.toggle('is-open');
+    layersButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    layersPopover.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+  };
+
+  layersButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggle();
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!container.contains(event.target as Node)) {
+      close();
+    }
+  });
+
+  window.addEventListener('resize', close);
+}
+
+function wireSettingsPopover() {
+  if (!settingsButton || !settingsPopover) return;
+  const container = settingsButton.closest('.settings-toggle') as HTMLDivElement | null;
+  if (!container) return;
+
+  const close = () => {
+    container.classList.remove('is-open');
+    settingsButton.setAttribute('aria-expanded', 'false');
+    settingsPopover.setAttribute('aria-hidden', 'true');
+  };
+
+  const toggle = () => {
+    const isOpen = container.classList.toggle('is-open');
+    settingsButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    settingsPopover.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+  };
+
+  settingsButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggle();
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!container.contains(event.target as Node)) {
+      close();
+    }
+  });
+
+  window.addEventListener('resize', close);
 }
 
 function wireThemeSwitcher() {
@@ -3615,15 +3707,19 @@ function handlePointerUp() {
   if (dragState) {
     throttledDragMove.flush();
     throttledDragMove.cancel();
-    const shouldRecalculateMap = dragDirty && shouldLiveUpdateMap(dragState);
+    const shouldRecalculateMap = shouldLiveUpdateMap(dragState);
     dragState = null;
     setInteractionActive(false);
+    // Ensure a crisp final map after drag updates and clear queued low-res work.
+    ctx.imageSmoothingEnabled = false;
+    queuedMapResolutionPx = null;
     if (dragDirty) {
       pushHistory({ invalidateMap: false });
     }
     computeScene({ invalidateMap: false });
     if (shouldRecalculateMap) {
       recalculateNoiseMap(RES_HIGH);
+      needsUpdate = true;
     }
   }
 }
@@ -3756,6 +3852,60 @@ function wireSceneName() {
   if (!sceneNameInput) return;
   sceneNameInput.addEventListener('input', () => {
     markDirty();
+  });
+}
+
+function wireContextPanel() {
+  if (contextClose) {
+    // Treat close as clearing selection (panel is tied to selection state).
+    contextClose.addEventListener('click', () => {
+      setSelection({ type: 'none' });
+    });
+  }
+
+  if (!contextPanel || !contextHeader) return;
+
+  let isDragging = false;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
+  let panelWidth = 0;
+  let panelHeight = 0;
+  const dragPadding = 12;
+  const originalUserSelect = document.body.style.userSelect;
+
+  const handleMouseMove = (event: MouseEvent) => {
+    if (!isDragging) return;
+    const maxLeft = window.innerWidth - panelWidth - dragPadding;
+    const maxTop = window.innerHeight - panelHeight - dragPadding;
+    const nextLeft = Math.min(Math.max(event.clientX - dragOffsetX, dragPadding), Math.max(dragPadding, maxLeft));
+    const nextTop = Math.min(Math.max(event.clientY - dragOffsetY, dragPadding), Math.max(dragPadding, maxTop));
+    contextPanel.style.left = `${nextLeft}px`;
+    contextPanel.style.top = `${nextTop}px`;
+  };
+
+  const handleMouseUp = () => {
+    if (!isDragging) return;
+    isDragging = false;
+    document.body.style.userSelect = originalUserSelect;
+    window.removeEventListener('mousemove', handleMouseMove);
+    window.removeEventListener('mouseup', handleMouseUp);
+  };
+
+  contextHeader.addEventListener('mousedown', (event) => {
+    if (event.button !== 0) return;
+    if ((event.target as HTMLElement | null)?.closest('.context-close')) return;
+    const rect = contextPanel.getBoundingClientRect();
+    panelWidth = rect.width;
+    panelHeight = rect.height;
+    dragOffsetX = event.clientX - rect.left;
+    dragOffsetY = event.clientY - rect.top;
+    contextPanel.style.left = `${rect.left}px`;
+    contextPanel.style.top = `${rect.top}px`;
+    contextPanel.style.right = 'auto';
+    isDragging = true;
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
   });
 }
 
@@ -4113,7 +4263,11 @@ function init() {
   wireComputeButton();
   wireMeshButton();
   wireMapSettings();
+  wireRefineButton();
+  wireLayersPopover();
+  wireSettingsPopover();
   wireSceneName();
+  wireContextPanel();
   wireSaveLoad();
   wireCanvasHelp();
   wireActionOverflow();
