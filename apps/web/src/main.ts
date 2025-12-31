@@ -334,11 +334,14 @@ const selectionLabel = document.querySelector('#selectionLabel') as HTMLSpanElem
 const selectionHint = document.querySelector('#selectionHint') as HTMLDivElement | null;
 const modeLabel = document.querySelector('#modeLabel') as HTMLSpanElement | null;
 const propertiesBody = document.querySelector('#propertiesBody') as HTMLDivElement | null;
+const contextPanel = document.querySelector('#contextPanel') as HTMLDivElement | null;
+const contextClose = document.querySelector('#contextClose') as HTMLButtonElement | null;
 const sourceTable = document.querySelector('#sourceTable') as HTMLDivElement | null;
 const sourceSumMode = document.querySelector('#sourceSumMode') as HTMLDivElement | null;
 const receiverTable = document.querySelector('#receiverTable') as HTMLDivElement | null;
 const panelStats = document.querySelector('#panelStats') as HTMLDivElement | null;
 const panelLegend = document.querySelector('#panelLegend') as HTMLDivElement | null;
+const panelStatsSection = document.querySelector('#panelStatsSection') as HTMLDivElement | null;
 const dbLegend = document.querySelector('#dbLegend') as HTMLDivElement | null;
 const dbLegendGradient = document.querySelector('#dbLegendGradient') as HTMLDivElement | null;
 const dbLegendLabels = document.querySelector('#dbLegendLabels') as HTMLDivElement | null;
@@ -346,6 +349,8 @@ const mapRenderStyleToggle = document.querySelector('#mapRenderStyle') as HTMLIn
 const mapBandStepRow = document.querySelector('#mapBandStepRow') as HTMLDivElement | null;
 const mapBandStepInput = document.querySelector('#mapBandStep') as HTMLInputElement | null;
 const mapAutoScaleToggle = document.querySelector('#mapAutoScale') as HTMLInputElement | null;
+const layersButton = document.querySelector('#layersButton') as HTMLButtonElement | null;
+const layersPopover = document.querySelector('#layersPopover') as HTMLDivElement | null;
 const exportCsv = document.querySelector('#exportCsv') as HTMLButtonElement | null;
 const snapIndicator = document.querySelector('#snapIndicator') as HTMLDivElement | null;
 const canvasHelp = document.querySelector('#canvasHelp') as HTMLDivElement | null;
@@ -770,7 +775,7 @@ function resizeCanvas() {
 }
 
 function updateScaleBar() {
-  if (!scaleLine || !scaleText || !rulerLabel || !rulerLine) return;
+  if (!scaleLine || !scaleText) return;
   const linePixels = 120;
   const meters = niceDistance(linePixels / pixelsPerMeter);
   const pixels = meters * pixelsPerMeter;
@@ -778,8 +783,8 @@ function updateScaleBar() {
   scaleLine.style.width = `${pixels}px`;
   scaleText.textContent = `${meters} m`;
 
-  rulerLine.style.width = `${pixels}px`;
-  rulerLabel.textContent = `${meters} m`;
+  if (rulerLine) rulerLine.style.width = `${pixels}px`;
+  if (rulerLabel) rulerLabel.textContent = `${meters} m`;
 }
 
 function worldToCanvas(point: Point): Point {
@@ -2238,6 +2243,15 @@ function setSelection(next: Selection) {
     building.selected = selection.type === 'building' && selection.id === building.id;
   }
   const current = selection;
+  // Reveal the context inspector only when there's an active selection.
+  if (contextPanel) {
+    const isOpen = current.type !== 'none';
+    contextPanel.classList.toggle('is-open', isOpen);
+    contextPanel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+  }
+  if (panelStatsSection) {
+    panelStatsSection.classList.toggle('is-hidden', current.type !== 'panel');
+  }
   if (selectionLabel) {
     selectionLabel.textContent = current.type === 'none'
       ? 'None'
@@ -2560,6 +2574,38 @@ function wireMapSettings() {
     mapAutoScale = mapAutoScaleToggle.checked;
     refreshNoiseMapVisualization();
   });
+}
+
+function wireLayersPopover() {
+  if (!layersButton || !layersPopover) return;
+  const container = layersButton.closest('.layers-toggle') as HTMLDivElement | null;
+  if (!container) return;
+
+  // Keep the popover lightweight: no modal, just a click-away dropdown.
+  const close = () => {
+    container.classList.remove('is-open');
+    layersButton.setAttribute('aria-expanded', 'false');
+    layersPopover.setAttribute('aria-hidden', 'true');
+  };
+
+  const toggle = () => {
+    const isOpen = container.classList.toggle('is-open');
+    layersButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    layersPopover.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+  };
+
+  layersButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggle();
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!container.contains(event.target as Node)) {
+      close();
+    }
+  });
+
+  window.addEventListener('resize', close);
 }
 
 function wireThemeSwitcher() {
@@ -3759,6 +3805,14 @@ function wireSceneName() {
   });
 }
 
+function wireContextPanel() {
+  if (!contextClose) return;
+  // Treat close as clearing selection (panel is tied to selection state).
+  contextClose.addEventListener('click', () => {
+    setSelection({ type: 'none' });
+  });
+}
+
 function buildScenePayload() {
   return {
     version: 1,
@@ -4113,7 +4167,9 @@ function init() {
   wireComputeButton();
   wireMeshButton();
   wireMapSettings();
+  wireLayersPopover();
   wireSceneName();
+  wireContextPanel();
   wireSaveLoad();
   wireCanvasHelp();
   wireActionOverflow();

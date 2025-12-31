@@ -25,351 +25,212 @@
     </script>
   </head>
   <body>
-    <div class="app">
-      <header class="topbar ui-surface">
-        <div class="topbar-left">
-          <div class="topbar-actions">
-            <button class="ghost ui-button" id="undoButton" type="button" title="Undo the last change.">Undo</button>
-            <button class="ghost ui-button" id="redoButton" type="button" title="Redo the last change.">Redo</button>
+    <div class="app-shell">
+      <!-- Fullscreen map canvas layer. -->
+      <div class="canvas-frame">
+        <canvas id="mapCanvas"></canvas>
+        <div class="canvas-status">
+          <div class="scale-bar">
+            <div class="scale-line" id="scaleLine"></div>
+            <div class="scale-text" id="scaleText">100 m</div>
+          </div>
+          <div class="canvas-status-line" aria-live="polite">
+            <span class="canvas-status-item">x: <span id="debug-x">0.0</span> m y: <span id="debug-y">0.0</span> m</span>
+            <span class="canvas-status-sep">|</span>
+            <span class="canvas-status-item">Mode: <span id="debug-mode">Select</span></span>
+            <span class="canvas-status-sep">|</span>
+            <span class="canvas-status-item">Layer: <span id="debug-layer">Sources</span></span>
           </div>
         </div>
-        <div class="topbar-center">
-          <div class="brand brand--debossed">
-            <div class="brand-icon" aria-hidden="true">
-              <span class="brand-ring ring-1"></span>
-              <span class="brand-ring ring-2"></span>
-              <span class="brand-ring ring-3"></span>
-              <span class="brand-core"></span>
+        <div class="snap-indicator" id="snapIndicator"></div>
+        <div class="canvas-corner">
+          <div class="db-legend" id="dbLegend" role="group" aria-label="Decibel legend">
+            <div class="db-legend-bar">
+              <div class="db-legend-gradient" id="dbLegendGradient" aria-hidden="true"></div>
+              <div class="db-legend-labels" id="dbLegendLabels">
+                <span>30 dB</span>
+                <span>85 dB</span>
+              </div>
             </div>
-            <div class="brand-title">geonoise</div>
+          </div>
+          <div class="canvas-help" id="canvasHelp">
+            <button
+              class="ghost ui-button canvas-help-button"
+              id="canvasHelpButton"
+              type="button"
+              aria-expanded="false"
+              aria-label="Canvas help"
+            >
+              ?
+            </button>
+            <div class="canvas-help-tooltip" id="canvasHelpTooltip" role="tooltip">
+              <div class="canvas-help-title">Canvas controls</div>
+              <div class="canvas-help-body">Drag: pan • Scroll: zoom • Click: select • Shift+Drag: duplicate</div>
+              <button class="ghost ui-button canvas-help-dismiss" id="canvasHelpDismiss" type="button">Got it</button>
+            </div>
           </div>
         </div>
-        <div class="topbar-right">
-          <div class="control-module">
-            <div class="run-group">
-              <button
-                class="primary ui-button"
-                id="computeButton"
-                type="button"
-                title="Run propagation and update receiver/grid levels."
-              >
-                Compute
-              </button>
-              <!-- Whole-scene noise map ("Mesh All"): compute a padded grid and render as a heatmap overlay. -->
-              <button class="primary ui-button" id="meshButton" type="button" title="Generate a whole-scene noise map.">
-                Generate Map
-              </button>
-              <div class="status-chip status-chip--small" id="computeChip" aria-label="Compute status">Ready</div>
-            </div>
-            <div class="run-options">
-              <label for="computePreference">CPU</label>
-              <div class="select-shell">
-                <select class="ui-inset" id="computePreference">
-                  <option value="cpu">CPU</option>
-                </select>
-              </div>
-            </div>
-            <!-- Lightweight feedback for heavy map computation (keeps UI responsive). -->
-            <div class="map-toast" id="mapToast" role="status" aria-live="polite"></div>
-          </div>
-          <button class="ghost ui-button" id="aboutButton" type="button" title="Model notes, assumptions, and limitations.">
-            About
-          </button>
+        <div class="canvas-footer">
+          <div class="footer-pill">Units: meters</div>
         </div>
-      </header>
+      </div>
 
-      <div class="content">
-        <aside class="sidebar">
-          <section class="panel ui-surface">
-            <h2>Tools</h2>
-            <div class="tool-groups" id="toolGrid">
-              <div class="tool-group">
-                <div class="tool-group-title">Edit</div>
-                <div class="tool-grid">
-                  <button class="tool-button ui-button is-active" data-tool="select" type="button">Select (V)</button>
-                  <button class="tool-button ui-button" data-tool="delete" type="button">Delete (Del)</button>
-                </div>
-              </div>
-              <div class="tool-group">
-                <div class="tool-group-title">Add</div>
-                <div class="tool-grid">
-                  <button class="tool-button ui-button" data-tool="add-source" type="button">Source (S)</button>
-                  <button class="tool-button ui-button" data-tool="add-receiver" type="button">Receiver (R)</button>
-                  <button class="tool-button ui-button" data-tool="add-barrier" type="button">Barrier (B)</button>
-                  <button class="tool-button ui-button" data-tool="add-building" type="button">Building (H)</button>
-                  <button class="tool-button ui-button" data-tool="add-panel" type="button">Measure Grid (G)</button>
-                </div>
-              </div>
-              <div class="tool-group">
-                <div class="tool-group-title">Inspect</div>
-                <div class="tool-grid">
-                  <button class="tool-button ui-button" data-tool="measure" type="button">Measure (M)</button>
-                </div>
-              </div>
+      <!-- Floating UI overlay (non-blocking except for interactive elements). -->
+      <div class="ui-layer">
+        <header class="topbar topbar-floating">
+          <div class="topbar-left">
+            <div class="topbar-actions">
+              <button class="ghost ui-button" id="undoButton" type="button" title="Undo the last change.">Undo</button>
+              <button class="ghost ui-button" id="redoButton" type="button" title="Redo the last change.">Redo</button>
             </div>
-            <div class="tool-instruction" id="toolInstruction"></div>
-          </section>
-
-          <section class="panel ui-surface">
-            <h2>Propagation model</h2>
-            <div class="properties">
-              <div class="property-row property-row-stack">
-                <div class="field-label">
-                  <span>Spreading</span>
-                  <span class="tooltip">
-                    <button class="tooltip-trigger ui-button" type="button" aria-label="Spreading info">?</button>
-                    <span class="tooltip-content">
-                      <span class="tooltip-note">Distance loss model (point vs line sources).</span>
-                    </span>
-                  </span>
-                </div>
-                <select class="ui-inset" id="propagationSpreading">
-                  <option value="spherical">Spherical</option>
-                  <option value="cylindrical">Cylindrical</option>
-                </select>
-                <div class="field-help">Controls distance loss.</div>
+          </div>
+          <div class="topbar-center">
+            <div class="brand brand--debossed">
+              <div class="brand-icon" aria-hidden="true">
+                <span class="brand-ring ring-1"></span>
+                <span class="brand-ring ring-2"></span>
+                <span class="brand-ring ring-3"></span>
+                <span class="brand-core"></span>
               </div>
-              <div class="property-row property-row-stack">
-                <div class="field-label">
-                  <span>Atmospheric</span>
-                  <span class="tooltip">
-                    <button class="tooltip-trigger ui-button" type="button" aria-label="Atmospheric info">?</button>
-                    <span class="tooltip-content">
-                      <span class="tooltip-note">Air absorption vs frequency.</span>
-                    </span>
-                  </span>
-                </div>
-                <select class="ui-inset" id="propagationAbsorption">
-                  <option value="none">None</option>
-                  <option value="simple">Simple</option>
-                  <option value="iso9613">ISO 9613-1</option>
-                </select>
-                <div class="field-help">Controls air absorption.</div>
-              </div>
-              <label class="toggle">
-                <input type="checkbox" id="propagationGroundReflection" />
-                <span>Ground effects</span>
-              </label>
-              <div class="field-help" id="propagationGroundHelp">Includes reflection + absorption by ground.</div>
-              <div class="ground-details" id="propagationGroundDetails">
-                <div class="property-row property-row-stack">
-                <div class="field-label">
-                  <span>Ground model</span>
-                  <span class="tooltip">
-                    <button class="tooltip-trigger ui-button" type="button" aria-label="Ground model info">?</button>
-                    <span class="tooltip-content">
-                      <span class="tooltip-title">Direct + reflected paths</span>
-                      <pre class="tooltip-diagram">source o----&gt; receiver
-      \\      /
-       \\____/ ground</pre>
-                        <span class="tooltip-note">Detailed mode can raise or lower levels based on phase.</span>
-                      </span>
-                    </span>
-                  </div>
-                  <select class="ui-inset" id="propagationGroundModel">
-                    <optgroup label="Recommended">
-                      <option value="legacy">Simple (ISO 9613-2) - Recommended</option>
-                    </optgroup>
-                    <optgroup label="Advanced">
-                      <option value="twoRayPhasor">Detailed (Two-ray phasor) - Frequency-dependent</option>
-                    </optgroup>
-                  </select>
-                  <div class="field-help" id="propagationGroundModelHelp"></div>
-                </div>
-                <div class="property-row property-row-stack">
-                <div class="field-label">
-                  <span>Ground surface</span>
-                  <span class="tooltip">
-                    <button class="tooltip-trigger ui-button" type="button" aria-label="Ground surface info">?</button>
-                    <span class="tooltip-content">
-                      <span class="tooltip-note">Porous ground absorbs more; hard ground reflects more.</span>
-                    </span>
-                  </span>
-                </div>
-                  <select class="ui-inset" id="propagationGroundType">
-                    <option value="hard">Hard (concrete/water)</option>
-                    <option value="mixed">Mixed</option>
-                    <option value="soft">Porous (grass/soil)</option>
-                  </select>
-                  <div class="field-help">Porous ground absorbs more; hard ground reflects more.</div>
-                </div>
-              </div>
-              <div class="property-row">
-                <span>Max distance (m)</span>
-                <input class="ui-inset" id="propagationMaxDistance" type="number" min="1" step="1" />
-              </div>
+              <div class="brand-title">geonoise</div>
             </div>
-            <div class="tool-note">Ground + absorption affect results today. Barriers support simple screen attenuation; multi-reflections are still TODO.</div>
-          </section>
-
-          <section class="panel ui-surface">
-            <h2>Layers</h2>
-            <label class="toggle">
-              <input type="checkbox" id="layerSources" checked />
-              <span>Sources</span>
-            </label>
-            <label class="toggle">
-              <input type="checkbox" id="layerReceivers" checked />
-              <span>Receivers</span>
-            </label>
-            <label class="toggle">
-              <input type="checkbox" id="layerPanels" checked />
-              <span>Measure Grids</span>
-            </label>
-            <!-- Heatmap layer produced by Generate Map. -->
-            <label class="toggle">
-              <input type="checkbox" id="layerNoiseMap" />
-              <span>Noise Map</span>
-            </label>
-            <label class="toggle">
-              <input type="checkbox" id="layerGrid" />
-              <span>Grid Overlay</span>
-            </label>
-          </section>
-
-          <section class="panel ui-surface">
-            <h2>Ruler</h2>
-            <div class="ruler-card">
-              <div class="ruler-label" id="rulerLabel">50 m</div>
-              <div class="ruler-line" id="rulerLine"></div>
-            </div>
-            <div class="ruler-note">Uses local meters ENU.</div>
-          </section>
-
-          <section class="panel ui-surface">
-            <h2>Scene</h2>
-            <div class="scene-meta">
-              <div>Sources: <span id="countSources">2</span></div>
-              <div>Receivers: <span id="countReceivers">2</span></div>
-              <div>Measure grids: <span id="countPanels">1</span></div>
-            </div>
-          </section>
-        </aside>
-
-        <main class="canvas-shell">
-          <div class="canvas-frame ui-surface">
-            <canvas id="mapCanvas"></canvas>
-            <div class="canvas-status">
-              <div class="scale-bar">
-                <div class="scale-line" id="scaleLine"></div>
-                <div class="scale-text" id="scaleText">100 m</div>
-              </div>
-              <div class="canvas-status-line" aria-live="polite">
-                <span class="canvas-status-item">x: <span id="debug-x">0.0</span> m y: <span id="debug-y">0.0</span> m</span>
-                <span class="canvas-status-sep">|</span>
-                <span class="canvas-status-item">Mode: <span id="debug-mode">Select</span></span>
-                <span class="canvas-status-sep">|</span>
-                <span class="canvas-status-item">Layer: <span id="debug-layer">Sources</span></span>
-              </div>
-            </div>
-            <div class="snap-indicator" id="snapIndicator"></div>
-            <div class="canvas-corner">
-              <div class="db-legend" id="dbLegend" role="group" aria-label="Decibel legend">
-                <div class="db-legend-bar">
-                  <div class="db-legend-gradient" id="dbLegendGradient" aria-hidden="true"></div>
-                  <div class="db-legend-labels" id="dbLegendLabels">
-                    <span>30 dB</span>
-                    <span>85 dB</span>
-                  </div>
-                </div>
-              </div>
-              <div class="canvas-help" id="canvasHelp">
+          </div>
+          <div class="topbar-right">
+            <div class="control-module">
+              <div class="run-group">
                 <button
-                  class="ghost ui-button canvas-help-button"
-                  id="canvasHelpButton"
+                  class="primary ui-button"
+                  id="computeButton"
                   type="button"
-                  aria-expanded="false"
-                  aria-label="Canvas help"
+                  title="Run propagation and update receiver/grid levels."
                 >
-                  ?
+                  Compute
                 </button>
-                <div class="canvas-help-tooltip" id="canvasHelpTooltip" role="tooltip">
-                  <div class="canvas-help-title">Canvas controls</div>
-                  <div class="canvas-help-body">Drag: pan • Scroll: zoom • Click: select • Shift+Drag: duplicate</div>
-                  <button class="ghost ui-button canvas-help-dismiss" id="canvasHelpDismiss" type="button">Got it</button>
+                <!-- Whole-scene noise map ("Mesh All"): compute a padded grid and render as a heatmap overlay. -->
+                <button class="primary ui-button" id="meshButton" type="button" title="Generate a whole-scene noise map.">
+                  Generate Map
+                </button>
+                <div class="status-chip status-chip--small" id="computeChip" aria-label="Compute status">Ready</div>
+              </div>
+              <div class="run-options">
+                <label for="computePreference">CPU</label>
+                <div class="select-shell">
+                  <select class="ui-inset" id="computePreference">
+                    <option value="cpu">CPU</option>
+                  </select>
+                </div>
+              </div>
+              <!-- Lightweight feedback for heavy map computation (keeps UI responsive). -->
+              <div class="map-toast" id="mapToast" role="status" aria-live="polite"></div>
+            </div>
+            <div class="layers-toggle">
+              <button class="ghost ui-button" id="layersButton" type="button" aria-expanded="false">
+                Layers
+              </button>
+              <div class="layers-popover" id="layersPopover" aria-hidden="true">
+                <div class="layers-section">
+                  <div class="layers-title">Layers</div>
+                  <label class="toggle">
+                    <input type="checkbox" id="layerSources" checked />
+                    <span>Sources</span>
+                  </label>
+                  <label class="toggle">
+                    <input type="checkbox" id="layerReceivers" checked />
+                    <span>Receivers</span>
+                  </label>
+                  <label class="toggle">
+                    <input type="checkbox" id="layerPanels" checked />
+                    <span>Measure Grids</span>
+                  </label>
+                  <!-- Heatmap layer produced by Generate Map. -->
+                  <label class="toggle">
+                    <input type="checkbox" id="layerNoiseMap" />
+                    <span>Noise Map</span>
+                  </label>
+                  <label class="toggle">
+                    <input type="checkbox" id="layerGrid" />
+                    <span>Grid Overlay</span>
+                  </label>
+                </div>
+                <div class="layers-divider"></div>
+                <div class="layers-section">
+                  <div class="layers-title">Map Settings</div>
+                  <label class="toggle">
+                    <input type="checkbox" id="mapRenderStyle" />
+                    <span>Render mode: Smooth / Contours</span>
+                  </label>
+                  <div class="property-row map-band-step" id="mapBandStepRow">
+                    <span>Band Step (dB)</span>
+                    <input class="ui-inset" id="mapBandStep" type="number" min="1" max="20" step="1" value="5" />
+                  </div>
+                  <label class="toggle">
+                    <input type="checkbox" id="mapAutoScale" checked />
+                    <span>Auto-scale colors</span>
+                  </label>
                 </div>
               </div>
             </div>
+            <button class="ghost ui-button" id="aboutButton" type="button" title="Model notes, assumptions, and limitations.">
+              About
+            </button>
           </div>
-          <div class="canvas-footer">
-            <div class="footer-pill">Units: meters</div>
-          </div>
-        </main>
+        </header>
 
-        <aside class="inspector">
-          <section class="panel ui-surface">
-            <h2>Inspector</h2>
-            <div class="inspector-body">
-              <div class="inspector-row">
-                <span>Selected</span>
-                <strong id="selectionLabel">None</strong>
-              </div>
-              <div class="inspector-row">
-                <span>Mode</span>
-                <strong id="modeLabel">Select</strong>
-              </div>
-              <div class="inspector-row">
-                <span>Snap</span>
-                <strong>5 m</strong>
-              </div>
-              <div class="inspector-hint" id="selectionHint">Click an item to edit it.</div>
+        <!-- Bottom dock for creation tools. -->
+        <div class="dock">
+          <div class="dock-tools" id="toolGrid">
+            <button class="dock-button ui-button is-active" data-tool="select" type="button" aria-label="Select (V)">
+              <span class="dock-label">V</span>
+            </button>
+            <button class="dock-button ui-button" data-tool="add-source" type="button" aria-label="Add Source (S)">
+              <span class="dock-label">S</span>
+            </button>
+            <button class="dock-button ui-button" data-tool="add-receiver" type="button" aria-label="Add Receiver (R)">
+              <span class="dock-label">R</span>
+            </button>
+            <button class="dock-button ui-button" data-tool="add-barrier" type="button" aria-label="Add Barrier (B)">
+              <span class="dock-label">B</span>
+            </button>
+            <button class="dock-button ui-button" data-tool="add-building" type="button" aria-label="Add Building (H)">
+              <span class="dock-label">H</span>
+            </button>
+            <button class="dock-button ui-button" data-tool="add-panel" type="button" aria-label="Add Measure Grid (G)">
+              <span class="dock-label">G</span>
+            </button>
+          </div>
+        </div>
+        <div class="dock-instruction" id="toolInstruction"></div>
+
+        <!-- Contextual inspector shown only when a selection exists. -->
+        <aside class="context-panel" id="contextPanel" aria-hidden="true">
+          <div class="context-header">
+            <div class="context-title">Inspector</div>
+            <button class="context-close ui-button" id="contextClose" type="button" aria-label="Close inspector">×</button>
+          </div>
+          <div class="inspector-body">
+            <div class="inspector-row">
+              <span>Selected</span>
+              <strong id="selectionLabel">None</strong>
             </div>
-          </section>
-
-          <section class="panel ui-surface">
-            <h2>Properties</h2>
+            <div class="inspector-row">
+              <span>Mode</span>
+              <strong id="modeLabel">Select</strong>
+            </div>
+            <div class="inspector-row">
+              <span>Snap</span>
+              <strong>5 m</strong>
+            </div>
+            <div class="inspector-hint" id="selectionHint">Click an item to edit it.</div>
+          </div>
+          <div class="context-section">
+            <div class="context-section-title">Properties</div>
             <div class="properties" id="propertiesBody">Select an item to edit its properties.</div>
-          </section>
-
-          <details class="panel ui-surface panel-collapsible" id="mapSettingsPanel" open>
-            <summary class="panel-summary">
-              <h2>Map Settings</h2>
-            </summary>
-            <div class="panel-body">
-              <label class="toggle">
-                <input type="checkbox" id="mapRenderStyle" />
-                <span>Render mode: Smooth (Gradient) / Contours (Banded)</span>
-              </label>
-              <div class="property-row map-band-step" id="mapBandStepRow">
-                <span>Band Step (dB)</span>
-                <input class="ui-inset" id="mapBandStep" type="number" min="1" max="20" step="1" value="5" />
-              </div>
-              <label class="toggle">
-                <input type="checkbox" id="mapAutoScale" checked />
-                <span>Auto-scale colors</span>
-              </label>
-            </div>
-          </details>
-
-          <section class="panel ui-surface">
-            <h2>Sources</h2>
-            <div class="results-section">
-              <div class="results-table" id="sourceTable"></div>
-              <div class="field-help" id="sourceSumMode">Summation: Energetic (dB)</div>
-            </div>
-          </section>
-
-          <section class="panel ui-surface">
-            <h2>Measure Grid Stats</h2>
-            <div class="results-section">
-              <div class="panel-legend" id="panelLegend"></div>
-              <div class="panel-stats" id="panelStats"></div>
-            </div>
-          </section>
-
-          <section class="panel ui-surface">
-            <h2>Results</h2>
-            <div class="results-section">
-              <div class="results-title">Receivers</div>
-              <div class="results-table" id="receiverTable"></div>
-            </div>
-            <button class="ghost ui-button" id="exportCsv" type="button">Export CSV</button>
-          </section>
-
-          <section class="panel ui-surface">
-            <h2>Notes</h2>
-            <p class="note">Drag nodes and measure grids to trigger recompute once wired.</p>
-          </section>
+          </div>
+          <div class="context-section" id="panelStatsSection">
+            <div class="context-section-title">Measure Grid Stats</div>
+            <div class="panel-legend" id="panelLegend"></div>
+            <div class="panel-stats" id="panelStats"></div>
+          </div>
         </aside>
       </div>
     </div>
