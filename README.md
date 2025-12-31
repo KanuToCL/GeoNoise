@@ -107,6 +107,15 @@ The noise map computes SPL on a grid over scene bounds (merged with the viewport
 
 ## How To Use
 
+## Installation
+
+1. Install Node.js (>= 18) and npm.
+2. Install dependencies:
+
+```
+npm install
+```
+
 ### Run the web app
 
 ```
@@ -140,4 +149,3 @@ Then open `http://localhost:5173` (or your `PORT` value if set).
 
 - This is a planning-grade model intended for fast iteration, not a certified compliance tool.
 - The physics model is explicit and readable in the engine source; contributions that improve accuracy or validation are welcome.
-
