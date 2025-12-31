@@ -35,11 +35,22 @@
             <div class="scale-text" id="scaleText">100 m</div>
           </div>
           <div class="canvas-status-line" aria-live="polite">
-            <span class="canvas-status-item">x: <span id="debug-x">0.0</span> m y: <span id="debug-y">0.0</span> m</span>
+            <span class="canvas-status-item">x: <span id="debug-x">0.0</span>m y: <span id="debug-y">0.0</span>m</span>
+            <span class="canvas-status-sep">|</span>
+            <span class="canvas-status-item">Units: Meters</span>
             <span class="canvas-status-sep">|</span>
             <span class="canvas-status-item">Mode: <span id="debug-mode">Select</span></span>
             <span class="canvas-status-sep">|</span>
-            <span class="canvas-status-item">Layer: <span id="debug-layer">Sources</span></span>
+            <button
+              class="status-refine-button"
+              id="refineButton"
+              type="button"
+              title="Force high-quality refine"
+              aria-label="Force high-quality refine"
+            >
+              <span class="status-refine-icon" aria-hidden="true">⟳</span>
+              <span>Refine</span>
+            </button>
           </div>
         </div>
         <div class="snap-indicator" id="snapIndicator"></div>
@@ -69,9 +80,6 @@
               <button class="ghost ui-button canvas-help-dismiss" id="canvasHelpDismiss" type="button">Got it</button>
             </div>
           </div>
-        </div>
-        <div class="canvas-footer">
-          <div class="footer-pill">Units: meters</div>
         </div>
       </div>
 
@@ -112,7 +120,7 @@
                 </button>
                 <div class="status-chip status-chip--small" id="computeChip" aria-label="Compute status">Ready</div>
               </div>
-              <div class="run-options">
+              <div class="run-options is-hidden" aria-hidden="true">
                 <label for="computePreference">CPU</label>
                 <div class="select-shell">
                   <select class="ui-inset" id="computePreference">
@@ -170,6 +178,49 @@
                 </div>
               </div>
             </div>
+            <div class="settings-toggle">
+              <button
+                class="ghost ui-button icon-button"
+                id="settingsButton"
+                type="button"
+                aria-expanded="false"
+                aria-controls="settingsPopover"
+                aria-label="Simulation physics"
+                title="Simulation physics settings"
+              >
+                <span aria-hidden="true">⚙</span>
+              </button>
+              <div class="settings-popover" id="settingsPopover" aria-hidden="true">
+                <div class="settings-title">Simulation Physics</div>
+                <div class="settings-section">
+                  <label class="property-row property-row-stack">
+                    <span>Atmospheric Model</span>
+                    <select class="ui-inset" id="propagationAbsorption">
+                      <option value="iso9613">ISO 9613-1</option>
+                      <option value="simple">Simple</option>
+                    </select>
+                  </label>
+                  <label class="toggle" for="propagationGroundReflection">
+                    <input type="checkbox" id="propagationGroundReflection" />
+                    <span>Ground Reflection</span>
+                  </label>
+                  <label class="property-row property-row-stack">
+                    <span>Ground Algorithm</span>
+                    <select class="ui-inset" id="propagationGroundModel">
+                      <option value="twoRayPhasor">Two-Ray</option>
+                      <option value="legacy">ISO 9613-2</option>
+                    </select>
+                  </label>
+                  <label class="property-row property-row-stack">
+                    <span>Spreading Loss</span>
+                    <select class="ui-inset" id="propagationSpreading">
+                      <option value="spherical">Spherical</option>
+                      <option value="cylindrical">Cylindrical</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+            </div>
             <button class="ghost ui-button" id="aboutButton" type="button" title="Model notes, assumptions, and limitations.">
               About
             </button>
@@ -203,7 +254,7 @@
 
         <!-- Contextual inspector shown only when a selection exists. -->
         <aside class="context-panel" id="contextPanel" aria-hidden="true">
-          <div class="context-header">
+          <div class="context-header" id="contextHeader">
             <div class="context-title">Inspector</div>
             <button class="context-close ui-button" id="contextClose" type="button" aria-label="Close inspector">×</button>
           </div>
