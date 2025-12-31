@@ -231,6 +231,9 @@ type NoiseMap = {
   texture: HTMLCanvasElement;
 };
 
+type MapRange = { min: number; max: number };
+type MapRenderStyle = 'Smooth' | 'Banded';
+
 type Tool = 'select' | 'add-source' | 'add-receiver' | 'add-panel' | 'add-barrier' | 'add-building' | 'measure' | 'delete';
 
 type Selection =
@@ -334,6 +337,12 @@ const sourceSumMode = document.querySelector('#sourceSumMode') as HTMLDivElement
 const receiverTable = document.querySelector('#receiverTable') as HTMLDivElement | null;
 const panelStats = document.querySelector('#panelStats') as HTMLDivElement | null;
 const panelLegend = document.querySelector('#panelLegend') as HTMLDivElement | null;
+const dbLegend = document.querySelector('#dbLegend') as HTMLDivElement | null;
+const dbLegendGradient = document.querySelector('#dbLegendGradient') as HTMLDivElement | null;
+const dbLegendLabels = document.querySelector('#dbLegendLabels') as HTMLDivElement | null;
+const mapRenderStyleToggle = document.querySelector('#mapRenderStyle') as HTMLInputElement | null;
+const mapBandStepInput = document.querySelector('#mapBandStep') as HTMLInputElement | null;
+const mapAutoScaleToggle = document.querySelector('#mapAutoScale') as HTMLInputElement | null;
 const exportCsv = document.querySelector('#exportCsv') as HTMLButtonElement | null;
 const snapIndicator = document.querySelector('#snapIndicator') as HTMLDivElement | null;
 const canvasHelp = document.querySelector('#canvasHelp') as HTMLDivElement | null;
@@ -432,6 +441,10 @@ const layers = {
   grid: false,
 };
 
+const DEFAULT_MAP_RANGE: MapRange = { min: 30, max: 85 };
+const DEFAULT_MAP_BAND_STEP = 5;
+const MAX_MAP_LEGEND_LABELS = 7;
+
 let pixelsPerMeter = 3;
 let activeTool: Tool = 'select';
 let selection: Selection = { type: 'none' };
@@ -451,6 +464,10 @@ let barrierDragActive = false;
 let lastComputeAt = 0;
 let results: SceneResults = { receivers: [], panels: [] };
 let noiseMap: NoiseMap | null = null;
+let currentMapRange: MapRange | null = null;
+let mapRenderStyle: MapRenderStyle = 'Smooth';
+let mapBandStep = DEFAULT_MAP_BAND_STEP;
+let mapAutoScale = true;
 let receiverEnergyTotals = new Map<string, number>();
 let panelEnergyTotals = new Map<string, Float64Array>();
 let dragContribution: DragContribution | null = null;
@@ -823,6 +840,95 @@ function colorToCss(color: { r: number; g: number; b: number }) {
   return `rgb(${color.r}, ${color.g}, ${color.b})`;
 }
 
+function formatLegendLevel(value: number) {
+  const text = formatLevel(value);
+  return text.endsWith('.0') ? text.slice(0, -2) : text;
+}
+
+function computeMapRange(values: number[]): MapRange | null {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const value of values) {
+    if (!Number.isFinite(value) || value <= MIN_LEVEL) continue;
+    if (value < min) min = value;
+    if (value > max) max = value;
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  return { min, max };
+}
+
+function getActiveMapRange(): MapRange {
+  if (mapAutoScale && currentMapRange) return currentMapRange;
+  return DEFAULT_MAP_RANGE;
+}
+
+function getMapBandStep() {
+  if (!Number.isFinite(mapBandStep) || mapBandStep <= 0) return DEFAULT_MAP_BAND_STEP;
+  return mapBandStep;
+}
+
+function snapMapValue(value: number) {
+  if (mapRenderStyle !== 'Banded') return value;
+  const step = getMapBandStep();
+  return Math.floor(value / step) * step;
+}
+
+function buildSmoothLegendStops() {
+  return sampleRamp
+    .map((stop) => `${colorToCss(stop.color)} ${Math.round(stop.stop * 100)}%`)
+    .join(', ');
+}
+
+function buildBandedLegendStops(range: MapRange, step: number) {
+  const span = range.max - range.min;
+  if (!(span > 0) || !Number.isFinite(span)) {
+    const color = colorToCss(getSampleColor(0));
+    return `${color} 0%, ${color} 100%`;
+  }
+
+  const clamp01 = (value: number) => Math.min(Math.max(value, 0), 1);
+  const start = Math.floor(range.min / step) * step;
+  const end = Math.ceil(range.max / step) * step;
+  const stops: string[] = [];
+
+  for (let value = start; value < end - 1e-6; value += step) {
+    const next = value + step;
+    const startRatio = (value - range.min) / span;
+    const endRatio = (next - range.min) / span;
+    const startPos = clamp01(startRatio);
+    const endPos = clamp01(endRatio);
+    if (endPos <= 0 || startPos >= 1) continue;
+    const color = colorToCss(getSampleColor(startRatio));
+    stops.push(`${color} ${(startPos * 100).toFixed(2)}%`, `${color} ${(endPos * 100).toFixed(2)}%`);
+  }
+
+  if (!stops.length) {
+    const color = colorToCss(getSampleColor(0));
+    return `${color} 0%, ${color} 100%`;
+  }
+
+  return stops.join(', ');
+}
+
+function buildBandedLegendLabels(range: MapRange, step: number) {
+  const labels: number[] = [range.min];
+  const epsilon = 1e-6;
+  let value = Math.ceil((range.min + epsilon) / step) * step;
+  for (; value < range.max - epsilon; value += step) {
+    labels.push(value);
+  }
+  labels.push(range.max);
+
+  if (labels.length <= MAX_MAP_LEGEND_LABELS) {
+    return labels;
+  }
+
+  const inner = labels.slice(1, -1);
+  const stride = Math.ceil(inner.length / (MAX_MAP_LEGEND_LABELS - 2));
+  const sampled = inner.filter((_, index) => index % stride === 0);
+  return [labels[0], ...sampled, labels[labels.length - 1]];
+}
+
 function getGridCounts(bounds: ComputeGridResponse['result']['bounds'], resolution: number) {
   // Derive cols/rows deterministically from bounds+resolution.
   // We avoid trusting backend-provided cols/rows because (for the current CPU engine)
@@ -833,10 +939,10 @@ function getGridCounts(bounds: ComputeGridResponse['result']['bounds'], resoluti
   return { cols, rows };
 }
 
-function buildNoiseMapTexture(grid: ComputeGridResponse['result']) {
+function buildNoiseMapTexture(grid: ComputeGridResponse['result'], range: MapRange) {
   // Convert grid values into a per-cell RGBA texture (in grid-space).
   // The draw step scales this texture into world-space bounds using worldToCanvas().
-  if (!grid.values.length || grid.max <= MIN_LEVEL) return null;
+  if (!grid.values.length) return null;
   const { cols, rows } = getGridCounts(grid.bounds, grid.resolution);
   const canvas = document.createElement('canvas');
   canvas.width = cols;
@@ -845,7 +951,7 @@ function buildNoiseMapTexture(grid: ComputeGridResponse['result']) {
   if (!mapCtx) return null;
 
   const image = mapCtx.createImageData(cols, rows);
-  const span = grid.max - grid.min;
+  const span = range.max - range.min;
   const alpha = 200;
 
   for (let y = 0; y < rows; y += 1) {
@@ -859,7 +965,8 @@ function buildNoiseMapTexture(grid: ComputeGridResponse['result']) {
         image.data[offset + 3] = 0;
         continue;
       }
-      const ratio = span > 0 ? (value - grid.min) / span : 0;
+      const mapped = snapMapValue(value);
+      const ratio = span > 0 ? (mapped - range.min) / span : 0;
       const color = getSampleColor(ratio);
       image.data[offset] = color.r;
       image.data[offset + 1] = color.g;
@@ -944,6 +1051,27 @@ function recomputePanelStats(panelResult: PanelResult) {
   panelResult.LAeq_avg = avg;
   panelResult.LAeq_p50 = sorted[p50Index];
   panelResult.LAeq_p95 = sorted[p95Index];
+}
+
+function renderNoiseMapLegend() {
+  if (!dbLegend || !dbLegendGradient || !dbLegendLabels) return;
+  const range = getActiveMapRange();
+  const step = getMapBandStep();
+  const isBanded = mapRenderStyle === 'Banded';
+  const stops = isBanded ? buildBandedLegendStops(range, step) : buildSmoothLegendStops();
+
+  dbLegendGradient.style.backgroundImage = `linear-gradient(90deg, ${stops})`;
+  dbLegend.classList.toggle('is-banded', isBanded);
+
+  dbLegendLabels.innerHTML = '';
+  const labels = isBanded ? buildBandedLegendLabels(range, step) : [range.min, range.max];
+  for (let i = 0; i < labels.length; i += 1) {
+    const value = labels[i];
+    const label = document.createElement('span');
+    const suffix = i === 0 || i === labels.length - 1 ? ' dB' : '';
+    label.textContent = `${formatLegendLevel(value)}${suffix}`;
+    dbLegendLabels.appendChild(label);
+  }
 }
 
 function renderPanelLegend() {
@@ -1415,11 +1543,13 @@ function invalidateNoiseMap() {
     updateMapUI();
   }
   noiseMap = null;
+  currentMapRange = null;
   layers.noiseMap = false;
   if (layerNoiseMap) {
     layerNoiseMap.checked = false;
   }
   setMapToast(null);
+  renderNoiseMapLegend();
   drawScene();
 }
 
@@ -1467,10 +1597,23 @@ async function computeNoiseMap() {
 
     if (token !== activeMapToken) return;
 
-    const texture = buildNoiseMapTexture(response.result);
+    const computedRange = computeMapRange(response.result.values);
+    if (!computedRange) {
+      currentMapRange = null;
+      noiseMap = null;
+      setMapToast('Map has no audible values.', 'error', 3000);
+      renderNoiseMapLegend();
+      drawScene();
+      return;
+    }
+
+    currentMapRange = computedRange;
+    const renderRange = getActiveMapRange();
+    const texture = buildNoiseMapTexture(response.result, renderRange);
     if (!texture) {
       noiseMap = null;
       setMapToast('Map has no audible values.', 'error', 3000);
+      renderNoiseMapLegend();
       drawScene();
       return;
     }
@@ -1481,6 +1624,7 @@ async function computeNoiseMap() {
     if (layerNoiseMap) layerNoiseMap.checked = true;
     if (layerLabel) layerLabel.textContent = layerLabels.noiseMap;
 
+    renderNoiseMapLegend();
     drawScene();
     const timing = response.timings?.totalMs;
     const timingLabel = typeof timing === 'number' ? `${timing.toFixed(0)} ms` : 'ready';
@@ -1723,6 +1867,19 @@ function renderResults() {
 
   renderPanelLegend();
   renderPanelStats();
+}
+
+function refreshNoiseMapVisualization() {
+  renderNoiseMapLegend();
+  if (!noiseMap) {
+    drawScene();
+    return;
+  }
+  const range = getActiveMapRange();
+  const texture = buildNoiseMapTexture(noiseMap, range);
+  if (!texture) return;
+  noiseMap.texture = texture;
+  drawScene();
 }
 
 function createInlineField(label: string, value: number, onChange: (value: number) => void) {
@@ -2217,6 +2374,46 @@ function setMapToast(message: string | null, state: 'busy' | 'ready' | 'error' =
 
 function updateMapUI() {
   updateMapButtonState();
+}
+
+function updateMapSettingsControls() {
+  if (mapRenderStyleToggle) {
+    mapRenderStyleToggle.checked = mapRenderStyle === 'Banded';
+  }
+  if (mapBandStepInput) {
+    mapBandStepInput.value = getMapBandStep().toString();
+    mapBandStepInput.disabled = mapRenderStyle !== 'Banded';
+  }
+  if (mapAutoScaleToggle) {
+    mapAutoScaleToggle.checked = mapAutoScale;
+  }
+}
+
+function wireMapSettings() {
+  if (!mapRenderStyleToggle && !mapBandStepInput && !mapAutoScaleToggle) return;
+
+  updateMapSettingsControls();
+
+  mapRenderStyleToggle?.addEventListener('change', () => {
+    mapRenderStyle = mapRenderStyleToggle.checked ? 'Banded' : 'Smooth';
+    updateMapSettingsControls();
+    refreshNoiseMapVisualization();
+  });
+
+  mapBandStepInput?.addEventListener('change', () => {
+    const next = Number(mapBandStepInput.value);
+    if (!Number.isFinite(next) || next <= 0) {
+      updateMapSettingsControls();
+      return;
+    }
+    mapBandStep = Math.max(1, next);
+    refreshNoiseMapVisualization();
+  });
+
+  mapAutoScaleToggle?.addEventListener('change', () => {
+    mapAutoScale = mapAutoScaleToggle.checked;
+    refreshNoiseMapVisualization();
+  });
 }
 
 function wireThemeSwitcher() {
@@ -3714,6 +3911,7 @@ function init() {
   wireHistory();
   wireComputeButton();
   wireMeshButton();
+  wireMapSettings();
   wireSceneName();
   wireSaveLoad();
   wireCanvasHelp();
@@ -3723,6 +3921,7 @@ function init() {
   updateSceneStatus();
   setActiveTool(activeTool);
   updateMapUI();
+  renderNoiseMapLegend();
   resizeCanvas();
   pushHistory({ markDirty: false });
   markSaved();

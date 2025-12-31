@@ -956,6 +956,15 @@ button.primary.is-cancel {
   mix-blend-mode: multiply;
 }
 
+.db-legend-labels span {
+  white-space: nowrap;
+}
+
+.db-legend.is-banded .db-legend-labels {
+  font-size: 9px;
+  letter-spacing: 0.01em;
+}
+
 .snap-indicator {
   position: absolute;
   width: 10px;

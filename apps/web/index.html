@@ -269,16 +269,12 @@
             </div>
             <div class="snap-indicator" id="snapIndicator"></div>
             <div class="canvas-corner">
-              <div class="db-legend" role="group" aria-label="Decibel legend">
+              <div class="db-legend" id="dbLegend" role="group" aria-label="Decibel legend">
                 <div class="db-legend-bar">
-                  <div class="db-legend-gradient" aria-hidden="true"></div>
-                  <div class="db-legend-labels">
+                  <div class="db-legend-gradient" id="dbLegendGradient" aria-hidden="true"></div>
+                  <div class="db-legend-labels" id="dbLegendLabels">
                     <span>30 dB</span>
-                    <span>40</span>
-                    <span>50</span>
-                    <span>60</span>
-                    <span>70</span>
-                    <span>80+</span>
+                    <span>85 dB</span>
                   </div>
                 </div>
               </div>
@@ -328,6 +324,22 @@
           <section class="panel ui-surface">
             <h2>Properties</h2>
             <div class="properties" id="propertiesBody">Select an item to edit its properties.</div>
+          </section>
+
+          <section class="panel ui-surface">
+            <h2>Map Settings</h2>
+            <label class="toggle">
+              <input type="checkbox" id="mapRenderStyle" />
+              <span>Smooth / Bands</span>
+            </label>
+            <div class="property-row">
+              <span>Band step (dB)</span>
+              <input class="ui-inset" id="mapBandStep" type="number" min="1" step="1" value="5" />
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="mapAutoScale" checked />
+              <span>Auto-scale colors</span>
+            </label>
           </section>
 
           <section class="panel ui-surface">
