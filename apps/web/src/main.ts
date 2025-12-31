@@ -19,6 +19,8 @@ import {
   type ComputeGridResponse,
   type ComputePanelResponse,
   type ComputeReceiversResponse,
+  type ProbeRequest,
+  type ProbeResult,
 } from '@geonoise/engine';
 import { panelId, MIN_LEVEL } from '@geonoise/shared';
 import { buildCsv } from './export.js';
@@ -49,6 +51,13 @@ type Panel = {
   points: Point[];
   elevation: number;
   sampling: { resolution: number; pointCap: number };
+};
+
+type Probe = {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
 };
 
 type Barrier = {
@@ -235,11 +244,21 @@ type NoiseMap = {
 type MapRange = { min: number; max: number };
 type MapRenderStyle = 'Smooth' | 'Contours';
 
-type Tool = 'select' | 'add-source' | 'add-receiver' | 'add-panel' | 'add-barrier' | 'add-building' | 'measure' | 'delete';
+type Tool =
+  | 'select'
+  | 'add-source'
+  | 'add-receiver'
+  | 'add-probe'
+  | 'add-panel'
+  | 'add-barrier'
+  | 'add-building'
+  | 'measure'
+  | 'delete';
 
 type Selection =
   | { type: 'none' }
   | { type: 'source'; id: string }
+  | { type: 'probe'; id: string }
   | { type: 'receiver'; id: string }
   | { type: 'panel'; id: string }
   | { type: 'barrier'; id: string }
@@ -248,7 +267,7 @@ type Selection =
 type DragState =
   | null
   | {
-      type: 'source' | 'receiver' | 'panel' | 'barrier' | 'building';
+      type: 'source' | 'receiver' | 'probe' | 'panel' | 'barrier' | 'building';
       id: string;
       offset: Point;
     }
@@ -301,6 +320,10 @@ type CanvasTheme = {
   receiverStroke: string;
   receiverLabel: string;
   receiverRing: string;
+  probeFill: string;
+  probeStroke: string;
+  probeLabel: string;
+  probeRing: string;
   badgeBg: string;
   badgeBorder: string;
   badgeText: string;
@@ -338,6 +361,11 @@ const propertiesBody = document.querySelector('#propertiesBody') as HTMLDivEleme
 const contextPanel = document.querySelector('#contextPanel') as HTMLDivElement | null;
 const contextHeader = document.querySelector('#contextHeader') as HTMLDivElement | null;
 const contextClose = document.querySelector('#contextClose') as HTMLButtonElement | null;
+const probePanel = document.querySelector('#probePanel') as HTMLDivElement | null;
+const probeTitle = document.querySelector('#probeTitle') as HTMLSpanElement | null;
+const probeClose = document.querySelector('#probeClose') as HTMLButtonElement | null;
+const probeStatus = document.querySelector('#probeStatus') as HTMLSpanElement | null;
+const probeChart = document.querySelector('#probeChart') as HTMLCanvasElement | null;
 const sourceTable = document.querySelector('#sourceTable') as HTMLDivElement | null;
 const sourceSumMode = document.querySelector('#sourceSumMode') as HTMLDivElement | null;
 const receiverTable = document.querySelector('#receiverTable') as HTMLDivElement | null;
@@ -403,6 +431,7 @@ if (!ctxEl) {
 }
 const canvas = canvasEl;
 const ctx = ctxEl;
+const probeChartCtx = probeChart?.getContext('2d') ?? null;
 
 let resizeRaf: number | null = null;
 const resizeObserver = new ResizeObserver(() => {
@@ -439,6 +468,7 @@ const scene = {
       sampling: { resolution: 10, pointCap: 300 },
     },
   ] as Panel[],
+  probes: [] as Probe[],
   buildings: [
     new Building({ id: 'bd1', x: 0, y: 0, width: 18, height: 12, rotation: 0.2, z_height: 12 }),
   ] as Building[],
@@ -461,10 +491,14 @@ const RES_HIGH = 2;
 const RES_LOW = 4;
 // Cap drag updates to ~33 FPS.
 const DRAG_FRAME_MS = 30;
+// Cap probe updates to ~10 FPS while dragging.
+const PROBE_UPDATE_MS = 100;
+const PROBE_DEFAULT_Z = 1.7;
 
 let pixelsPerMeter = 3;
 let activeTool: Tool = 'select';
 let selection: Selection = { type: 'none' };
+let activeProbeId: string | null = null;
 let hoverSelection: Selection | null = null;
 let dragState: DragState = null;
 let measureStart: Point | null = null;
@@ -479,6 +513,9 @@ let barrierDraft: { p1: Point; p2: Point } | null = null;
 let barrierDraftAnchored = false;
 let barrierDragActive = false;
 let results: SceneResults = { receivers: [], panels: [] };
+const probeResults = new Map<string, ProbeResult['data']>();
+let probeWorker: Worker | null = null;
+const probePending = new Set<string>();
 let noiseMap: NoiseMap | null = null;
 let currentMapRange: MapRange | null = null;
 let mapRenderStyle: MapRenderStyle = 'Smooth';
@@ -521,14 +558,17 @@ type SceneSnapshot = {
   sources: Source[];
   receivers: Receiver[];
   panels: Panel[];
+  probes: Probe[];
   buildings: BuildingData[];
   barriers: Barrier[];
   sourceSeq: number;
   receiverSeq: number;
   panelSeq: number;
+  probeSeq: number;
   buildingSeq: number;
   barrierSeq: number;
   selection: Selection;
+  activeProbeId: string | null;
   soloSourceId: string | null;
   panOffset: Point;
   zoom: number;
@@ -540,6 +580,7 @@ let historyIndex = -1;
 let sourceSeq = 3;
 let receiverSeq = 3;
 let panelSeq = 2;
+let probeSeq = 1;
 let buildingSeq = 2;
 let barrierSeq = 1;
 
@@ -594,6 +635,10 @@ function readCanvasTheme(): CanvasTheme {
     receiverStroke: readCssVar('--canvas-receiver-stroke'),
     receiverLabel: readCssVar('--canvas-receiver-label'),
     receiverRing: readCssVar('--canvas-receiver-ring'),
+    probeFill: readCssVar('--canvas-probe-fill'),
+    probeStroke: readCssVar('--canvas-probe-stroke'),
+    probeLabel: readCssVar('--canvas-probe-label'),
+    probeRing: readCssVar('--canvas-probe-ring'),
     badgeBg: readCssVar('--canvas-badge-bg'),
     badgeBorder: readCssVar('--canvas-badge-border'),
     badgeText: readCssVar('--canvas-badge-text'),
@@ -604,6 +649,7 @@ function readCanvasTheme(): CanvasTheme {
 
 function refreshCanvasTheme() {
   canvasTheme = readCanvasTheme();
+  renderProbeInspector();
   requestRender();
 }
 
@@ -684,6 +730,7 @@ function snapshotScene(): SceneSnapshot {
       points: panel.points.map((pt) => ({ ...pt })),
       sampling: { ...panel.sampling },
     })),
+    probes: scene.probes.map((probe) => ({ ...probe })),
     buildings: scene.buildings.map((building) => building.toData()),
     barriers: scene.barriers.map((barrier) => ({
       ...barrier,
@@ -693,9 +740,11 @@ function snapshotScene(): SceneSnapshot {
     sourceSeq,
     receiverSeq,
     panelSeq,
+    probeSeq,
     buildingSeq,
     barrierSeq,
     selection: { ...selection } as Selection,
+    activeProbeId,
     soloSourceId,
     panOffset: { ...panOffset },
     zoom,
@@ -724,6 +773,7 @@ function applySnapshot(snap: SceneSnapshot) {
     points: panel.points.map((pt) => ({ ...pt })),
     sampling: { ...panel.sampling },
   }));
+  scene.probes = snap.probes.map((probe) => ({ ...probe }));
   scene.buildings = snap.buildings.map((building) => new Building(building));
   scene.barriers = snap.barriers.map((barrier) => ({
     ...barrier,
@@ -733,15 +783,25 @@ function applySnapshot(snap: SceneSnapshot) {
   sourceSeq = snap.sourceSeq;
   receiverSeq = snap.receiverSeq;
   panelSeq = snap.panelSeq;
+  probeSeq = snap.probeSeq;
+  const probeIds = new Set(scene.probes.map((probe) => probe.id));
+  for (const id of probeResults.keys()) {
+    if (!probeIds.has(id)) probeResults.delete(id);
+  }
+  for (const id of probePending) {
+    if (!probeIds.has(id)) probePending.delete(id);
+  }
   buildingSeq = snap.buildingSeq;
   barrierSeq = snap.barrierSeq;
   selection = snap.selection;
+  activeProbeId = snap.activeProbeId;
   soloSourceId = snap.soloSourceId;
   panOffset = { ...snap.panOffset };
   zoom = snap.zoom;
   updatePixelsPerMeter();
   updateCounts();
   setSelection(selection);
+  setActiveProbe(activeProbeId);
   updateUndoRedoButtons();
   invalidateNoiseMap();
   computeScene();
@@ -775,6 +835,8 @@ function resizeCanvas() {
   basePixelsPerMeter = rect.width / 320;
   updatePixelsPerMeter();
   updateScaleBar();
+  resizeProbeChart();
+  renderProbeInspector();
   requestRender();
 }
 
@@ -1197,6 +1259,7 @@ function renderPanelStats() {
 function selectionTypeLabel(type: Selection['type']) {
   if (type === 'panel') return 'Measure grid';
   if (type === 'source') return 'Source';
+  if (type === 'probe') return 'Probe';
   if (type === 'receiver') return 'Receiver';
   if (type === 'barrier') return 'Barrier';
   if (type === 'building') return 'Building';
@@ -1215,6 +1278,8 @@ function toolLabel(tool: Tool) {
       return 'Add Source';
     case 'add-receiver':
       return 'Add Receiver';
+    case 'add-probe':
+      return 'Add Probe';
     case 'measure':
       return 'Measure';
     case 'delete':
@@ -1230,6 +1295,8 @@ function toolInstructionFor(tool: Tool) {
       return 'Click to place a source. Drag to reposition.';
     case 'add-receiver':
       return 'Click to place a receiver. Drag to reposition.';
+    case 'add-probe':
+      return 'Click to place a probe. Drag to reposition.';
     case 'add-barrier':
       return 'Click to set the start, then drag or click to place the end.';
     case 'add-panel':
@@ -1771,6 +1838,9 @@ function computeScene(options: { invalidateMap?: boolean } = {}) {
   for (const panel of scene.panels) {
     void computePanel(engineScene, preference, panel, activeComputeToken);
   }
+  if (activeProbeId) {
+    requestProbeUpdate(activeProbeId);
+  }
 }
 
 function cancelCompute() {
@@ -1959,6 +2029,9 @@ function computeSceneIncremental(sourceId: string) {
   for (const panel of scene.panels) {
     void computePanelIncremental(engineScene, preference, sourceId, panel);
   }
+  if (activeProbeId) {
+    requestProbeUpdate(activeProbeId);
+  }
 }
 
 function renderResults() {
@@ -1976,6 +2049,261 @@ function renderResults() {
 
   renderPanelLegend();
   renderPanelStats();
+}
+
+function setActiveProbe(nextId: string | null) {
+  const resolved = nextId && scene.probes.some((probe) => probe.id === nextId) ? nextId : null;
+  const didChange = resolved !== activeProbeId;
+  activeProbeId = resolved;
+  renderProbeInspector();
+  if (activeProbeId && didChange) {
+    requestProbeUpdate(activeProbeId, { immediate: true });
+  }
+  requestRender();
+}
+
+function getActiveProbe() {
+  if (!activeProbeId) return null;
+  return scene.probes.find((probe) => probe.id === activeProbeId) ?? null;
+}
+
+function initProbeWorker() {
+  if (probeWorker) return;
+  try {
+    probeWorker = new Worker(new URL('./probeWorker.js', import.meta.url), { type: 'module' });
+    probeWorker.addEventListener('message', (event: MessageEvent<ProbeResult>) => {
+      handleProbeResult(event.data);
+    });
+    probeWorker.addEventListener('error', (error) => {
+      // eslint-disable-next-line no-console
+      console.error('Probe worker error', error);
+    });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Probe worker unavailable', error);
+    probeWorker = null;
+  }
+}
+
+function buildProbeRequest(probe: Probe): ProbeRequest {
+  const sources = scene.sources
+    .filter((source) => isSourceEnabled(source))
+    .map((source) => ({
+      id: source.id,
+      position: { x: source.x, y: source.y, z: source.z },
+    }));
+  const walls = [
+    ...scene.barriers.map((barrier) => ({
+      id: barrier.id,
+      type: 'barrier' as const,
+      vertices: [{ ...barrier.p1 }, { ...barrier.p2 }],
+      height: barrier.height,
+    })),
+    ...scene.buildings.map((building) => ({
+      id: building.id,
+      type: 'building' as const,
+      vertices: building.getVertices().map((point) => ({ ...point })),
+      height: building.z_height,
+    })),
+  ];
+
+  return {
+    type: 'CALCULATE_PROBE',
+    probeId: probe.id,
+    position: { x: probe.x, y: probe.y, z: probe.z ?? PROBE_DEFAULT_Z },
+    sources,
+    walls,
+  };
+}
+
+function calculateProbeStub(req: ProbeRequest): ProbeResult {
+  const freqs = [63, 125, 250, 500, 1000, 2000, 4000, 8000];
+  let minDist = Number.POSITIVE_INFINITY;
+  for (const source of req.sources) {
+    const dx = req.position.x - source.position.x;
+    const dy = req.position.y - source.position.y;
+    const dz = (req.position.z ?? 0) - (source.position.z ?? 0);
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (dist < minDist) minDist = dist;
+  }
+  const hasSources = req.sources.length > 0;
+  const dist = hasSources ? Math.max(minDist, 1) : 100;
+  const base = hasSources ? 100 - 20 * Math.log10(dist) : 35;
+
+  const magnitudes = freqs.map((freq) => {
+    const tilt = -2.5 * Math.log2(freq / 1000);
+    const jitter = (Math.random() - 0.5) * 2;
+    return base + tilt + jitter;
+  });
+
+  return {
+    type: 'PROBE_UPDATE',
+    probeId: req.probeId,
+    data: {
+      frequencies: freqs,
+      magnitudes,
+    },
+  };
+}
+
+function sendProbeRequest(probe: Probe) {
+  const request = buildProbeRequest(probe);
+  probePending.add(probe.id);
+  renderProbeInspector();
+  if (!probeWorker) {
+    window.setTimeout(() => {
+      handleProbeResult(calculateProbeStub(request));
+    }, 0);
+    return;
+  }
+  probeWorker.postMessage(request);
+}
+
+const throttledProbeUpdate = throttle((probeId: string) => {
+  const probe = scene.probes.find((item) => item.id === probeId);
+  if (!probe) return;
+  sendProbeRequest(probe);
+}, PROBE_UPDATE_MS);
+
+function requestProbeUpdate(probeId: string, options?: { immediate?: boolean }) {
+  if (!probeId) return;
+  if (!probeWorker) initProbeWorker();
+  if (options?.immediate) {
+    throttledProbeUpdate.cancel();
+    const probe = scene.probes.find((item) => item.id === probeId);
+    if (probe) {
+      sendProbeRequest(probe);
+    }
+    return;
+  }
+  throttledProbeUpdate(probeId);
+}
+
+function handleProbeResult(result: ProbeResult) {
+  if (!result || result.type !== 'PROBE_UPDATE') return;
+  probeResults.set(result.probeId, result.data);
+  probePending.delete(result.probeId);
+  if (activeProbeId === result.probeId) {
+    renderProbeInspector();
+  }
+}
+
+function resizeProbeChart() {
+  if (!probeChart || !probeChartCtx) return;
+  const rect = probeChart.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const dpr = window.devicePixelRatio || 1;
+  probeChart.width = rect.width * dpr;
+  probeChart.height = rect.height * dpr;
+  probeChartCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function renderProbeChart(data: ProbeResult['data'] | null) {
+  if (!probeChart || !probeChartCtx) return;
+  resizeProbeChart();
+  const rect = probeChart.getBoundingClientRect();
+  const width = rect.width;
+  const height = rect.height;
+  if (!width || !height) return;
+
+  const ctxChart = probeChartCtx;
+  const padding = { left: 36, right: 14, top: 12, bottom: 24 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+
+  ctxChart.clearRect(0, 0, width, height);
+  ctxChart.fillStyle = readCssVar('--probe-bg');
+  ctxChart.fillRect(0, 0, width, height);
+
+  if (!data || data.frequencies.length === 0) {
+    ctxChart.fillStyle = readCssVar('--probe-text');
+    ctxChart.font = '11px "Work Sans", sans-serif';
+    ctxChart.fillText('Drag the probe to sample.', padding.left, padding.top + 12);
+    return;
+  }
+
+  const minFreq = Math.min(...data.frequencies);
+  const maxFreq = Math.max(...data.frequencies);
+  const logMin = Math.log10(minFreq);
+  const logMax = Math.log10(maxFreq);
+  const minMag = Math.min(...data.magnitudes);
+  const maxMag = Math.max(...data.magnitudes);
+  const magMin = Math.floor((minMag - 2) / 5) * 5;
+  const magMax = Math.ceil((maxMag + 2) / 5) * 5;
+
+  ctxChart.strokeStyle = readCssVar('--probe-grid');
+  ctxChart.lineWidth = 1;
+  ctxChart.setLineDash([4, 4]);
+  for (let i = 0; i <= 4; i += 1) {
+    const y = padding.top + (chartHeight * i) / 4;
+    ctxChart.beginPath();
+    ctxChart.moveTo(padding.left, y);
+    ctxChart.lineTo(width - padding.right, y);
+    ctxChart.stroke();
+  }
+  ctxChart.setLineDash([]);
+
+  const points = data.frequencies.map((freq, idx) => {
+    const x = padding.left + ((Math.log10(freq) - logMin) / (logMax - logMin)) * chartWidth;
+    const value = data.magnitudes[idx];
+    const ratio = (value - magMin) / (magMax - magMin || 1);
+    const y = padding.top + (1 - ratio) * chartHeight;
+    return { x, y, value, freq };
+  });
+
+  ctxChart.beginPath();
+  points.forEach((pt, index) => {
+    if (index === 0) {
+      ctxChart.moveTo(pt.x, pt.y);
+    } else {
+      ctxChart.lineTo(pt.x, pt.y);
+    }
+  });
+  ctxChart.strokeStyle = readCssVar('--probe-line');
+  ctxChart.lineWidth = 2;
+  ctxChart.stroke();
+
+  ctxChart.fillStyle = readCssVar('--probe-fill');
+  ctxChart.lineTo(points[points.length - 1].x, height - padding.bottom);
+  ctxChart.lineTo(points[0].x, height - padding.bottom);
+  ctxChart.closePath();
+  ctxChart.fill();
+
+  ctxChart.fillStyle = readCssVar('--probe-line');
+  for (const point of points) {
+    ctxChart.beginPath();
+    ctxChart.arc(point.x, point.y, 3, 0, Math.PI * 2);
+    ctxChart.fill();
+  }
+
+  ctxChart.fillStyle = readCssVar('--probe-text');
+  ctxChart.font = '10px "Work Sans", sans-serif';
+  ctxChart.fillText(`${magMax} dB`, 6, padding.top + 4);
+  ctxChart.fillText(`${magMin} dB`, 6, height - padding.bottom + 4);
+
+  const labelIndices = [0, Math.floor(points.length / 2), points.length - 1];
+  for (const idx of labelIndices) {
+    const point = points[idx];
+    const label = `${Math.round(point.freq)} Hz`;
+    ctxChart.fillText(label, point.x - 10, height - 6);
+  }
+}
+
+function renderProbeInspector() {
+  if (!probePanel) return;
+  const probe = getActiveProbe();
+  const isOpen = !!probe;
+  probePanel.classList.toggle('is-open', isOpen);
+  probePanel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+  if (!probe) return;
+  if (probeTitle) {
+    probeTitle.textContent = `Probe ${probe.id.toUpperCase()}`;
+  }
+  if (probeStatus) {
+    const hasData = probeResults.has(probe.id);
+    probeStatus.textContent = probePending.has(probe.id) ? 'Updating' : hasData ? 'Live' : 'Idle';
+  }
+  renderProbeChart(probeResults.get(probe.id) ?? null);
 }
 
 function refreshNoiseMapVisualization() {
@@ -2188,6 +2516,11 @@ function duplicateReceiver(receiver: Receiver): Receiver {
   return { ...receiver, id: newId };
 }
 
+function duplicateProbe(probe: Probe): Probe {
+  const newId = createId('pr', probeSeq++);
+  return { ...probe, id: newId };
+}
+
 function duplicatePanel(panel: Panel): Panel {
   const newId = createId('p', panelSeq++);
   return {
@@ -2245,9 +2578,12 @@ function setSelection(next: Selection) {
     building.selected = selection.type === 'building' && selection.id === building.id;
   }
   const current = selection;
+  if (current.type === 'probe') {
+    setActiveProbe(current.id);
+  }
   // Reveal the context inspector only when there's an active selection.
   if (contextPanel) {
-    const isOpen = current.type !== 'none';
+    const isOpen = current.type !== 'none' && current.type !== 'probe';
     contextPanel.classList.toggle('is-open', isOpen);
     contextPanel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
   }
@@ -2778,6 +3114,12 @@ function hitTest(point: Point) {
   });
   if (hitSource) return { type: 'source' as const, id: hitSource.id };
 
+  const hitProbe = scene.probes.find((probe) => {
+    const screen = worldToCanvas(probe);
+    return distance(screen, point) <= threshold;
+  });
+  if (hitProbe) return { type: 'probe' as const, id: hitProbe.id };
+
   const hitReceiver = scene.receivers.find((receiver) => {
     const screen = worldToCanvas(receiver);
     return distance(screen, point) <= threshold;
@@ -2808,6 +3150,14 @@ function deleteSelection(target: Selection) {
   }
   if (target.type === 'receiver') {
     scene.receivers = scene.receivers.filter((item) => item.id !== target.id);
+  }
+  if (target.type === 'probe') {
+    scene.probes = scene.probes.filter((item) => item.id !== target.id);
+    probeResults.delete(target.id);
+    probePending.delete(target.id);
+    if (activeProbeId === target.id) {
+      setActiveProbe(null);
+    }
   }
   if (target.type === 'panel') {
     scene.panels = scene.panels.filter((item) => item.id !== target.id);
@@ -2916,6 +3266,19 @@ function addReceiverAt(point: Point) {
   updateCounts();
   pushHistory();
   computeScene();
+}
+
+function addProbeAt(point: Point) {
+  const probe: Probe = {
+    id: createId('pr', probeSeq++),
+    x: point.x,
+    y: point.y,
+    z: PROBE_DEFAULT_Z,
+  };
+  scene.probes.push(probe);
+  setSelection({ type: 'probe', id: probe.id });
+  pushHistory({ invalidateMap: false });
+  requestRender();
 }
 
 function drawGrid() {
@@ -3227,6 +3590,67 @@ function drawReceiverBadges() {
   }
 }
 
+function drawProbes() {
+  for (const probe of scene.probes) {
+    const p = worldToCanvas(probe);
+    const isActive = probe.id === activeProbeId;
+    const isSelected = selection.type === 'probe' && selection.id === probe.id;
+
+    ctx.save();
+    if (isActive || isSelected) {
+      ctx.fillStyle = canvasTheme.selectionHalo;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = canvasTheme.probeRing;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.translate(p.x, p.y);
+    ctx.strokeStyle = canvasTheme.probeStroke;
+    ctx.fillStyle = canvasTheme.probeFill;
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+
+    // Mic head
+    ctx.beginPath();
+    ctx.arc(0, -6, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Mic body
+    ctx.beginPath();
+    ctx.moveTo(-4, -6);
+    ctx.lineTo(-4, 2);
+    ctx.lineTo(4, 2);
+    ctx.lineTo(4, -6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Stem
+    ctx.beginPath();
+    ctx.moveTo(0, 2);
+    ctx.lineTo(0, 8);
+    ctx.stroke();
+
+    // Base
+    ctx.beginPath();
+    ctx.moveTo(-6, 8);
+    ctx.lineTo(6, 8);
+    ctx.stroke();
+
+    ctx.restore();
+
+    ctx.fillStyle = canvasTheme.probeLabel;
+    ctx.font = '12px "Work Sans", sans-serif';
+    ctx.fillText(probe.id.toUpperCase(), p.x + 14, p.y + 6);
+  }
+}
+
 function requestRender() {
   needsUpdate = true;
 }
@@ -3270,6 +3694,8 @@ function renderLoop() {
     drawReceivers();
     drawReceiverBadges();
   }
+
+  drawProbes();
 
   if (activeTool === 'measure') {
     drawMeasurement();
@@ -3316,6 +3742,14 @@ function applyDrag(worldPoint: Point) {
     if (receiver) {
       receiver.x = targetPoint.x;
       receiver.y = targetPoint.y;
+    }
+  }
+  if (activeDrag.type === 'probe') {
+    const probe = scene.probes.find((item) => item.id === activeDrag.id);
+    if (probe) {
+      probe.x = targetPoint.x;
+      probe.y = targetPoint.y;
+      requestProbeUpdate(probe.id);
     }
   }
   if (activeDrag.type === 'panel') {
@@ -3371,13 +3805,16 @@ function applyDrag(worldPoint: Point) {
 
   // Limit live noise-map work to drags that affect propagation.
   const shouldUpdateMap = shouldLiveUpdateMap(activeDrag);
-  if (activeDrag.type === 'source') {
-    computeSceneIncremental(activeDrag.id);
-  } else {
-    computeScene({ invalidateMap: false });
+  const shouldCompute = activeDrag.type !== 'probe';
+  if (shouldCompute) {
+    if (activeDrag.type === 'source') {
+      computeSceneIncremental(activeDrag.id);
+    } else {
+      computeScene({ invalidateMap: false });
+    }
   }
 
-  if (shouldUpdateMap) {
+  if (shouldCompute && shouldUpdateMap) {
     recalculateNoiseMap(RES_LOW);
   }
   requestRender();
@@ -3462,6 +3899,11 @@ function handlePointerDown(event: MouseEvent) {
 
   if (activeTool === 'add-receiver') {
     addReceiverAt(snappedPoint);
+    return;
+  }
+
+  if (activeTool === 'add-probe') {
+    addProbeAt(snappedPoint);
     return;
   }
 
@@ -3575,6 +4017,26 @@ function handlePointerDown(event: MouseEvent) {
         }
         dragState = { type: 'source', id: source.id, offset: { x: worldHit.x - source.x, y: worldHit.y - source.y } };
         primeDragContribution(source.id);
+      }
+    }
+    if (hit.type === 'probe') {
+      const probe = scene.probes.find((item) => item.id === hit.id);
+      if (probe) {
+        if (event.shiftKey) {
+          const duplicate = duplicateProbe(probe);
+          duplicate.x = probe.x + 2;
+          duplicate.y = probe.y - 2;
+          scene.probes.push(duplicate);
+          setSelection({ type: 'probe', id: duplicate.id });
+          dragDirty = true;
+          dragState = {
+            type: 'probe',
+            id: duplicate.id,
+            offset: { x: worldHit.x - duplicate.x, y: worldHit.y - duplicate.y },
+          };
+          return;
+        }
+        dragState = { type: 'probe', id: probe.id, offset: { x: worldHit.x - probe.x, y: worldHit.y - probe.y } };
       }
     }
     if (hit.type === 'receiver') {
@@ -3704,9 +4166,10 @@ function handlePointerUp() {
     return;
   }
   if (dragState) {
+    const finishedDrag = dragState;
     throttledDragMove.flush();
     throttledDragMove.cancel();
-    const shouldRecalculateMap = shouldLiveUpdateMap(dragState);
+    const shouldRecalculateMap = shouldLiveUpdateMap(finishedDrag);
     dragState = null;
     setInteractionActive(false);
     // Ensure a crisp final map after drag updates and clear queued low-res work.
@@ -3715,10 +4178,14 @@ function handlePointerUp() {
     if (dragDirty) {
       pushHistory({ invalidateMap: false });
     }
-    computeScene({ invalidateMap: false });
-    if (shouldRecalculateMap) {
-      recalculateNoiseMap(RES_HIGH);
-      needsUpdate = true;
+    if (finishedDrag.type !== 'probe') {
+      computeScene({ invalidateMap: false });
+      if (shouldRecalculateMap) {
+        recalculateNoiseMap(RES_HIGH);
+        needsUpdate = true;
+      }
+    } else {
+      requestProbeUpdate(finishedDrag.id, { immediate: true });
     }
   }
 }
@@ -3803,6 +4270,9 @@ function wireKeyboard() {
     }
     if (event.key === 'r' || event.key === 'R') {
       setActiveTool('add-receiver');
+    }
+    if (event.key === 'p' || event.key === 'P') {
+      setActiveTool('add-probe');
     }
     if (event.key === 'b' || event.key === 'B') {
       setActiveTool('add-barrier');
@@ -3908,6 +4378,16 @@ function wireContextPanel() {
   });
 }
 
+function wireProbePanel() {
+  if (!probeClose) return;
+  probeClose.addEventListener('click', () => {
+    setActiveProbe(null);
+    if (selection.type === 'probe') {
+      setSelection({ type: 'none' });
+    }
+  });
+}
+
 function buildScenePayload() {
   return {
     version: 1,
@@ -3919,6 +4399,7 @@ function buildScenePayload() {
       points: panel.points.map((point) => ({ ...point })),
       sampling: { ...panel.sampling },
     })),
+    probes: scene.probes.map((probe) => ({ ...probe })),
     buildings: scene.buildings.map((building) => building.toData()),
     // UI save format extension (v1 payload still; this is not the core Scene schema yet):
     // - barriers are persisted so users can save/load screen geometry.
@@ -3967,6 +4448,10 @@ function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
     points: panel.points.map((point) => ({ ...point })),
     sampling: { ...panel.sampling },
   }));
+  scene.probes = (payload.probes ?? []).map((probe) => ({
+    ...probe,
+    z: probe.z ?? PROBE_DEFAULT_Z,
+  }));
   scene.buildings = (payload.buildings ?? []).map((building) => new Building(building));
   // Backwards-compatible load: scenes saved before barriers existed simply omit this field.
   scene.barriers = (payload.barriers ?? []).map((barrier) => ({
@@ -3977,6 +4462,7 @@ function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
   sourceSeq = nextSequence('s', scene.sources);
   receiverSeq = nextSequence('r', scene.receivers);
   panelSeq = nextSequence('p', scene.panels);
+  probeSeq = nextSequence('pr', scene.probes);
   buildingSeq = nextSequence('bd', scene.buildings);
   barrierSeq = nextSequence('b', scene.barriers);
   collapsedSources.clear();
@@ -3991,6 +4477,9 @@ function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
   barrierDraft = null;
   barrierDraftAnchored = false;
   barrierDragActive = false;
+  activeProbeId = null;
+  probeResults.clear();
+  probePending.clear();
   if (payload.propagation) {
     updatePropagationConfig(payload.propagation);
     updatePropagationControls();
@@ -4000,6 +4489,7 @@ function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
   }
   updateCounts();
   setSelection({ type: 'none' });
+  renderProbeInspector();
   history = [];
   historyIndex = -1;
   invalidateNoiseMap();
@@ -4267,6 +4757,7 @@ function init() {
   wireSettingsPopover();
   wireSceneName();
   wireContextPanel();
+  wireProbePanel();
   wireSaveLoad();
   wireCanvasHelp();
   wireActionOverflow();

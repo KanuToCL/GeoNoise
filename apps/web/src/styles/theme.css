@@ -117,6 +117,10 @@
   --canvas-receiver-stroke: var(--accent-cool-strong);
   --canvas-receiver-label: var(--text);
   --canvas-receiver-ring: var(--accent-contrast);
+  --canvas-probe-fill: var(--accent-cool);
+  --canvas-probe-stroke: var(--accent-cool-strong);
+  --canvas-probe-label: var(--text);
+  --canvas-probe-ring: var(--accent-contrast);
 
   --canvas-badge-bg: var(--surface-glass);
   --canvas-badge-border: var(--border-contrast);
@@ -124,6 +128,12 @@
 
   --canvas-measure-line: var(--accent-dark);
   --canvas-measure-text: var(--accent-dark);
+
+  --probe-line: var(--accent-cool);
+  --probe-fill: rgba(138, 161, 196, 0.25);
+  --probe-grid: rgba(123, 130, 140, 0.24);
+  --probe-text: var(--text-muted);
+  --probe-bg: rgba(255, 255, 255, 0.55);
 }
 
 [data-theme='neumorphic'] {
@@ -231,6 +241,10 @@
   --canvas-receiver-stroke: var(--accent-cool-strong);
   --canvas-receiver-label: var(--text);
   --canvas-receiver-ring: var(--surface-2);
+  --canvas-probe-fill: var(--accent-cool);
+  --canvas-probe-stroke: var(--accent-cool-strong);
+  --canvas-probe-label: var(--text);
+  --canvas-probe-ring: var(--surface-2);
 
   --canvas-badge-bg: var(--surface-glass);
   --canvas-badge-border: var(--border-contrast);
@@ -238,4 +252,10 @@
 
   --canvas-measure-line: var(--accent-dark);
   --canvas-measure-text: var(--accent-dark);
+
+  --probe-line: var(--accent-cool);
+  --probe-fill: rgba(59, 156, 144, 0.2);
+  --probe-grid: rgba(31, 39, 51, 0.18);
+  --probe-text: var(--text-muted);
+  --probe-bg: rgba(255, 255, 255, 0.45);
 }

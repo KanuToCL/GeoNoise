@@ -138,6 +138,46 @@ export type ComputeResponse =
   | ComputeGridResponse;
 
 // ============================================================================
+// Probe Types (Async UI Analysis)
+// ============================================================================
+
+/** Minimal source payload for probe analysis */
+export interface ProbeSource {
+  id: string;
+  position: { x: number; y: number; z: number };
+}
+
+/** Minimal wall/obstacle payload for probe analysis */
+export interface ProbeWall {
+  id: string;
+  type: 'barrier' | 'building';
+  vertices: Array<{ x: number; y: number }>;
+  height: number;
+}
+
+/** Request sent to a probe worker */
+export interface ProbeRequest {
+  type: 'CALCULATE_PROBE';
+  probeId: string;
+  position: { x: number; y: number; z: number };
+  sources: ProbeSource[];
+  walls: ProbeWall[];
+}
+
+/** Response received from a probe worker */
+export interface ProbeResult {
+  type: 'PROBE_UPDATE';
+  probeId: string;
+  data: {
+    frequencies: number[];
+    magnitudes: number[];
+    interferenceDetails?: {
+      ghostCount: number;
+    };
+  };
+}
+
+// ============================================================================
 // Engine Interface
 // ============================================================================
 

@@ -239,6 +239,26 @@
             <button class="dock-button ui-button" data-tool="add-receiver" type="button" aria-label="Add Receiver (R)">
               <span class="dock-label">R</span>
             </button>
+            <button class="dock-button ui-button" data-tool="add-probe" type="button" aria-label="Add Probe (P)">
+              <svg class="dock-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
             <button class="dock-button ui-button" data-tool="add-barrier" type="button" aria-label="Add Barrier (B)">
               <span class="dock-label">B</span>
             </button>
@@ -281,6 +301,26 @@
             <div class="context-section-title">Measure Grid Stats</div>
             <div class="panel-legend" id="panelLegend"></div>
             <div class="panel-stats" id="panelStats"></div>
+          </div>
+        </aside>
+
+        <aside class="probe-panel" id="probePanel" aria-hidden="true">
+          <div class="probe-header">
+            <div class="probe-title" id="probeTitle">Probe</div>
+            <button class="probe-close ui-button" id="probeClose" type="button" aria-label="Close probe inspector">
+              x
+            </button>
+          </div>
+          <div class="probe-meta">
+            <span>Frequency Response</span>
+            <span class="probe-status" id="probeStatus">Idle</span>
+          </div>
+          <div class="probe-chart">
+            <canvas id="probeChart"></canvas>
+          </div>
+          <div class="probe-footer">
+            <span>Frequency (Hz)</span>
+            <span>Amplitude (dB)</span>
           </div>
         </aside>
       </div>
