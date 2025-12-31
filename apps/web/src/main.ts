@@ -1432,7 +1432,7 @@ function buildNoiseMapGridConfig(resolutionPx?: number) {
   let resolution = Math.max(paddedWidth, paddedHeight) / 50;
   // When a pixel step is supplied, convert to world meters for a predictable preview grid.
   if (Number.isFinite(resolutionPx) && Number.isFinite(pixelsPerMeter) && pixelsPerMeter > 0) {
-    const stepPx = Math.max(1, resolutionPx);
+    const stepPx = Math.max(1, resolutionPx ?? 1);
     resolution = stepPx / pixelsPerMeter;
   }
   if (!Number.isFinite(resolution) || resolution <= 0) resolution = 1;
@@ -1450,7 +1450,7 @@ function buildNoiseMapGridConfig(resolutionPx?: number) {
     }
   }
 
-  return { bounds: padded, resolution, elevation: 1.5 };
+  return { enabled: true, bounds: padded, resolution, elevation: 1.5 };
 }
 
 function buildPanelPayload(panel: Panel) {
