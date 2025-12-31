@@ -35,9 +35,14 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
   };
 }
 
-const workerContext = self as DedicatedWorkerGlobalScope;
+type ProbeWorkerScope = {
+  postMessage: (message: ProbeResult) => void;
+  addEventListener: (type: 'message', listener: (event: MessageEvent<ProbeRequest>) => void) => void;
+};
 
-workerContext.addEventListener('message', (event: MessageEvent<ProbeRequest>) => {
+const workerContext = self as unknown as ProbeWorkerScope;
+
+workerContext.addEventListener('message', (event) => {
   const req = event.data;
   if (!req || req.type !== 'CALCULATE_PROBE') return;
   const result = calculateProbe(req);
