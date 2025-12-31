@@ -3235,18 +3235,7 @@ function renderLoop() {
   requestAnimationFrame(renderLoop);
   if (!needsUpdate) return;
   needsUpdate = false;
-  drawScene();
-}
 
-function setInteractionActive(active: boolean) {
-  if (interactionActive === active) return;
-  interactionActive = active;
-  ctx.imageSmoothingEnabled = active;
-  // Switching smoothing affects map draw, so request a frame.
-  requestRender();
-}
-
-function drawScene() {
   const rect = canvas.getBoundingClientRect();
   ctx.clearRect(0, 0, rect.width, rect.height);
   ctx.fillStyle = canvasTheme.canvasBg;
@@ -3287,6 +3276,14 @@ function drawScene() {
   }
 }
 
+function setInteractionActive(active: boolean) {
+  if (interactionActive === active) return;
+  interactionActive = active;
+  ctx.imageSmoothingEnabled = active;
+  // Switching smoothing affects map draw, so request a frame.
+  requestRender();
+}
+
 function shouldLiveUpdateMap(activeDrag: DragState | null) {
   return activeDrag?.type === 'source' || activeDrag?.type === 'barrier';
 }
@@ -3308,8 +3305,10 @@ function applyDrag(worldPoint: Point) {
   if (activeDrag.type === 'source') {
     const source = scene.sources.find((item) => item.id === activeDrag.id);
     if (source) {
-      source.x = targetPoint.x;
-      source.y = targetPoint.y;
+      const nextPosition = { x: targetPoint.x, y: targetPoint.y, z: source.z ?? 0 };
+      source.x = nextPosition.x;
+      source.y = nextPosition.y;
+      source.z = nextPosition.z;
     }
   }
   if (activeDrag.type === 'receiver') {
@@ -3385,7 +3384,7 @@ function applyDrag(worldPoint: Point) {
   dragDirty = true;
 }
 
-const throttledDragMove = throttle((worldPoint: Point) => {
+const throttledDragMove = throttle((worldPoint: any) => {
   applyDrag(worldPoint);
 }, DRAG_FRAME_MS);
 
