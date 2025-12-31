@@ -223,6 +223,7 @@ class Building {
 type NoiseMap = {
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
   resolution: number;
+  elevation: number;
   cols: number;
   rows: number;
   values: number[];
@@ -446,6 +447,11 @@ const layers = {
 const DEFAULT_MAP_RANGE: MapRange = { min: 30, max: 85 };
 const DEFAULT_MAP_BAND_STEP = 5;
 const MAX_MAP_LEGEND_LABELS = 7;
+// Noise map render steps (px) for preview vs. final quality.
+const RES_HIGH = 2;
+const RES_LOW = 16;
+// Cap drag updates to ~33 FPS.
+const DRAG_FRAME_MS = 30;
 
 let pixelsPerMeter = 3;
 let activeTool: Tool = 'select';
@@ -463,7 +469,6 @@ let measureLocked = false;
 let barrierDraft: { p1: Point; p2: Point } | null = null;
 let barrierDraftAnchored = false;
 let barrierDragActive = false;
-let lastComputeAt = 0;
 let results: SceneResults = { receivers: [], panels: [] };
 let noiseMap: NoiseMap | null = null;
 let currentMapRange: MapRange | null = null;
@@ -479,6 +484,8 @@ let aboutOpen = false;
 let pendingComputes = 0;
 let canvasTheme: CanvasTheme = readCanvasTheme();
 let isDirty = false;
+// Render loop gate to avoid redrawing a static scene.
+let needsUpdate = true;
 let computeToken = 0;
 let activeComputeToken = 0;
 let isComputing = false;
@@ -486,6 +493,9 @@ let mapComputeToken = 0;
 let activeMapToken = 0;
 let isMapComputing = false;
 let mapToastTimer: number | null = null;
+// True while we want low-res, smoothed map previews.
+let interactionActive = false;
+let queuedMapResolutionPx: number | null = null;
 
 const snapMeters = 5;
 let basePixelsPerMeter = 3;
@@ -585,7 +595,7 @@ function readCanvasTheme(): CanvasTheme {
 
 function refreshCanvasTheme() {
   canvasTheme = readCanvasTheme();
-  drawScene();
+  requestRender();
 }
 
 function updateThemeControls(theme: Theme, allowed: boolean) {
@@ -683,13 +693,15 @@ function snapshotScene(): SceneSnapshot {
   };
 }
 
-function pushHistory(options?: { markDirty?: boolean }) {
+function pushHistory(options?: { markDirty?: boolean; invalidateMap?: boolean }) {
   const snap = snapshotScene();
   history = history.slice(0, historyIndex + 1);
   history.push(snap);
   historyIndex = history.length - 1;
   updateUndoRedoButtons();
-  invalidateNoiseMap();
+  if (options?.invalidateMap !== false) {
+    invalidateNoiseMap();
+  }
   if (options?.markDirty !== false) {
     markDirty();
   }
@@ -754,7 +766,7 @@ function resizeCanvas() {
   basePixelsPerMeter = rect.width / 320;
   updatePixelsPerMeter();
   updateScaleBar();
-  drawScene();
+  requestRender();
 }
 
 function updateScaleBar() {
@@ -807,6 +819,66 @@ function distanceToSegment(point: Point, a: Point, b: Point) {
   const clamped = Math.max(0, Math.min(1, t));
   const proj = { x: a.x + clamped * dx, y: a.y + clamped * dy };
   return distance(point, proj);
+}
+
+type ThrottledFn<T extends (...args: any[]) => void> = ((...args: Parameters<T>) => void) & {
+  flush: () => void;
+  cancel: () => void;
+};
+
+function throttle<T extends (...args: any[]) => void>(fn: T, waitMs: number): ThrottledFn<T> {
+  let lastCall = 0;
+  let timeoutId: number | null = null;
+  let pendingArgs: Parameters<T> | null = null;
+
+  const invoke = (args: Parameters<T>) => {
+    lastCall = performance.now();
+    pendingArgs = null;
+    fn(...args);
+  };
+
+  // Leading call, then coalesce trailing updates.
+  const throttled = ((...args: Parameters<T>) => {
+    const now = performance.now();
+    const remaining = waitMs - (now - lastCall);
+    if (remaining <= 0 || remaining > waitMs) {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      invoke(args);
+      return;
+    }
+
+    pendingArgs = args;
+    if (timeoutId === null) {
+      timeoutId = window.setTimeout(() => {
+        timeoutId = null;
+        if (pendingArgs) {
+          invoke(pendingArgs);
+        }
+      }, remaining);
+    }
+  }) as ThrottledFn<T>;
+
+  throttled.flush = () => {
+    if (!pendingArgs) return;
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    invoke(pendingArgs);
+  };
+
+  throttled.cancel = () => {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    pendingArgs = null;
+  };
+
+  return throttled;
 }
 
 function lerp(a: number, b: number, t: number) {
@@ -1317,7 +1389,7 @@ function mergeBounds(a: { minX: number; minY: number; maxX: number; maxY: number
   };
 }
 
-function buildNoiseMapGridConfig() {
+function buildNoiseMapGridConfig(resolutionPx?: number) {
   // Resolution strategy:
   // - target ~50 cells across the max dimension (step ~= max(width,height)/50)
   // - clamp to ~2,500 points total for responsiveness
@@ -1349,17 +1421,24 @@ function buildNoiseMapGridConfig() {
   const paddedWidth = padded.maxX - padded.minX;
   const paddedHeight = padded.maxY - padded.minY;
   let resolution = Math.max(paddedWidth, paddedHeight) / 50;
+  // When a pixel step is supplied, convert to world meters for a predictable preview grid.
+  if (Number.isFinite(resolutionPx) && Number.isFinite(pixelsPerMeter) && pixelsPerMeter > 0) {
+    const stepPx = Math.max(1, resolutionPx);
+    resolution = stepPx / pixelsPerMeter;
+  }
   if (!Number.isFinite(resolution) || resolution <= 0) resolution = 1;
 
   let cols = Math.ceil(paddedWidth / resolution) + 1;
   let rows = Math.ceil(paddedHeight / resolution) + 1;
-  const targetPoints = 2500;
-  const pointCount = cols * rows;
-  if (pointCount > targetPoints) {
-    const scale = Math.sqrt(pointCount / targetPoints);
-    resolution *= scale;
-    cols = Math.ceil(paddedWidth / resolution) + 1;
-    rows = Math.ceil(paddedHeight / resolution) + 1;
+  if (!Number.isFinite(resolutionPx)) {
+    const targetPoints = 2500;
+    const pointCount = cols * rows;
+    if (pointCount > targetPoints) {
+      const scale = Math.sqrt(pointCount / targetPoints);
+      resolution *= scale;
+      cols = Math.ceil(paddedWidth / resolution) + 1;
+      rows = Math.ceil(paddedHeight / resolution) + 1;
+    }
   }
 
   return { bounds: padded, resolution, elevation: 1.5 };
@@ -1454,7 +1533,7 @@ async function computeReceivers(
     receiverEnergyTotals = new Map(results.receivers.map((receiver) => [receiver.id, dbToEnergy(receiver.LAeq)]));
     updateStatus(response);
     renderResults();
-    drawScene();
+    requestRender();
   } catch (error) {
     if (isStaleError(error)) return;
     showComputeError('Receivers', error);
@@ -1501,7 +1580,7 @@ async function computePanel(
     recomputePanelStats(panelResult);
     updatePanelResult(panelResult);
     renderResults();
-    drawScene();
+    requestRender();
   } catch (error) {
     if (isStaleError(error)) return;
     showComputeError(`Panel ${panel.id}`, error);
@@ -1526,27 +1605,33 @@ function invalidateNoiseMap() {
   }
   setMapToast(null);
   renderNoiseMapLegend();
-  drawScene();
+  requestRender();
 }
 
-async function computeNoiseMap() {
+type NoiseMapComputeOptions = {
+  resolutionPx?: number;
+  silent?: boolean;
+  requestId?: string;
+};
+
+async function computeNoiseMapInternal(options: NoiseMapComputeOptions = {}) {
   // Generates a global noise map without blocking the UI thread.
   // The actual propagation compute is routed through the CPU worker backend (see engine-backends),
   // and we yield a frame before awaiting so the "Generating map..." toast is painted.
-  if (isMapComputing) {
-    invalidateNoiseMap();
-    setMapToast('Map canceled', 'error', 2000);
-    return;
-  }
+  const silent = options.silent ?? false;
 
   if (!scene.sources.some((source) => isSourceEnabled(source))) {
-    setMapToast('Enable at least one source to generate a map.', 'error', 3000);
+    if (!silent) {
+      setMapToast('Enable at least one source to generate a map.', 'error', 3000);
+    }
     return;
   }
 
-  const gridConfig = buildNoiseMapGridConfig();
+  const gridConfig = buildNoiseMapGridConfig(options.resolutionPx);
   if (!gridConfig) {
-    setMapToast('Add sources, receivers, or barriers to define the map bounds.', 'error', 3000);
+    if (!silent) {
+      setMapToast('Add sources, receivers, or barriers to define the map bounds.', 'error', 3000);
+    }
     return;
   }
 
@@ -1555,8 +1640,10 @@ async function computeNoiseMap() {
   const token = ++mapComputeToken;
   activeMapToken = token;
   isMapComputing = true;
-  updateMapUI();
-  setMapToast('Generating map...', 'busy');
+  if (!silent) {
+    updateMapUI();
+    setMapToast('Generating map...', 'busy');
+  }
   await new Promise((resolve) => requestAnimationFrame(resolve));
 
   try {
@@ -1568,7 +1655,7 @@ async function computeNoiseMap() {
         payload: { gridConfig },
       },
       preference,
-      'grid:global'
+      options.requestId ?? 'grid:global'
     )) as ComputeGridResponse;
 
     if (token !== activeMapToken) return;
@@ -1577,9 +1664,11 @@ async function computeNoiseMap() {
     if (!computedRange) {
       currentMapRange = null;
       noiseMap = null;
-      setMapToast('Map has no audible values.', 'error', 3000);
+      if (!silent) {
+        setMapToast('Map has no audible values.', 'error', 3000);
+      }
       renderNoiseMapLegend();
-      drawScene();
+      requestRender();
       return;
     }
 
@@ -1588,9 +1677,11 @@ async function computeNoiseMap() {
     const texture = buildNoiseMapTexture(response.result, renderRange);
     if (!texture) {
       noiseMap = null;
-      setMapToast('Map has no audible values.', 'error', 3000);
+      if (!silent) {
+        setMapToast('Map has no audible values.', 'error', 3000);
+      }
       renderNoiseMapLegend();
-      drawScene();
+      requestRender();
       return;
     }
 
@@ -1601,28 +1692,63 @@ async function computeNoiseMap() {
     if (debugLayer) debugLayer.textContent = layerLabels.noiseMap;
 
     renderNoiseMapLegend();
-    drawScene();
+    // Ensure silent map updates still trigger a frame.
+    needsUpdate = true;
+    requestRender();
     const timing = response.timings?.totalMs;
     const timingLabel = typeof timing === 'number' ? `${timing.toFixed(0)} ms` : 'ready';
-    setMapToast(`Map ready (${timingLabel})`, 'ready', 2000);
+    if (!silent) {
+      setMapToast(`Map ready (${timingLabel})`, 'ready', 2000);
+    }
   } catch (error) {
     if (isStaleError(error)) return;
-    setMapToast('Map compute failed.', 'error', 3000);
+    if (!silent) {
+      setMapToast('Map compute failed.', 'error', 3000);
+    }
     // eslint-disable-next-line no-console
     console.error('Map compute failed', error);
   } finally {
     if (token === activeMapToken) {
       isMapComputing = false;
-      updateMapUI();
+      if (!silent) {
+        updateMapUI();
+      }
+      if (queuedMapResolutionPx !== null) {
+        const nextResolution = queuedMapResolutionPx;
+        queuedMapResolutionPx = null;
+        recalculateNoiseMap(nextResolution);
+      }
     }
   }
 }
 
-function computeScene() {
-  invalidateNoiseMap();
+async function computeNoiseMap() {
+  if (isMapComputing) {
+    invalidateNoiseMap();
+    setMapToast('Map canceled', 'error', 2000);
+    return;
+  }
+  queuedMapResolutionPx = null;
+  await computeNoiseMapInternal();
+}
+
+function recalculateNoiseMap(resolutionPx: number) {
+  if (!layers.noiseMap) return;
+  if (isMapComputing) {
+    queuedMapResolutionPx = resolutionPx;
+    return;
+  }
+  // Silent recompute keeps UI responsive while updating the map texture.
+  void computeNoiseMapInternal({ resolutionPx, silent: true, requestId: 'grid:live' });
+}
+
+function computeScene(options: { invalidateMap?: boolean } = {}) {
+  if (options.invalidateMap !== false) {
+    invalidateNoiseMap();
+  }
   pruneResults();
   renderResults();
-  drawScene();
+  requestRender();
   dragContribution = null;
   receiverEnergyTotals = new Map();
   panelEnergyTotals = new Map();
@@ -1780,7 +1906,7 @@ async function computeReceiversIncremental(
     if (applyReceiverDelta(sourceId, energies)) {
       updateStatus(response);
       renderResults();
-      drawScene();
+      requestRender();
     }
   } catch (error) {
     if (isStaleError(error)) return;
@@ -1805,7 +1931,7 @@ async function computePanelIncremental(
     const energies = panelSamplesToEnergy(response.result.samples ?? []);
     if (applyPanelDelta(sourceId, panel.id, energies)) {
       renderResults();
-      drawScene();
+      requestRender();
     }
   } catch (error) {
     if (isStaleError(error)) return;
@@ -1848,14 +1974,14 @@ function renderResults() {
 function refreshNoiseMapVisualization() {
   renderNoiseMapLegend();
   if (!noiseMap) {
-    drawScene();
+    requestRender();
     return;
   }
   const range = getActiveMapRange();
   const texture = buildNoiseMapTexture(noiseMap, range);
   if (!texture) return;
   noiseMap.texture = texture;
-  drawScene();
+  requestRender();
 }
 
 function createFieldLabel(label: string, tooltipText?: string) {
@@ -2124,7 +2250,7 @@ function setSelection(next: Selection) {
   renderSources();
   renderPanelLegend();
   renderPanelStats();
-  drawScene();
+  requestRender();
 }
 
 function renderProperties() {
@@ -2487,7 +2613,7 @@ function wireLayerToggle(input: HTMLInputElement | null, key: keyof typeof layer
     if (debugLayer && input.checked) {
       debugLayer.textContent = layerLabels[key];
     }
-    drawScene();
+    requestRender();
   });
 }
 
@@ -2735,7 +2861,7 @@ function drawNoiseMap() {
   if (width <= 0 || height <= 0) return;
 
   ctx.save();
-  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingEnabled = interactionActive;
   ctx.drawImage(noiseMap.texture, topLeft.x, topLeft.y, width, height);
   ctx.restore();
 }
@@ -3009,6 +3135,25 @@ function drawReceiverBadges() {
   }
 }
 
+function requestRender() {
+  needsUpdate = true;
+}
+
+function renderLoop() {
+  requestAnimationFrame(renderLoop);
+  if (!needsUpdate) return;
+  needsUpdate = false;
+  drawScene();
+}
+
+function setInteractionActive(active: boolean) {
+  if (interactionActive === active) return;
+  interactionActive = active;
+  ctx.imageSmoothingEnabled = active;
+  // Switching smoothing affects map draw, so request a frame.
+  requestRender();
+}
+
 function drawScene() {
   const rect = canvas.getBoundingClientRect();
   ctx.clearRect(0, 0, rect.width, rect.height);
@@ -3050,6 +3195,108 @@ function drawScene() {
   }
 }
 
+function shouldLiveUpdateMap(activeDrag: DragState | null) {
+  return activeDrag?.type === 'source' || activeDrag?.type === 'barrier';
+}
+
+function startInteractionForDrag(activeDrag: DragState | null) {
+  if (!shouldLiveUpdateMap(activeDrag)) return;
+  setInteractionActive(true);
+}
+
+function applyDrag(worldPoint: Point) {
+  if (!dragState) return;
+  const activeDrag = dragState;
+  const targetPoint = 'offset' in activeDrag
+    ? {
+        x: worldPoint.x - activeDrag.offset.x,
+        y: worldPoint.y - activeDrag.offset.y,
+      }
+    : worldPoint;
+  if (activeDrag.type === 'source') {
+    const source = scene.sources.find((item) => item.id === activeDrag.id);
+    if (source) {
+      source.x = targetPoint.x;
+      source.y = targetPoint.y;
+    }
+  }
+  if (activeDrag.type === 'receiver') {
+    const receiver = scene.receivers.find((item) => item.id === activeDrag.id);
+    if (receiver) {
+      receiver.x = targetPoint.x;
+      receiver.y = targetPoint.y;
+    }
+  }
+  if (activeDrag.type === 'panel') {
+    const panel = scene.panels.find((item) => item.id === activeDrag.id);
+    if (panel) {
+      const dx = targetPoint.x - panel.points[0].x;
+      const dy = targetPoint.y - panel.points[0].y;
+      panel.points = panel.points.map((pt) => ({ x: pt.x + dx, y: pt.y + dy }));
+    }
+  }
+  if (activeDrag.type === 'barrier') {
+    const barrier = scene.barriers.find((item) => item.id === activeDrag.id);
+    if (barrier) {
+      const dx = targetPoint.x - barrier.p1.x;
+      const dy = targetPoint.y - barrier.p1.y;
+      barrier.p1 = { x: barrier.p1.x + dx, y: barrier.p1.y + dy };
+      barrier.p2 = { x: barrier.p2.x + dx, y: barrier.p2.y + dy };
+    }
+  }
+  if (activeDrag.type === 'building') {
+    const building = scene.buildings.find((item) => item.id === activeDrag.id);
+    if (building) {
+      building.x = targetPoint.x;
+      building.y = targetPoint.y;
+    }
+  }
+  if (activeDrag.type === 'building-resize') {
+    const building = scene.buildings.find((item) => item.id === activeDrag.id);
+    if (building) {
+      const dx = worldPoint.x - building.x;
+      const dy = worldPoint.y - building.y;
+      const cos = Math.cos(building.rotation);
+      const sin = Math.sin(building.rotation);
+      const localX = dx * cos + dy * sin;
+      const localY = -dx * sin + dy * cos;
+      building.width = Math.max(BUILDING_MIN_SIZE, Math.abs(localX) * 2);
+      building.height = Math.max(BUILDING_MIN_SIZE, Math.abs(localY) * 2);
+    }
+  }
+  if (activeDrag.type === 'building-rotate') {
+    const building = scene.buildings.find((item) => item.id === activeDrag.id);
+    if (building) {
+      const angle = Math.atan2(worldPoint.y - building.y, worldPoint.x - building.x);
+      building.rotation = activeDrag.startRotation + (angle - activeDrag.startAngle);
+    }
+  }
+  if (activeDrag.type === 'panel-vertex') {
+    const panel = scene.panels.find((item) => item.id === activeDrag.id);
+    if (panel && panel.points[activeDrag.index]) {
+      panel.points[activeDrag.index] = { x: targetPoint.x, y: targetPoint.y };
+    }
+  }
+
+  // Limit live noise-map work to drags that affect propagation.
+  const shouldUpdateMap = shouldLiveUpdateMap(activeDrag);
+  if (activeDrag.type === 'source') {
+    computeSceneIncremental(activeDrag.id);
+  } else {
+    computeScene({ invalidateMap: false });
+  }
+
+  if (shouldUpdateMap) {
+    recalculateNoiseMap(RES_LOW);
+  }
+  requestRender();
+  dragDirty = true;
+}
+
+const throttledDragMove = throttle((worldPoint: Point) => {
+  applyDrag(worldPoint);
+}, DRAG_FRAME_MS);
+
 function handlePointerMove(event: MouseEvent) {
   const rect = canvas.getBoundingClientRect();
   const canvasPoint = { x: event.clientX - rect.left, y: event.clientY - rect.top };
@@ -3062,7 +3309,7 @@ function handlePointerMove(event: MouseEvent) {
       x: panState.origin.x + dx / pixelsPerMeter,
       y: panState.origin.y - dy / pixelsPerMeter,
     };
-    drawScene();
+    requestRender();
   }
 
   const { point: snappedPoint, snapped } = snapPoint(worldPoint);
@@ -3085,7 +3332,7 @@ function handlePointerMove(event: MouseEvent) {
 
   if (activeTool === 'add-barrier' && barrierDragActive && barrierDraft) {
     barrierDraft.p2 = snappedPoint;
-    drawScene();
+    requestRender();
     return;
   }
 
@@ -3093,103 +3340,20 @@ function handlePointerMove(event: MouseEvent) {
     const nextHover = hitTest(canvasPoint);
     if (!sameSelection(hoverSelection, nextHover)) {
       hoverSelection = nextHover;
-      drawScene();
+      requestRender();
     }
   } else if (!dragState && hoverSelection) {
     hoverSelection = null;
-    drawScene();
+    requestRender();
   }
 
   if (dragState) {
-    const activeDrag = dragState;
-    const targetPoint = 'offset' in activeDrag
-      ? {
-          x: worldPoint.x - activeDrag.offset.x,
-          y: worldPoint.y - activeDrag.offset.y,
-        }
-      : worldPoint;
-    if (activeDrag.type === 'source') {
-      const source = scene.sources.find((item) => item.id === activeDrag.id);
-      if (source) {
-        source.x = targetPoint.x;
-        source.y = targetPoint.y;
-      }
-    }
-    if (activeDrag.type === 'receiver') {
-      const receiver = scene.receivers.find((item) => item.id === activeDrag.id);
-      if (receiver) {
-        receiver.x = targetPoint.x;
-        receiver.y = targetPoint.y;
-      }
-    }
-    if (activeDrag.type === 'panel') {
-      const panel = scene.panels.find((item) => item.id === activeDrag.id);
-      if (panel) {
-        const dx = targetPoint.x - panel.points[0].x;
-        const dy = targetPoint.y - panel.points[0].y;
-        panel.points = panel.points.map((pt) => ({ x: pt.x + dx, y: pt.y + dy }));
-      }
-    }
-    if (activeDrag.type === 'barrier') {
-      const barrier = scene.barriers.find((item) => item.id === activeDrag.id);
-      if (barrier) {
-        const dx = targetPoint.x - barrier.p1.x;
-        const dy = targetPoint.y - barrier.p1.y;
-        barrier.p1 = { x: barrier.p1.x + dx, y: barrier.p1.y + dy };
-        barrier.p2 = { x: barrier.p2.x + dx, y: barrier.p2.y + dy };
-      }
-    }
-    if (activeDrag.type === 'building') {
-      const building = scene.buildings.find((item) => item.id === activeDrag.id);
-      if (building) {
-        building.x = targetPoint.x;
-        building.y = targetPoint.y;
-      }
-    }
-    if (activeDrag.type === 'building-resize') {
-      const building = scene.buildings.find((item) => item.id === activeDrag.id);
-      if (building) {
-        const dx = worldPoint.x - building.x;
-        const dy = worldPoint.y - building.y;
-        const cos = Math.cos(building.rotation);
-        const sin = Math.sin(building.rotation);
-        const localX = dx * cos + dy * sin;
-        const localY = -dx * sin + dy * cos;
-        building.width = Math.max(BUILDING_MIN_SIZE, Math.abs(localX) * 2);
-        building.height = Math.max(BUILDING_MIN_SIZE, Math.abs(localY) * 2);
-      }
-    }
-    if (activeDrag.type === 'building-rotate') {
-      const building = scene.buildings.find((item) => item.id === activeDrag.id);
-      if (building) {
-        const angle = Math.atan2(worldPoint.y - building.y, worldPoint.x - building.x);
-        building.rotation = activeDrag.startRotation + (angle - activeDrag.startAngle);
-      }
-    }
-    if (activeDrag.type === 'panel-vertex') {
-      const panel = scene.panels.find((item) => item.id === activeDrag.id);
-      if (panel && panel.points[activeDrag.index]) {
-        panel.points[activeDrag.index] = { x: targetPoint.x, y: targetPoint.y };
-      }
-    }
-
-    const now = performance.now();
-    if (now - lastComputeAt > 120) {
-      lastComputeAt = now;
-      if (activeDrag.type === 'source') {
-        computeSceneIncremental(activeDrag.id);
-      } else {
-        computeScene();
-      }
-    } else {
-      drawScene();
-    }
-    dragDirty = true;
+    throttledDragMove(worldPoint);
   }
 
   if (activeTool === 'measure' && measureStart && !measureLocked) {
     measureEnd = worldPoint;
-    drawScene();
+    requestRender();
   }
 }
 
@@ -3218,7 +3382,7 @@ function handlePointerDown(event: MouseEvent) {
       barrierDraft.p2 = snappedPoint;
     }
     barrierDragActive = true;
-    drawScene();
+    requestRender();
     return;
   }
 
@@ -3241,7 +3405,7 @@ function handlePointerDown(event: MouseEvent) {
       measureEnd = worldPoint;
       measureLocked = true;
     }
-    drawScene();
+    requestRender();
     return;
   }
 
@@ -3264,6 +3428,7 @@ function handlePointerDown(event: MouseEvent) {
           } else {
             dragState = { type: 'building-resize', id: building.id };
           }
+          startInteractionForDrag(dragState);
           return;
         }
       }
@@ -3280,6 +3445,7 @@ function handlePointerDown(event: MouseEvent) {
           index: handleHit.index,
           offset: { x: worldPoint.x - vertex.x, y: worldPoint.y - vertex.y },
         };
+        startInteractionForDrag(dragState);
       }
       return;
     }
@@ -3313,6 +3479,7 @@ function handlePointerDown(event: MouseEvent) {
             offset: { x: worldHit.x - duplicate.x, y: worldHit.y - duplicate.y },
           };
           primeDragContribution(duplicate.id);
+          startInteractionForDrag(dragState);
           return;
         }
         dragState = { type: 'source', id: source.id, offset: { x: worldHit.x - source.x, y: worldHit.y - source.y } };
@@ -3335,6 +3502,7 @@ function handlePointerDown(event: MouseEvent) {
             id: duplicate.id,
             offset: { x: worldHit.x - duplicate.x, y: worldHit.y - duplicate.y },
           };
+          startInteractionForDrag(dragState);
           return;
         }
         dragState = { type: 'receiver', id: receiver.id, offset: { x: worldHit.x - receiver.x, y: worldHit.y - receiver.y } };
@@ -3351,11 +3519,12 @@ function handlePointerDown(event: MouseEvent) {
           setSelection({ type: 'panel', id: duplicate.id });
           dragDirty = true;
           const first = duplicate.points[0];
-          dragState = { type: 'panel', id: duplicate.id, offset: { x: worldHit.x - first.x, y: worldHit.y - first.y } };
-          return;
-        }
-        const first = panel.points[0];
-        dragState = { type: 'panel', id: panel.id, offset: { x: worldHit.x - first.x, y: worldHit.y - first.y } };
+        dragState = { type: 'panel', id: duplicate.id, offset: { x: worldHit.x - first.x, y: worldHit.y - first.y } };
+        startInteractionForDrag(dragState);
+        return;
+      }
+      const first = panel.points[0];
+      dragState = { type: 'panel', id: panel.id, offset: { x: worldHit.x - first.x, y: worldHit.y - first.y } };
       }
     }
     if (hit.type === 'barrier') {
@@ -3374,6 +3543,7 @@ function handlePointerDown(event: MouseEvent) {
             id: duplicate.id,
             offset: { x: worldHit.x - duplicate.p1.x, y: worldHit.y - duplicate.p1.y },
           };
+          startInteractionForDrag(dragState);
           return;
         }
         dragState = { type: 'barrier', id: barrier.id, offset: { x: worldHit.x - barrier.p1.x, y: worldHit.y - barrier.p1.y } };
@@ -3395,6 +3565,7 @@ function handlePointerDown(event: MouseEvent) {
             id: duplicate.id,
             offset: { x: worldHit.x - duplicate.x, y: worldHit.y - duplicate.y },
           };
+          startInteractionForDrag(dragState);
           return;
         }
         dragState = { type: 'building', id: building.id, offset: { x: worldHit.x - building.x, y: worldHit.y - building.y } };
@@ -3406,12 +3577,16 @@ function handlePointerDown(event: MouseEvent) {
       panState = { start: canvasPoint, origin: { ...panOffset } };
     }
   }
+
+  if (dragState) {
+    startInteractionForDrag(dragState);
+  }
 }
 
 function handlePointerLeave() {
   if (hoverSelection) {
     hoverSelection = null;
-    drawScene();
+    requestRender();
   }
   if (snapIndicator) {
     snapIndicator.style.display = 'none';
@@ -3429,7 +3604,7 @@ function handlePointerUp() {
       // keep the draft around so the next click can set p2 (classic click-then-click placement).
       barrierDraftAnchored = true;
       barrierDragActive = false;
-      drawScene();
+      requestRender();
     }
     return;
   }
@@ -3438,11 +3613,18 @@ function handlePointerUp() {
     return;
   }
   if (dragState) {
+    throttledDragMove.flush();
+    throttledDragMove.cancel();
+    const shouldRecalculateMap = dragDirty && shouldLiveUpdateMap(dragState);
     dragState = null;
+    setInteractionActive(false);
     if (dragDirty) {
-      pushHistory();
+      pushHistory({ invalidateMap: false });
     }
-    computeScene();
+    computeScene({ invalidateMap: false });
+    if (shouldRecalculateMap) {
+      recalculateNoiseMap(RES_HIGH);
+    }
   }
 }
 
@@ -3467,7 +3649,7 @@ function handleWheel(event: WheelEvent) {
     y: panOffset.y + (before.y - after.y),
   };
   updateScaleBar();
-  drawScene();
+  requestRender();
 }
 
 function wireWheel() {
@@ -3510,7 +3692,7 @@ function wireKeyboard() {
       barrierDraft = null;
       barrierDraftAnchored = false;
       barrierDragActive = false;
-      drawScene();
+      requestRender();
     }
     if (event.key === 'Delete' || event.key === 'Backspace') {
       if (selection.type !== 'none') {
@@ -3942,6 +4124,9 @@ function init() {
   updateMapUI();
   renderNoiseMapLegend();
   resizeCanvas();
+  needsUpdate = true;
+  requestRender();
+  renderLoop();
   pushHistory({ markDirty: false });
   markSaved();
   computeScene();
