@@ -2953,7 +2953,7 @@ function drawNoiseMap() {
   if (width <= 0 || height <= 0) return;
 
   ctx.save();
-  ctx.imageSmoothingEnabled = interactionActive;
+  ctx.imageSmoothingEnabled = false;
   ctx.drawImage(noiseMap.texture, topLeft.x, topLeft.y, width, height);
   ctx.restore();
 }
