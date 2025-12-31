@@ -857,39 +857,7 @@ button.primary.is-cancel {
   display: block;
 }
 
-.canvas-hud {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  z-index: 2;
-}
-
-.hud-card {
-  padding: 10px 12px;
-  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-soft);
-  min-width: 160px;
-  box-shadow: var(--shadow-panel);
-}
-
-.hud-title {
-  font-size: 11px;
-  text-transform: lowercase;
-  letter-spacing: var(--ui-letter-spacing);
-  color: var(--text-soft);
-  font-weight: 600;
-}
-
-.hud-value {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.scale-bar {
+.canvas-status {
   position: absolute;
   bottom: 18px;
   left: 18px;
@@ -897,6 +865,29 @@ button.primary.is-cancel {
   flex-direction: column;
   gap: 6px;
   z-index: 2;
+  pointer-events: none;
+}
+
+.scale-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.canvas-status-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.canvas-status-sep {
+  color: var(--text-soft);
+  opacity: 0.7;
 }
 
 .canvas-help {

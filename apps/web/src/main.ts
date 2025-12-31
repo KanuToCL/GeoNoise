@@ -308,8 +308,10 @@ type CanvasTheme = {
 };
 
 const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
-const coordLabel = document.querySelector('#coordLabel') as HTMLDivElement | null;
-const layerLabel = document.querySelector('#layerLabel') as HTMLDivElement | null;
+const debugX = document.querySelector('#debug-x') as HTMLSpanElement | null;
+const debugY = document.querySelector('#debug-y') as HTMLSpanElement | null;
+const debugMode = document.querySelector('#debug-mode') as HTMLSpanElement | null;
+const debugLayer = document.querySelector('#debug-layer') as HTMLSpanElement | null;
 const computeButton = document.querySelector('#computeButton') as HTMLButtonElement | null;
 const meshButton = document.querySelector('#meshButton') as HTMLButtonElement | null;
 const saveButton = document.querySelector('#saveButton') as HTMLButtonElement | null;
@@ -330,7 +332,6 @@ const toolInstruction = document.querySelector('#toolInstruction') as HTMLDivEle
 const selectionLabel = document.querySelector('#selectionLabel') as HTMLSpanElement | null;
 const selectionHint = document.querySelector('#selectionHint') as HTMLDivElement | null;
 const modeLabel = document.querySelector('#modeLabel') as HTMLSpanElement | null;
-const modeHint = document.querySelector('#modeHint') as HTMLDivElement | null;
 const propertiesBody = document.querySelector('#propertiesBody') as HTMLDivElement | null;
 const sourceTable = document.querySelector('#sourceTable') as HTMLDivElement | null;
 const sourceSumMode = document.querySelector('#sourceSumMode') as HTMLDivElement | null;
@@ -1597,7 +1598,7 @@ async function computeNoiseMap() {
     noiseMap = { ...response.result, cols, rows, texture };
     layers.noiseMap = true;
     if (layerNoiseMap) layerNoiseMap.checked = true;
-    if (layerLabel) layerLabel.textContent = layerLabels.noiseMap;
+    if (debugLayer) debugLayer.textContent = layerLabels.noiseMap;
 
     renderNoiseMapLegend();
     drawScene();
@@ -1857,11 +1858,39 @@ function refreshNoiseMapVisualization() {
   drawScene();
 }
 
-function createInlineField(label: string, value: number, onChange: (value: number) => void) {
+function createFieldLabel(label: string, tooltipText?: string) {
+  const wrapper = document.createElement('span');
+  wrapper.className = 'field-label';
+  const text = document.createElement('span');
+  text.textContent = label;
+  wrapper.appendChild(text);
+
+  if (tooltipText) {
+    const tooltip = document.createElement('span');
+    tooltip.className = 'tooltip';
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'tooltip-trigger ui-button';
+    trigger.textContent = 'i';
+    trigger.setAttribute('aria-label', `${label} info`);
+    const content = document.createElement('span');
+    content.className = 'tooltip-content';
+    const note = document.createElement('span');
+    note.className = 'tooltip-note';
+    note.textContent = tooltipText;
+    content.appendChild(note);
+    tooltip.appendChild(trigger);
+    tooltip.appendChild(content);
+    wrapper.appendChild(tooltip);
+  }
+
+  return wrapper;
+}
+
+function createInlineField(label: string, value: number, onChange: (value: number) => void, tooltipText?: string) {
   const field = document.createElement('label');
   field.className = 'source-field';
-  const name = document.createElement('span');
-  name.textContent = label;
+  const name = createFieldLabel(label, tooltipText);
   const input = document.createElement('input');
   input.type = 'number';
   input.classList.add('ui-inset');
@@ -1976,12 +2005,12 @@ function renderSources() {
 
     const fields = document.createElement('div');
     fields.className = 'source-fields';
-    fields.appendChild(createInlineField('Level (dB)', source.power, (value) => {
+    fields.appendChild(createInlineField('Sound Power ($L_W$)', source.power, (value) => {
       source.power = value;
       pushHistory();
       renderProperties();
       computeScene();
-    }));
+    }, 'Total acoustic energy'));
     fields.appendChild(createInlineField('Height (m)', source.z, (value) => {
       source.z = value;
       pushHistory();
@@ -2061,8 +2090,8 @@ function setActiveTool(tool: Tool) {
   if (modeLabel) {
     modeLabel.textContent = toolLabel(tool);
   }
-  if (modeHint) {
-    modeHint.textContent = toolLabel(tool);
+  if (debugMode) {
+    debugMode.textContent = toolLabel(tool);
   }
   if (toolInstruction) {
     toolInstruction.textContent = toolInstructionFor(tool);
@@ -2166,11 +2195,11 @@ function renderProperties() {
     propertiesBody.appendChild(createTextRow('Name', source.name, (value) => {
       source.name = value;
     }));
-    propertiesBody.appendChild(createInputRow('Level (dB)', source.power, (value) => {
+    propertiesBody.appendChild(createInputRow('Sound Power ($L_W$)', source.power, (value) => {
       source.power = value;
       pushHistory();
       computeScene();
-    }));
+    }, 'Total acoustic energy'));
     propertiesBody.appendChild(createInputRow('Height (m)', source.z, (value) => {
       source.z = value;
       pushHistory();
@@ -2247,11 +2276,10 @@ function renderProperties() {
   }
 }
 
-function createInputRow(label: string, value: number, onChange: (value: number) => void) {
+function createInputRow(label: string, value: number, onChange: (value: number) => void, tooltipText?: string) {
   const row = document.createElement('div');
   row.className = 'property-row';
-  const name = document.createElement('span');
-  name.textContent = label;
+  const name = createFieldLabel(label, tooltipText);
   const input = document.createElement('input');
   input.type = 'number';
   input.classList.add('ui-inset');
@@ -2456,8 +2484,8 @@ function wireLayerToggle(input: HTMLInputElement | null, key: keyof typeof layer
   if (!input) return;
   input.addEventListener('change', () => {
     layers[key] = input.checked;
-    if (layerLabel && input.checked) {
-      layerLabel.textContent = layerLabels[key];
+    if (debugLayer && input.checked) {
+      debugLayer.textContent = layerLabels[key];
     }
     drawScene();
   });
@@ -3048,9 +3076,8 @@ function handlePointerMove(event: MouseEvent) {
     }
   }
 
-  if (coordLabel) {
-    coordLabel.textContent = `x: ${formatMeters(worldPoint.x)} m, y: ${formatMeters(worldPoint.y)} m`;
-  }
+  if (debugX) debugX.textContent = formatMeters(worldPoint.x);
+  if (debugY) debugY.textContent = formatMeters(worldPoint.y);
 
   if (panState) {
     return;
