@@ -49,13 +49,3 @@ for (const packageRoot of packageRoots) {
   mkdirSync(resolve(packagesOut, packageName), { recursive: true });
   cpSync(packageDist, destination, { recursive: true });
 }
-
-const vendorModules = ['zod'];
-const modulesOut = resolve(dist, 'node_modules');
-mkdirSync(modulesOut, { recursive: true });
-for (const moduleName of vendorModules) {
-  const moduleRoot = resolve(repoRoot, 'node_modules', moduleName);
-  if (!existsSync(moduleRoot)) continue;
-  const destination = resolve(modulesOut, moduleName);
-  cpSync(moduleRoot, destination, { recursive: true });
-}
