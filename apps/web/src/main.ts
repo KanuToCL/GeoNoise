@@ -232,7 +232,7 @@ type NoiseMap = {
 };
 
 type MapRange = { min: number; max: number };
-type MapRenderStyle = 'Smooth' | 'Banded';
+type MapRenderStyle = 'Smooth' | 'Contours';
 
 type Tool = 'select' | 'add-source' | 'add-receiver' | 'add-panel' | 'add-barrier' | 'add-building' | 'measure' | 'delete';
 
@@ -341,6 +341,7 @@ const dbLegend = document.querySelector('#dbLegend') as HTMLDivElement | null;
 const dbLegendGradient = document.querySelector('#dbLegendGradient') as HTMLDivElement | null;
 const dbLegendLabels = document.querySelector('#dbLegendLabels') as HTMLDivElement | null;
 const mapRenderStyleToggle = document.querySelector('#mapRenderStyle') as HTMLInputElement | null;
+const mapBandStepRow = document.querySelector('#mapBandStepRow') as HTMLDivElement | null;
 const mapBandStepInput = document.querySelector('#mapBandStep') as HTMLInputElement | null;
 const mapAutoScaleToggle = document.querySelector('#mapAutoScale') as HTMLInputElement | null;
 const exportCsv = document.querySelector('#exportCsv') as HTMLButtonElement | null;
@@ -863,12 +864,12 @@ function getActiveMapRange(): MapRange {
 }
 
 function getMapBandStep() {
-  if (!Number.isFinite(mapBandStep) || mapBandStep <= 0) return DEFAULT_MAP_BAND_STEP;
-  return mapBandStep;
+  if (!Number.isFinite(mapBandStep)) return DEFAULT_MAP_BAND_STEP;
+  return Math.min(20, Math.max(1, mapBandStep));
 }
 
 function snapMapValue(value: number) {
-  if (mapRenderStyle !== 'Banded') return value;
+  if (mapRenderStyle !== 'Contours') return value;
   const step = getMapBandStep();
   return Math.floor(value / step) * step;
 }
@@ -879,45 +880,19 @@ function buildSmoothLegendStops() {
     .join(', ');
 }
 
-function buildBandedLegendStops(range: MapRange, step: number) {
-  const span = range.max - range.min;
-  if (!(span > 0) || !Number.isFinite(span)) {
-    const color = colorToCss(getSampleColor(0));
-    return `${color} 0%, ${color} 100%`;
-  }
-
-  const clamp01 = (value: number) => Math.min(Math.max(value, 0), 1);
-  const start = Math.floor(range.min / step) * step;
-  const end = Math.ceil(range.max / step) * step;
-  const stops: string[] = [];
-
-  for (let value = start; value < end - 1e-6; value += step) {
-    const next = value + step;
-    const startRatio = (value - range.min) / span;
-    const endRatio = (next - range.min) / span;
-    const startPos = clamp01(startRatio);
-    const endPos = clamp01(endRatio);
-    if (endPos <= 0 || startPos >= 1) continue;
-    const color = colorToCss(getSampleColor(startRatio));
-    stops.push(`${color} ${(startPos * 100).toFixed(2)}%`, `${color} ${(endPos * 100).toFixed(2)}%`);
-  }
-
-  if (!stops.length) {
-    const color = colorToCss(getSampleColor(0));
-    return `${color} 0%, ${color} 100%`;
-  }
-
-  return stops.join(', ');
-}
-
 function buildBandedLegendLabels(range: MapRange, step: number) {
-  const labels: number[] = [range.min];
-  const epsilon = 1e-6;
-  let value = Math.ceil((range.min + epsilon) / step) * step;
-  for (; value < range.max - epsilon; value += step) {
+  const clampedStep = Math.min(20, Math.max(1, step));
+  const start = Math.floor(range.min / clampedStep) * clampedStep;
+  const end = Math.ceil(range.max / clampedStep) * clampedStep;
+  const labels: number[] = [];
+
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return [range.min, range.max];
+  }
+
+  for (let value = start; value <= end + 1e-6; value += clampedStep) {
     labels.push(value);
   }
-  labels.push(range.max);
 
   if (labels.length <= MAX_MAP_LEGEND_LABELS) {
     return labels;
@@ -1057,14 +1032,14 @@ function renderNoiseMapLegend() {
   if (!dbLegend || !dbLegendGradient || !dbLegendLabels) return;
   const range = getActiveMapRange();
   const step = getMapBandStep();
-  const isBanded = mapRenderStyle === 'Banded';
-  const stops = isBanded ? buildBandedLegendStops(range, step) : buildSmoothLegendStops();
+  const isContours = mapRenderStyle === 'Contours';
+  const stops = buildSmoothLegendStops();
 
   dbLegendGradient.style.backgroundImage = `linear-gradient(90deg, ${stops})`;
-  dbLegend.classList.toggle('is-banded', isBanded);
+  dbLegend.classList.toggle('is-contours', isContours);
 
   dbLegendLabels.innerHTML = '';
-  const labels = isBanded ? buildBandedLegendLabels(range, step) : [range.min, range.max];
+  const labels = isContours ? buildBandedLegendLabels(range, step) : [range.min, range.max];
   for (let i = 0; i < labels.length; i += 1) {
     const value = labels[i];
     const label = document.createElement('span');
@@ -2378,11 +2353,14 @@ function updateMapUI() {
 
 function updateMapSettingsControls() {
   if (mapRenderStyleToggle) {
-    mapRenderStyleToggle.checked = mapRenderStyle === 'Banded';
+    mapRenderStyleToggle.checked = mapRenderStyle === 'Contours';
   }
   if (mapBandStepInput) {
     mapBandStepInput.value = getMapBandStep().toString();
-    mapBandStepInput.disabled = mapRenderStyle !== 'Banded';
+    mapBandStepInput.disabled = mapRenderStyle !== 'Contours';
+  }
+  if (mapBandStepRow) {
+    mapBandStepRow.classList.toggle('is-hidden', mapRenderStyle !== 'Contours');
   }
   if (mapAutoScaleToggle) {
     mapAutoScaleToggle.checked = mapAutoScale;
@@ -2395,19 +2373,33 @@ function wireMapSettings() {
   updateMapSettingsControls();
 
   mapRenderStyleToggle?.addEventListener('change', () => {
-    mapRenderStyle = mapRenderStyleToggle.checked ? 'Banded' : 'Smooth';
+    mapRenderStyle = mapRenderStyleToggle.checked ? 'Contours' : 'Smooth';
     updateMapSettingsControls();
     refreshNoiseMapVisualization();
   });
 
-  mapBandStepInput?.addEventListener('change', () => {
+  const applyBandStep = (shouldClamp: boolean) => {
+    if (!mapBandStepInput) return;
     const next = Number(mapBandStepInput.value);
-    if (!Number.isFinite(next) || next <= 0) {
-      updateMapSettingsControls();
+    if (!Number.isFinite(next)) {
+      if (shouldClamp) {
+        mapBandStepInput.value = getMapBandStep().toString();
+      }
       return;
     }
-    mapBandStep = Math.max(1, next);
+    mapBandStep = Math.min(20, Math.max(1, next));
+    if (shouldClamp) {
+      mapBandStepInput.value = mapBandStep.toString();
+    }
     refreshNoiseMapVisualization();
+  };
+
+  mapBandStepInput?.addEventListener('input', () => {
+    applyBandStep(false);
+  });
+
+  mapBandStepInput?.addEventListener('change', () => {
+    applyBandStep(true);
   });
 
   mapAutoScaleToggle?.addEventListener('change', () => {

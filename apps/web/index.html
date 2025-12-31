@@ -326,21 +326,25 @@
             <div class="properties" id="propertiesBody">Select an item to edit its properties.</div>
           </section>
 
-          <section class="panel ui-surface">
-            <h2>Map Settings</h2>
-            <label class="toggle">
-              <input type="checkbox" id="mapRenderStyle" />
-              <span>Smooth / Bands</span>
-            </label>
-            <div class="property-row">
-              <span>Band step (dB)</span>
-              <input class="ui-inset" id="mapBandStep" type="number" min="1" step="1" value="5" />
+          <details class="panel ui-surface panel-collapsible" id="mapSettingsPanel" open>
+            <summary class="panel-summary">
+              <h2>Map Settings</h2>
+            </summary>
+            <div class="panel-body">
+              <label class="toggle">
+                <input type="checkbox" id="mapRenderStyle" />
+                <span>Render mode: Smooth (Gradient) / Contours (Banded)</span>
+              </label>
+              <div class="property-row map-band-step" id="mapBandStepRow">
+                <span>Band Step (dB)</span>
+                <input class="ui-inset" id="mapBandStep" type="number" min="1" max="20" step="1" value="5" />
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="mapAutoScale" checked />
+                <span>Auto-scale colors</span>
+              </label>
             </div>
-            <label class="toggle">
-              <input type="checkbox" id="mapAutoScale" checked />
-              <span>Auto-scale colors</span>
-            </label>
-          </section>
+          </details>
 
           <section class="panel ui-surface">
             <h2>Sources</h2>
