@@ -186,17 +186,44 @@
 
         <!-- Bottom dock for creation tools. -->
         <div class="dock">
+          <div class="dock-label-stage" id="dockLabelStage" aria-hidden="true">
+            <span id="dockLabelText"></span>
+          </div>
           <div class="dock-tools" id="toolGrid">
-            <button class="dock-button ui-button is-active" data-tool="select" type="button" aria-label="Select (V)">
+            <button
+              class="dock-button ui-button is-active"
+              data-tool="select"
+              data-label="Select Tool (V)"
+              type="button"
+              aria-label="Select (V)"
+            >
               <span class="dock-label">V</span>
             </button>
-            <button class="dock-button ui-button" data-tool="add-source" type="button" aria-label="Add Source (S)">
+            <button
+              class="dock-button ui-button"
+              data-tool="add-source"
+              data-label="Add Source (S)"
+              type="button"
+              aria-label="Add Source (S)"
+            >
               <span class="dock-label">S</span>
             </button>
-            <button class="dock-button ui-button" data-tool="add-receiver" type="button" aria-label="Add Receiver (R)">
+            <button
+              class="dock-button ui-button"
+              data-tool="add-receiver"
+              data-label="Add Receiver (R)"
+              type="button"
+              aria-label="Add Receiver (R)"
+            >
               <span class="dock-label">R</span>
             </button>
-            <button class="dock-button ui-button" data-tool="add-probe" type="button" aria-label="Add Probe (P)">
+            <button
+              class="dock-button ui-button"
+              data-tool="add-probe"
+              data-label="Add Probe (P)"
+              type="button"
+              aria-label="Add Probe (P)"
+            >
               <svg class="dock-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path
                   d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"
@@ -216,18 +243,36 @@
                 />
               </svg>
             </button>
-            <button class="dock-button ui-button" data-tool="add-barrier" type="button" aria-label="Add Barrier (B)">
+            <button
+              class="dock-button ui-button"
+              data-tool="add-barrier"
+              data-label="Add Barrier (B)"
+              type="button"
+              aria-label="Add Barrier (B)"
+            >
               <span class="dock-label">B</span>
             </button>
-            <button class="dock-button ui-button" data-tool="add-building" type="button" aria-label="Add Building (H)">
+            <button
+              class="dock-button ui-button"
+              data-tool="add-building"
+              data-label="Add Building (H)"
+              type="button"
+              aria-label="Add Building (H)"
+            >
               <span class="dock-label">H</span>
             </button>
-            <button class="dock-button ui-button" data-tool="add-panel" type="button" aria-label="Add Measure Grid (G)">
+            <button
+              class="dock-button ui-button"
+              data-tool="add-panel"
+              data-label="Add Measure Grid (G)"
+              type="button"
+              aria-label="Add Measure Grid (G)"
+            >
               <span class="dock-label">G</span>
             </button>
           </div>
+          <div class="dock-instruction-bottom">Click to select. Drag to move. Shift+drag to duplicate.</div>
         </div>
-        <div class="dock-instruction" id="toolInstruction"></div>
         <!-- Settings shortcut uses inline styles to bypass cached/overridden CSS. -->
         <div
           class="settings-footer"

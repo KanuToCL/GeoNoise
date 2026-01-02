@@ -353,7 +353,8 @@ const scaleLine = document.querySelector('#scaleLine') as HTMLDivElement | null;
 const preferenceSelect = document.querySelector('#computePreference') as HTMLSelectElement | null;
 const themeOptions = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-theme-option]'));
 const toolGrid = document.querySelector('#toolGrid') as HTMLDivElement | null;
-const toolInstruction = document.querySelector('#toolInstruction') as HTMLDivElement | null;
+const dockLabelStage = document.querySelector('#dockLabelStage') as HTMLDivElement | null;
+const dockLabelText = document.querySelector('#dockLabelText') as HTMLSpanElement | null;
 const selectionLabel = document.querySelector('#selectionLabel') as HTMLSpanElement | null;
 const selectionHint = document.querySelector('#selectionHint') as HTMLDivElement | null;
 const modeLabel = document.querySelector('#modeLabel') as HTMLSpanElement | null;
@@ -1311,29 +1312,6 @@ function toolLabel(tool: Tool) {
       return 'Delete';
     default:
       return 'Select';
-  }
-}
-
-function toolInstructionFor(tool: Tool) {
-  switch (tool) {
-    case 'add-source':
-      return 'Click to place a source. Drag to reposition.';
-    case 'add-receiver':
-      return 'Click to place a receiver. Drag to reposition.';
-    case 'add-probe':
-      return 'Click to place a probe. Drag to reposition.';
-    case 'add-barrier':
-      return 'Click to set the start, then drag or click to place the end.';
-    case 'add-panel':
-      return 'Click to place a measure grid.';
-    case 'add-building':
-      return 'Click to place a building. Drag corners to resize and the lollipop to rotate.';
-    case 'measure':
-      return 'Click two points to measure distance.';
-    case 'delete':
-      return 'Click an item to remove it. Undo restores it.';
-    default:
-      return 'Click to select. Drag to move. Shift+drag to duplicate.';
   }
 }
 
@@ -2956,9 +2934,6 @@ function setActiveTool(tool: Tool) {
   if (debugMode) {
     debugMode.textContent = toolLabel(tool);
   }
-  if (toolInstruction) {
-    toolInstruction.textContent = toolInstructionFor(tool);
-  }
 
   if (toolGrid) {
     const buttons = toolGrid.querySelectorAll<HTMLButtonElement>('button[data-tool]');
@@ -3464,6 +3439,50 @@ function wireTools() {
     if (!button) return;
     const tool = button.dataset.tool as Tool;
     setActiveTool(tool);
+  });
+}
+
+function wireDockLabels() {
+  if (!toolGrid || !dockLabelStage || !dockLabelText) return;
+
+  const showLabel = (label: string) => {
+    dockLabelText.textContent = label;
+    dockLabelStage.classList.add('is-visible');
+  };
+
+  const hideLabel = () => {
+    dockLabelStage.classList.remove('is-visible');
+  };
+
+  const resolveButton = (target: EventTarget | null) =>
+    (target as HTMLElement | null)?.closest<HTMLButtonElement>('button[data-label]') ?? null;
+
+  toolGrid.addEventListener('mouseover', (event) => {
+    const button = resolveButton(event.target);
+    if (!button) return;
+    const label = button.dataset.label;
+    if (!label) return;
+    showLabel(label);
+  });
+
+  toolGrid.addEventListener('mouseout', (event) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && toolGrid.contains(nextTarget)) return;
+    hideLabel();
+  });
+
+  toolGrid.addEventListener('focusin', (event) => {
+    const button = resolveButton(event.target);
+    if (!button) return;
+    const label = button.dataset.label;
+    if (!label) return;
+    showLabel(label);
+  });
+
+  toolGrid.addEventListener('focusout', (event) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && toolGrid.contains(nextTarget)) return;
+    hideLabel();
   });
 }
 
@@ -5161,6 +5180,7 @@ function init() {
   wireLayerToggle(layerGrid, 'grid');
   wirePreference();
   wireTools();
+  wireDockLabels();
   wirePointer();
   wireWheel();
   wireKeyboard();
