@@ -365,6 +365,7 @@ const probePanel = document.querySelector('#probePanel') as HTMLDivElement | nul
 const probeTitle = document.querySelector('#probeTitle') as HTMLSpanElement | null;
 const probeClose = document.querySelector('#probeClose') as HTMLButtonElement | null;
 const probeFreeze = document.querySelector('#probeFreeze') as HTMLButtonElement | null;
+const probePin = document.querySelector('#probePin') as HTMLButtonElement | null;
 const probeStatus = document.querySelector('#probeStatus') as HTMLSpanElement | null;
 const probeChart = document.querySelector('#probeChart') as HTMLCanvasElement | null;
 const sourceTable = document.querySelector('#sourceTable') as HTMLDivElement | null;
@@ -525,7 +526,16 @@ type ProbeSnapshot = {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
 };
+type PinnedProbePanel = {
+  id: string;
+  panel: HTMLDivElement;
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  status: HTMLSpanElement;
+};
 const probeSnapshots: ProbeSnapshot[] = [];
+// Live monitors that persist beyond selection (updated alongside the active probe).
+const pinnedProbePanels = new Map<string, PinnedProbePanel>();
 let probeSnapshotSeq = 1;
 let noiseMap: NoiseMap | null = null;
 let currentMapRange: MapRange | null = null;
@@ -803,6 +813,7 @@ function applySnapshot(snap: SceneSnapshot) {
   for (const id of probePending) {
     if (!probeIds.has(id)) probePending.delete(id);
   }
+  prunePinnedProbes();
   buildingSeq = snap.buildingSeq;
   barrierSeq = snap.barrierSeq;
   selection = snap.selection;
@@ -850,6 +861,7 @@ function resizeCanvas() {
   resizeProbeChart();
   renderProbeInspector();
   renderProbeSnapshots();
+  renderPinnedProbePanels();
   requestRender();
 }
 
@@ -1851,9 +1863,7 @@ function computeScene(options: { invalidateMap?: boolean } = {}) {
   for (const panel of scene.panels) {
     void computePanel(engineScene, preference, panel, activeComputeToken);
   }
-  if (activeProbeId) {
-    requestProbeUpdate(activeProbeId);
-  }
+  requestLiveProbeUpdates();
 }
 
 function cancelCompute() {
@@ -2042,9 +2052,7 @@ function computeSceneIncremental(sourceId: string) {
   for (const panel of scene.panels) {
     void computePanelIncremental(engineScene, preference, sourceId, panel);
   }
-  if (activeProbeId) {
-    requestProbeUpdate(activeProbeId);
-  }
+  requestLiveProbeUpdates();
 }
 
 function renderResults() {
@@ -2163,6 +2171,7 @@ function sendProbeRequest(probe: Probe) {
   const request = buildProbeRequest(probe);
   probePending.add(probe.id);
   renderProbeInspector();
+  renderPinnedProbePanel(probe.id);
   if (!probeWorker) {
     window.setTimeout(() => {
       handleProbeResult(calculateProbeStub(request));
@@ -2172,24 +2181,53 @@ function sendProbeRequest(probe: Probe) {
   probeWorker.postMessage(request);
 }
 
-const throttledProbeUpdate = throttle((probeId: string) => {
-  const probe = scene.probes.find((item) => item.id === probeId);
-  if (!probe) return;
-  sendProbeRequest(probe);
+function getProbeById(probeId: string) {
+  return scene.probes.find((item) => item.id === probeId) ?? null;
+}
+
+const throttledProbeUpdate = throttle((probeIds: string[]) => {
+  for (const probeId of probeIds) {
+    const probe = getProbeById(probeId);
+    if (!probe) continue;
+    sendProbeRequest(probe);
+  }
 }, PROBE_UPDATE_MS);
 
-function requestProbeUpdate(probeId: string, options?: { immediate?: boolean }) {
-  if (!probeId) return;
+function requestProbeUpdates(probeIds: string[], options?: { immediate?: boolean }) {
+  const uniqueIds = Array.from(new Set(probeIds)).filter((id) => id);
+  if (!uniqueIds.length) return;
   if (!probeWorker) initProbeWorker();
   if (options?.immediate) {
-    throttledProbeUpdate.cancel();
-    const probe = scene.probes.find((item) => item.id === probeId);
-    if (probe) {
-      sendProbeRequest(probe);
+    for (const probeId of uniqueIds) {
+      const probe = getProbeById(probeId);
+      if (probe) {
+        sendProbeRequest(probe);
+      }
     }
     return;
   }
-  throttledProbeUpdate(probeId);
+  throttledProbeUpdate(uniqueIds);
+}
+
+function requestProbeUpdate(probeId: string, options?: { immediate?: boolean }) {
+  if (!probeId) return;
+  requestProbeUpdates([probeId], options);
+}
+
+function getLiveProbeIds() {
+  const ids = new Set<string>();
+  if (activeProbeId) {
+    ids.add(activeProbeId);
+  }
+  for (const id of pinnedProbePanels.keys()) {
+    ids.add(id);
+  }
+  return Array.from(ids);
+}
+
+function requestLiveProbeUpdates(options?: { immediate?: boolean }) {
+  // Keep pinned monitors and the active inspector in sync with the engine.
+  requestProbeUpdates(getLiveProbeIds(), options);
 }
 
 function handleProbeResult(result: ProbeResult) {
@@ -2199,6 +2237,7 @@ function handleProbeResult(result: ProbeResult) {
   if (activeProbeId === result.probeId) {
     renderProbeInspector();
   }
+  renderPinnedProbePanel(result.probeId);
 }
 
 function resizeProbeCanvas(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
@@ -2317,13 +2356,42 @@ function renderProbeSnapshots() {
   }
 }
 
+function getProbeStatusLabel(probeId: string) {
+  if (probePending.has(probeId)) return 'Updating';
+  if (probeResults.has(probeId)) return 'Live';
+  return 'Idle';
+}
+
+function renderPinnedProbePanel(probeId: string) {
+  const pinned = pinnedProbePanels.get(probeId);
+  if (!pinned) return;
+  pinned.status.textContent = getProbeStatusLabel(probeId);
+  renderProbeChartOn(pinned.canvas, pinned.ctx, probeResults.get(probeId) ?? null);
+}
+
+function renderPinnedProbePanels() {
+  for (const id of pinnedProbePanels.keys()) {
+    renderPinnedProbePanel(id);
+  }
+}
+
 function renderProbeInspector() {
   if (!probePanel) return;
   const probe = getActiveProbe();
-  const isOpen = !!probe;
+  const isPinned = probe ? pinnedProbePanels.has(probe.id) : false;
+  // Hide the inspector if its probe is now showing as a pinned monitor.
+  const isOpen = !!probe && !isPinned;
   probePanel.classList.toggle('is-open', isOpen);
+  probePanel.classList.toggle('probe-panel--active', isOpen);
   probePanel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
-  if (!probe) {
+  if (probePin) {
+    const pinActive = !!probe && pinnedProbePanels.has(probe.id);
+    probePin.disabled = !probe;
+    probePin.classList.toggle('is-active', pinActive);
+    probePin.setAttribute('aria-pressed', pinActive ? 'true' : 'false');
+    probePin.title = probe ? (pinActive ? 'Unpin monitoring window' : 'Pin monitoring window') : 'Pin monitoring window';
+  }
+  if (!probe || isPinned) {
     if (probeFreeze) {
       probeFreeze.disabled = true;
       probeFreeze.title = 'Freeze probe snapshot';
@@ -2334,8 +2402,7 @@ function renderProbeInspector() {
     probeTitle.textContent = `Probe ${probe.id.toUpperCase()}`;
   }
   if (probeStatus) {
-    const hasData = probeResults.has(probe.id);
-    probeStatus.textContent = probePending.has(probe.id) ? 'Updating' : hasData ? 'Live' : 'Idle';
+    probeStatus.textContent = getProbeStatusLabel(probe.id);
   }
   if (probeFreeze) {
     const hasData = probeResults.has(probe.id);
@@ -2410,6 +2477,146 @@ function makePanelDraggable(
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
   });
+}
+
+function removePinnedProbe(probeId: string) {
+  const pinned = pinnedProbePanels.get(probeId);
+  if (!pinned) return false;
+  pinnedProbePanels.delete(probeId);
+  pinned.panel.remove();
+  return true;
+}
+
+function clearPinnedProbes() {
+  for (const id of Array.from(pinnedProbePanels.keys())) {
+    removePinnedProbe(id);
+  }
+}
+
+function prunePinnedProbes() {
+  const probeIds = new Set(scene.probes.map((probe) => probe.id));
+  for (const id of Array.from(pinnedProbePanels.keys())) {
+    if (!probeIds.has(id)) {
+      removePinnedProbe(id);
+    }
+  }
+}
+
+function createPinnedProbePanel(probeId: string) {
+  if (!uiLayer) return;
+  // Pinned panels are live monitors that stay on-screen until explicitly closed.
+  const panel = document.createElement('aside');
+  panel.className = 'probe-panel probe-panel--pinned is-open';
+  panel.setAttribute('aria-hidden', 'false');
+  panel.dataset.probeId = probeId;
+
+  const header = document.createElement('div');
+  header.className = 'probe-header';
+
+  const titleWrap = document.createElement('div');
+  titleWrap.className = 'probe-title-wrap';
+  const title = document.createElement('div');
+  title.className = 'probe-title';
+  title.textContent = `Probe ${probeId.toUpperCase()}`;
+  const badge = document.createElement('span');
+  badge.className = 'probe-title-badge';
+  badge.textContent = 'Pinned';
+  titleWrap.appendChild(title);
+  titleWrap.appendChild(badge);
+
+  const actions = document.createElement('div');
+  actions.className = 'probe-actions';
+  const closeButton = document.createElement('button');
+  closeButton.className = 'probe-close ui-button';
+  closeButton.type = 'button';
+  closeButton.setAttribute('aria-label', 'Unpin probe monitor');
+  closeButton.title = 'Unpin probe monitor';
+  closeButton.textContent = 'x';
+  actions.appendChild(closeButton);
+
+  header.appendChild(titleWrap);
+  header.appendChild(actions);
+
+  const meta = document.createElement('div');
+  meta.className = 'probe-meta';
+  const metaLeft = document.createElement('span');
+  metaLeft.textContent = 'Frequency Response';
+  const metaRight = document.createElement('span');
+  metaRight.textContent = getProbeStatusLabel(probeId);
+  meta.appendChild(metaLeft);
+  meta.appendChild(metaRight);
+
+  const chart = document.createElement('div');
+  chart.className = 'probe-chart';
+  const canvas = document.createElement('canvas');
+  chart.appendChild(canvas);
+
+  const footer = document.createElement('div');
+  footer.className = 'probe-footer';
+  const footerLeft = document.createElement('span');
+  footerLeft.textContent = 'Frequency (Hz)';
+  const footerRight = document.createElement('span');
+  footerRight.textContent = 'Amplitude (dB)';
+  footer.appendChild(footerLeft);
+  footer.appendChild(footerRight);
+
+  panel.appendChild(header);
+  panel.appendChild(meta);
+  panel.appendChild(chart);
+  panel.appendChild(footer);
+  uiLayer.appendChild(panel);
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    panel.remove();
+    return;
+  }
+
+  const pinned: PinnedProbePanel = { id: probeId, panel, canvas, ctx, status: metaRight };
+  pinnedProbePanels.set(probeId, pinned);
+
+  const parent = uiLayer;
+  requestAnimationFrame(() => {
+    const parentRect = parent.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const anchorRect = probePanel?.getBoundingClientRect() ?? null;
+    const stackOffset = 18 * ((pinnedProbePanels.size - 1) % 4);
+    const offset = 12 + stackOffset;
+    const initialLeft = anchorRect
+      ? anchorRect.left - parentRect.left + offset
+      : parentRect.width - panelRect.width - offset;
+    const initialTop = anchorRect
+      ? anchorRect.top - parentRect.top + offset
+      : parentRect.height - panelRect.height - offset;
+    clampPanelToParent(panel, parent, initialLeft, initialTop, 12);
+    renderProbeChartOn(canvas, ctx, probeResults.get(probeId) ?? null);
+  });
+
+  makePanelDraggable(panel, header, { parent, padding: 12, ignoreSelector: 'button' });
+  closeButton.addEventListener('click', () => {
+    unpinProbe(probeId);
+  });
+}
+
+function pinProbe(probeId: string) {
+  if (!probeId || pinnedProbePanels.has(probeId)) return;
+  if (!getProbeById(probeId)) return;
+  createPinnedProbePanel(probeId);
+  requestProbeUpdate(probeId, { immediate: true });
+  renderProbeInspector();
+}
+
+function unpinProbe(probeId: string) {
+  if (!removePinnedProbe(probeId)) return;
+  renderProbeInspector();
+}
+
+function togglePinProbe(probeId: string) {
+  if (pinnedProbePanels.has(probeId)) {
+    unpinProbe(probeId);
+    return;
+  }
+  pinProbe(probeId);
 }
 
 function createProbeSnapshot(data: ProbeResult['data']) {
@@ -3345,6 +3552,7 @@ function deleteSelection(target: Selection) {
     scene.probes = scene.probes.filter((item) => item.id !== target.id);
     probeResults.delete(target.id);
     probePending.delete(target.id);
+    unpinProbe(target.id);
     if (activeProbeId === target.id) {
       setActiveProbe(null);
     }
@@ -4583,6 +4791,12 @@ function wireProbePanel() {
     }
   });
 
+  probePin?.addEventListener('click', () => {
+    const probe = getActiveProbe();
+    if (!probe) return;
+    togglePinProbe(probe.id);
+  });
+
   probeFreeze?.addEventListener('click', () => {
     const probe = getActiveProbe();
     if (!probe) return;
@@ -4684,6 +4898,7 @@ function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
   activeProbeId = null;
   probeResults.clear();
   probePending.clear();
+  clearPinnedProbes();
   if (payload.propagation) {
     updatePropagationConfig(payload.propagation);
     updatePropagationControls();
