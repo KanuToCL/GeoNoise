@@ -1,11 +1,5 @@
 {
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
-        { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" }
-      ]
-    }
-  ]
+  "installCommand": "cd ../.. && npm install",
+  "buildCommand": "cd ../.. && npm run -w @geonoise/web build",
+  "outputDirectory": "dist"
 }
