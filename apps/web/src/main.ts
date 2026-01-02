@@ -364,6 +364,7 @@ const contextClose = document.querySelector('#contextClose') as HTMLButtonElemen
 const probePanel = document.querySelector('#probePanel') as HTMLDivElement | null;
 const probeTitle = document.querySelector('#probeTitle') as HTMLSpanElement | null;
 const probeClose = document.querySelector('#probeClose') as HTMLButtonElement | null;
+const probeFreeze = document.querySelector('#probeFreeze') as HTMLButtonElement | null;
 const probeStatus = document.querySelector('#probeStatus') as HTMLSpanElement | null;
 const probeChart = document.querySelector('#probeChart') as HTMLCanvasElement | null;
 const sourceTable = document.querySelector('#sourceTable') as HTMLDivElement | null;
@@ -389,6 +390,7 @@ const canvasHelp = document.querySelector('#canvasHelp') as HTMLDivElement | nul
 const canvasHelpButton = document.querySelector('#canvasHelpButton') as HTMLButtonElement | null;
 const canvasHelpTooltip = document.querySelector('#canvasHelpTooltip') as HTMLDivElement | null;
 const canvasHelpDismiss = document.querySelector('#canvasHelpDismiss') as HTMLButtonElement | null;
+const uiLayer = document.querySelector('.ui-layer') as HTMLDivElement | null;
 
 const undoButton = document.querySelector('#undoButton') as HTMLButtonElement | null;
 const redoButton = document.querySelector('#redoButton') as HTMLButtonElement | null;
@@ -516,6 +518,15 @@ let results: SceneResults = { receivers: [], panels: [] };
 const probeResults = new Map<string, ProbeResult['data']>();
 let probeWorker: Worker | null = null;
 const probePending = new Set<string>();
+type ProbeSnapshot = {
+  id: string;
+  data: ProbeResult['data'];
+  panel: HTMLDivElement;
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+};
+const probeSnapshots: ProbeSnapshot[] = [];
+let probeSnapshotSeq = 1;
 let noiseMap: NoiseMap | null = null;
 let currentMapRange: MapRange | null = null;
 let mapRenderStyle: MapRenderStyle = 'Smooth';
@@ -650,6 +661,7 @@ function readCanvasTheme(): CanvasTheme {
 function refreshCanvasTheme() {
   canvasTheme = readCanvasTheme();
   renderProbeInspector();
+  renderProbeSnapshots();
   requestRender();
 }
 
@@ -837,6 +849,7 @@ function resizeCanvas() {
   updateScaleBar();
   resizeProbeChart();
   renderProbeInspector();
+  renderProbeSnapshots();
   requestRender();
 }
 
@@ -1467,7 +1480,7 @@ function mergeBounds(a: { minX: number; minY: number; maxX: number; maxY: number
 
 function buildNoiseMapGridConfig(resolutionPx?: number) {
   // Resolution strategy:
-  // - target ~50 cells across the max dimension (step ~= max(width,height)/50)
+  // - target ~40 cells across the max dimension (step ~= max(width,height)/40)
   // - clamp to ~2,500 points total for responsiveness
   const bounds = getSceneBounds();
   if (!bounds) return null;
@@ -1496,7 +1509,7 @@ function buildNoiseMapGridConfig(resolutionPx?: number) {
 
   const paddedWidth = padded.maxX - padded.minX;
   const paddedHeight = padded.maxY - padded.minY;
-  let resolution = Math.max(paddedWidth, paddedHeight) / 50;
+  let resolution = Math.max(paddedWidth, paddedHeight) / 40;
   // When a pixel step is supplied, convert to world meters for a predictable preview grid.
   if (Number.isFinite(resolutionPx) && Number.isFinite(pixelsPerMeter) && pixelsPerMeter > 0) {
     const stepPx = Math.max(1, resolutionPx ?? 1);
@@ -2188,25 +2201,23 @@ function handleProbeResult(result: ProbeResult) {
   }
 }
 
-function resizeProbeChart() {
-  if (!probeChart || !probeChartCtx) return;
-  const rect = probeChart.getBoundingClientRect();
+function resizeProbeCanvas(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
+  const rect = canvas.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
   const dpr = window.devicePixelRatio || 1;
-  probeChart.width = rect.width * dpr;
-  probeChart.height = rect.height * dpr;
-  probeChartCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-function renderProbeChart(data: ProbeResult['data'] | null) {
-  if (!probeChart || !probeChartCtx) return;
-  resizeProbeChart();
-  const rect = probeChart.getBoundingClientRect();
+function renderProbeChartOn(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, data: ProbeResult['data'] | null) {
+  resizeProbeCanvas(canvas, ctx);
+  const rect = canvas.getBoundingClientRect();
   const width = rect.width;
   const height = rect.height;
   if (!width || !height) return;
 
-  const ctxChart = probeChartCtx;
+  const ctxChart = ctx;
   const padding = { left: 36, right: 14, top: 12, bottom: 24 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
@@ -2289,13 +2300,36 @@ function renderProbeChart(data: ProbeResult['data'] | null) {
   }
 }
 
+function resizeProbeChart() {
+  if (!probeChart || !probeChartCtx) return;
+  resizeProbeCanvas(probeChart, probeChartCtx);
+}
+
+function renderProbeChart(data: ProbeResult['data'] | null) {
+  if (!probeChart || !probeChartCtx) return;
+  renderProbeChartOn(probeChart, probeChartCtx, data);
+}
+
+function renderProbeSnapshots() {
+  if (!probeSnapshots.length) return;
+  for (const snapshot of probeSnapshots) {
+    renderProbeChartOn(snapshot.canvas, snapshot.ctx, snapshot.data);
+  }
+}
+
 function renderProbeInspector() {
   if (!probePanel) return;
   const probe = getActiveProbe();
   const isOpen = !!probe;
   probePanel.classList.toggle('is-open', isOpen);
   probePanel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
-  if (!probe) return;
+  if (!probe) {
+    if (probeFreeze) {
+      probeFreeze.disabled = true;
+      probeFreeze.title = 'Freeze probe snapshot';
+    }
+    return;
+  }
   if (probeTitle) {
     probeTitle.textContent = `Probe ${probe.id.toUpperCase()}`;
   }
@@ -2303,7 +2337,163 @@ function renderProbeInspector() {
     const hasData = probeResults.has(probe.id);
     probeStatus.textContent = probePending.has(probe.id) ? 'Updating' : hasData ? 'Live' : 'Idle';
   }
+  if (probeFreeze) {
+    const hasData = probeResults.has(probe.id);
+    probeFreeze.disabled = !hasData;
+    probeFreeze.title = hasData ? 'Freeze probe snapshot' : 'Probe data not ready yet';
+  }
   renderProbeChart(probeResults.get(probe.id) ?? null);
+}
+
+function cloneProbeData(data: ProbeResult['data']): ProbeResult['data'] {
+  return {
+    frequencies: [...data.frequencies],
+    magnitudes: [...data.magnitudes],
+    interferenceDetails: data.interferenceDetails ? { ...data.interferenceDetails } : undefined,
+  };
+}
+
+function clampPanelToParent(panel: HTMLElement, parent: HTMLElement, left: number, top: number, padding: number) {
+  const maxLeft = parent.clientWidth - panel.offsetWidth - padding;
+  const maxTop = parent.clientHeight - panel.offsetHeight - padding;
+  const clampedLeft = Math.min(Math.max(left, padding), Math.max(padding, maxLeft));
+  const clampedTop = Math.min(Math.max(top, padding), Math.max(padding, maxTop));
+  panel.style.left = `${clampedLeft}px`;
+  panel.style.top = `${clampedTop}px`;
+  panel.style.right = 'auto';
+  panel.style.bottom = 'auto';
+}
+
+function makePanelDraggable(
+  panel: HTMLElement,
+  handle: HTMLElement,
+  options: { parent?: HTMLElement | null; padding?: number; ignoreSelector?: string } = {}
+) {
+  const parent = options.parent ?? panel.parentElement ?? document.body;
+  const padding = options.padding ?? 12;
+  const ignoreSelector = options.ignoreSelector ?? 'button';
+  const originalUserSelect = document.body.style.userSelect;
+  let isDragging = false;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
+
+  const handleMouseMove = (event: MouseEvent) => {
+    if (!isDragging) return;
+    const parentRect = parent.getBoundingClientRect();
+    const nextLeft = event.clientX - parentRect.left - dragOffsetX;
+    const nextTop = event.clientY - parentRect.top - dragOffsetY;
+    clampPanelToParent(panel, parent, nextLeft, nextTop, padding);
+  };
+
+  const handleMouseUp = () => {
+    if (!isDragging) return;
+    isDragging = false;
+    document.body.style.userSelect = originalUserSelect;
+    window.removeEventListener('mousemove', handleMouseMove);
+    window.removeEventListener('mouseup', handleMouseUp);
+  };
+
+  handle.addEventListener('mousedown', (event) => {
+    if (event.button !== 0) return;
+    if ((event.target as HTMLElement | null)?.closest(ignoreSelector)) return;
+    const panelRect = panel.getBoundingClientRect();
+    const parentRect = parent.getBoundingClientRect();
+    dragOffsetX = event.clientX - panelRect.left;
+    dragOffsetY = event.clientY - panelRect.top;
+    panel.style.position = 'absolute';
+    panel.style.left = `${panelRect.left - parentRect.left}px`;
+    panel.style.top = `${panelRect.top - parentRect.top}px`;
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    isDragging = true;
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  });
+}
+
+function createProbeSnapshot(data: ProbeResult['data']) {
+  if (!uiLayer) return;
+  const snapshotIndex = probeSnapshotSeq++;
+  const snapshotId = `snapshot-${snapshotIndex}`;
+  const panel = document.createElement('aside');
+  panel.className = 'probe-panel probe-panel--snapshot is-open';
+  panel.setAttribute('aria-hidden', 'false');
+  panel.dataset.snapshotId = snapshotId;
+
+  const header = document.createElement('div');
+  header.className = 'probe-header';
+  const title = document.createElement('div');
+  title.className = 'probe-title';
+  title.textContent = `Snapshot ${snapshotIndex}`;
+  const actions = document.createElement('div');
+  actions.className = 'probe-actions';
+  const closeButton = document.createElement('button');
+  closeButton.className = 'probe-close ui-button';
+  closeButton.type = 'button';
+  closeButton.setAttribute('aria-label', 'Close snapshot');
+  closeButton.textContent = 'x';
+  actions.appendChild(closeButton);
+  header.appendChild(title);
+  header.appendChild(actions);
+
+  const meta = document.createElement('div');
+  meta.className = 'probe-meta';
+  const metaLeft = document.createElement('span');
+  metaLeft.textContent = 'Frequency Response';
+  const metaRight = document.createElement('span');
+  metaRight.textContent = 'Frozen';
+  meta.appendChild(metaLeft);
+  meta.appendChild(metaRight);
+
+  const chart = document.createElement('div');
+  chart.className = 'probe-chart';
+  const canvas = document.createElement('canvas');
+  chart.appendChild(canvas);
+
+  const footer = document.createElement('div');
+  footer.className = 'probe-footer';
+  const footerLeft = document.createElement('span');
+  footerLeft.textContent = 'Frequency (Hz)';
+  const footerRight = document.createElement('span');
+  footerRight.textContent = 'Amplitude (dB)';
+  footer.appendChild(footerLeft);
+  footer.appendChild(footerRight);
+
+  panel.appendChild(header);
+  panel.appendChild(meta);
+  panel.appendChild(chart);
+  panel.appendChild(footer);
+  uiLayer.appendChild(panel);
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    panel.remove();
+    return;
+  }
+
+  const snapshot: ProbeSnapshot = { id: snapshotId, data, panel, canvas, ctx };
+  probeSnapshots.push(snapshot);
+
+  const parent = uiLayer;
+  requestAnimationFrame(() => {
+    const parentRect = parent.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const anchorRect = probePanel?.getBoundingClientRect() ?? null;
+    const stackOffset = 18 * ((probeSnapshots.length - 1) % 4);
+    const offset = 24 + stackOffset;
+    const initialLeft = (anchorRect ? anchorRect.left - parentRect.left + offset : parentRect.width - panelRect.width - offset);
+    const initialTop = (anchorRect ? anchorRect.top - parentRect.top + offset : parentRect.height - panelRect.height - offset);
+    clampPanelToParent(panel, parent, initialLeft, initialTop, 12);
+    renderProbeChartOn(canvas, ctx, data);
+  });
+
+  makePanelDraggable(panel, header, { parent, padding: 12, ignoreSelector: 'button' });
+  closeButton.addEventListener('click', () => {
+    const idx = probeSnapshots.findIndex((item) => item.id === snapshotId);
+    if (idx >= 0) probeSnapshots.splice(idx, 1);
+    panel.remove();
+  });
 }
 
 function refreshNoiseMapVisualization() {
@@ -4379,12 +4569,26 @@ function wireContextPanel() {
 }
 
 function wireProbePanel() {
-  if (!probeClose) return;
-  probeClose.addEventListener('click', () => {
+  if (probePanel) {
+    const header = probePanel.querySelector('.probe-header') as HTMLDivElement | null;
+    if (header) {
+      makePanelDraggable(probePanel, header, { parent: uiLayer ?? undefined, padding: 12, ignoreSelector: 'button' });
+    }
+  }
+
+  probeClose?.addEventListener('click', () => {
     setActiveProbe(null);
     if (selection.type === 'probe') {
       setSelection({ type: 'none' });
     }
+  });
+
+  probeFreeze?.addEventListener('click', () => {
+    const probe = getActiveProbe();
+    if (!probe) return;
+    const data = probeResults.get(probe.id);
+    if (!data) return;
+    createProbeSnapshot(cloneProbeData(data));
   });
 }
 
@@ -4774,6 +4978,7 @@ function init() {
   pushHistory({ markDirty: false });
   markSaved();
   computeScene();
+  void computeNoiseMapInternal({ silent: true, requestId: 'grid:init' });
   window.addEventListener('resize', resizeCanvas);
 }
 
