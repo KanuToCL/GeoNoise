@@ -346,7 +346,7 @@ body {
 
 .dock-instruction-bottom {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(var(--text-on-dark-rgb), 0.55);
   text-align: center;
   margin-top: 2px;
   pointer-events: none;
