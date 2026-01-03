@@ -162,6 +162,33 @@
                 </div>
                 <div class="layers-divider"></div>
                 <div class="layers-section">
+                  <div class="layers-title">Display Settings</div>
+                  <label class="property-row property-row-stack">
+                    <span>Frequency Weighting</span>
+                    <select class="ui-inset" id="displayWeighting">
+                      <option value="A" selected>A-weighting (dBA)</option>
+                      <option value="C">C-weighting (dBC)</option>
+                      <option value="Z">Z-weighting (dBZ / Linear)</option>
+                    </select>
+                  </label>
+                  <label class="property-row property-row-stack">
+                    <span>Display Band</span>
+                    <select class="ui-inset" id="displayBand">
+                      <option value="overall" selected>Overall (Sum)</option>
+                      <option value="0">63 Hz</option>
+                      <option value="1">125 Hz</option>
+                      <option value="2">250 Hz</option>
+                      <option value="3">500 Hz</option>
+                      <option value="4">1000 Hz</option>
+                      <option value="5">2000 Hz</option>
+                      <option value="6">4000 Hz</option>
+                      <option value="7">8000 Hz</option>
+                      <option value="8">16000 Hz</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="layers-divider"></div>
+                <div class="layers-section">
                   <div class="layers-title">Map Settings</div>
                   <label class="toggle">
                     <input type="checkbox" id="mapRenderStyle" />

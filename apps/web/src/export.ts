@@ -1,11 +1,36 @@
+/**
+ * Export utilities and types for scene results
+ * 
+ * Spectral Source Migration (Jan 2026):
+ * - Added Spectrum9 type for 9-band octave spectra
+ * - ReceiverResult now includes LCeq, LZeq, and Leq_spectrum
+ */
+
 import { formatLevel, formatMeters } from './format.js';
 
+/** 9-element tuple for octave bands: 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000 Hz */
+export type Spectrum9 = [number, number, number, number, number, number, number, number, number];
+
+/**
+ * Result for a single receiver point
+ * 
+ * Spectral Source Migration (Jan 2026):
+ * - Added LCeq and LZeq for C and Z weighted totals
+ * - Added Leq_spectrum for full 9-band spectrum at receiver
+ */
 export type ReceiverResult = {
   id: string;
   x: number;
   y: number;
   z: number;
+  /** A-weighted overall level */
   LAeq: number;
+  /** C-weighted overall level (optional) */
+  LCeq?: number;
+  /** Z-weighted (linear) overall level (optional) */
+  LZeq?: number;
+  /** Full 9-band spectrum at receiver [63Hz - 16kHz] in dB SPL */
+  Leq_spectrum?: Spectrum9;
 };
 
 export type PanelSample = { x: number; y: number; z: number; LAeq: number };

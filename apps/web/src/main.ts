@@ -22,20 +22,50 @@ import {
   type ProbeRequest,
   type ProbeResult,
 } from '@geonoise/engine';
-import { panelId, MIN_LEVEL, createFlatSpectrum, type Spectrum9 } from '@geonoise/shared';
+import {
+  panelId,
+  MIN_LEVEL,
+  createFlatSpectrum,
+  calculateOverallLevel,
+  applyWeightingToSpectrum,
+  OCTAVE_BANDS,
+  A_WEIGHTING_ARRAY,
+  type Spectrum9,
+  type FrequencyWeighting,
+} from '@geonoise/shared';
 import { buildCsv } from './export.js';
 import type { SceneResults, PanelResult } from './export.js';
 import { formatLevel, formatMeters } from './format.js';
 
 type Point = { x: number; y: number };
 
+/** Labels for octave band display */
+const OCTAVE_BAND_LABELS = ['63', '125', '250', '500', '1k', '2k', '4k', '8k', '16k'] as const;
+
+/** Display mode: which frequency band or overall to show */
+/** Display mode: which frequency band to show (overall or specific octave band index 0-8) */
+type DisplayBand = 'overall' | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
+/**
+ * Sound source with full spectral definition
+ * 
+ * Spectral Source Migration (Jan 2026):
+ * - Added `spectrum` for 9-band octave levels
+ * - Added `gain` for master level offset
+ * - `power` is now computed from spectrum (kept for backward compatibility)
+ */
 type Source = {
   id: string;
   name: string;
   x: number;
   y: number;
   z: number;
+  /** Overall power level (computed from spectrum) - kept for legacy compatibility */
   power: number;
+  /** 9-band spectrum: [63, 125, 250, 500, 1k, 2k, 4k, 8k, 16k] Hz in dB Lw */
+  spectrum: Spectrum9;
+  /** Gain offset applied on top of spectrum (dB) */
+  gain: number;
   enabled: boolean;
 };
 
@@ -420,6 +450,8 @@ const layerReceivers = document.querySelector('#layerReceivers') as HTMLInputEle
 const layerPanels = document.querySelector('#layerPanels') as HTMLInputElement | null;
 const layerNoiseMap = document.querySelector('#layerNoiseMap') as HTMLInputElement | null;
 const layerGrid = document.querySelector('#layerGrid') as HTMLInputElement | null;
+const displayWeightingSelect = document.querySelector('#displayWeighting') as HTMLSelectElement | null;
+const displayBandSelect = document.querySelector('#displayBand') as HTMLSelectElement | null;
 
 const countSources = document.querySelector('#countSources') as HTMLSpanElement | null;
 const countReceivers = document.querySelector('#countReceivers') as HTMLSpanElement | null;
@@ -452,8 +484,8 @@ const origin = { latLon: { lat: 0, lon: 0 }, altitude: 0 };
 
 const scene = {
   sources: [
-    { id: 's1', name: 'Source S1', x: -40, y: 10, z: 1.5, power: 100, enabled: true },
-    { id: 's2', name: 'Source S2', x: 60, y: -20, z: 1.5, power: 94, enabled: true },
+    { id: 's1', name: 'Source S1', x: -40, y: 10, z: 1.5, power: 100, spectrum: createFlatSpectrum(100) as Spectrum9, gain: 0, enabled: true },
+    { id: 's2', name: 'Source S2', x: 60, y: -20, z: 1.5, power: 94, spectrum: createFlatSpectrum(94) as Spectrum9, gain: 0, enabled: true },
   ] as Source[],
   receivers: [
     { id: 'r1', x: 10, y: 30, z: 1.5 },
@@ -573,6 +605,12 @@ let panState: { start: Point; origin: Point } | null = null;
 
 const collapsedSources = new Set<string>();
 let soloSourceId: string | null = null;
+
+/** Current frequency weighting for display (A/C/Z) */
+let displayWeighting: FrequencyWeighting = 'A';
+
+/** Current band to display: 'overall' or band index 0-8 */
+let displayBand: DisplayBand = 'overall';
 
 const CANVAS_HELP_KEY = 'geonoise.canvasHelpDismissed';
 
@@ -1343,9 +1381,9 @@ function buildEngineScene() {
     type: 'point' as const,
     name: source.name.trim() || `Source ${source.id.toUpperCase()}`,
     position: { x: source.x, y: source.y, z: source.z },
-    spectrum: createFlatSpectrum(source.power) as Spectrum9,
-    gain: 0,
-    soundPowerLevel: source.power,
+    spectrum: source.spectrum,
+    gain: source.gain,
+    soundPowerLevel: calculateOverallLevel(source.spectrum, 'Z'),
     enabled: isSourceEnabled(source),
   }));
 
@@ -1609,6 +1647,9 @@ async function computeReceivers(
         y: receiver?.y ?? 0,
         z: receiver?.z ?? 0,
         LAeq: result.LAeq,
+        LCeq: result.LCeq,
+        LZeq: result.LZeq,
+        Leq_spectrum: result.Leq_spectrum,
       };
     });
     receiverEnergyTotals = new Map(results.receivers.map((receiver) => [receiver.id, dbToEnergy(receiver.LAeq)]));
@@ -2035,6 +2076,38 @@ function computeSceneIncremental(sourceId: string) {
   requestLiveProbeUpdates();
 }
 
+/**
+ * Get the appropriate display level for a receiver based on user's weighting/band selection
+ * 
+ * Spectral Source Migration (Jan 2026):
+ * - Supports displaying individual octave bands from Leq_spectrum
+ * - Supports A/C/Z weighting selection for overall level
+ * - Falls back to LAeq if weighted values not available
+ * 
+ * @param receiver - Receiver result with spectrum data
+ * @returns Object with level (dB) and unit string for display
+ */
+function getReceiverDisplayLevel(receiver: SceneResults['receivers'][number]): { level: number; unit: string } {
+  // If a specific band is selected, show that band's level (unweighted)
+  if (displayBand !== 'overall' && receiver.Leq_spectrum) {
+    return {
+      level: receiver.Leq_spectrum[displayBand],
+      unit: `dB @ ${OCTAVE_BAND_LABELS[displayBand]}`,
+    };
+  }
+  
+  // Show weighted overall level based on selected weighting
+  switch (displayWeighting) {
+    case 'C':
+      return { level: receiver.LCeq ?? receiver.LAeq, unit: 'dB(C)' };
+    case 'Z':
+      return { level: receiver.LZeq ?? receiver.LAeq, unit: 'dB(Z)' };
+    case 'A':
+    default:
+      return { level: receiver.LAeq, unit: 'dB(A)' };
+  }
+}
+
 function renderResults() {
   renderSources();
 
@@ -2042,8 +2115,39 @@ function renderResults() {
     receiverTable.innerHTML = '';
     for (const receiver of results.receivers) {
       const row = document.createElement('div');
-      row.className = 'result-row';
-      row.innerHTML = `<span>${receiver.id.toUpperCase()}</span><strong>${formatLevel(receiver.LAeq)} dB</strong>`;
+      row.className = 'result-row result-row--spectrum';
+      
+      // Header with ID and weighted/band-specific level
+      const { level, unit } = getReceiverDisplayLevel(receiver);
+      const header = document.createElement('div');
+      header.className = 'result-row-header';
+      header.innerHTML = `<span>${receiver.id.toUpperCase()}</span><strong>${formatLevel(level)} ${unit}</strong>`;
+      row.appendChild(header);
+      
+      // Add spectrum bars if available
+      if (receiver.Leq_spectrum) {
+        const spectrumContainer = document.createElement('div');
+        spectrumContainer.className = 'result-spectrum-mini';
+        
+        const maxLevel = Math.max(...receiver.Leq_spectrum);
+        const minDisplay = Math.max(0, maxLevel - 60);
+        
+        receiver.Leq_spectrum.forEach((level, i) => {
+          const bar = document.createElement('div');
+          bar.className = 'spectrum-bar-mini';
+          const height = Math.max(0, ((level - minDisplay) / (maxLevel - minDisplay)) * 100);
+          bar.style.height = `${height}%`;
+          bar.title = `${OCTAVE_BAND_LABELS[i]}: ${formatLevel(level)} dB`;
+          // Highlight the selected band
+          if (displayBand !== 'overall' && i === displayBand) {
+            bar.classList.add('is-selected');
+          }
+          spectrumContainer.appendChild(bar);
+        });
+        
+        row.appendChild(spectrumContainer);
+      }
+      
       receiverTable.appendChild(row);
     }
   }
@@ -2092,7 +2196,8 @@ function buildProbeRequest(probe: Probe): ProbeRequest {
     .map((source) => ({
       id: source.id,
       position: { x: source.x, y: source.y, z: source.z },
-      spectrum: createFlatSpectrum(source.power) as Spectrum9,
+      spectrum: source.spectrum,
+      gain: source.gain,
     }));
   const walls = [
     ...scene.barriers.map((barrier) => ({
@@ -2744,6 +2849,226 @@ function createInlineField(label: string, value: number, onChange: (value: numbe
   return field;
 }
 
+/**
+ * Create a spectrum editor component for editing 9-band source levels
+ */
+function createSpectrumEditor(
+  source: Source,
+  onChangeSpectrum: (spectrum: Spectrum9) => void,
+  onChangeGain: (gain: number) => void
+): HTMLElement {
+  const container = document.createElement('div');
+  container.className = 'spectrum-editor';
+
+  // Header with overall level and gain
+  const header = document.createElement('div');
+  header.className = 'spectrum-header';
+
+  const overallLabel = document.createElement('span');
+  overallLabel.className = 'spectrum-overall-label';
+  const updateOverallLabel = () => {
+    const overallZ = calculateOverallLevel(source.spectrum, 'Z');
+    const overallA = calculateOverallLevel(source.spectrum, 'A');
+    overallLabel.innerHTML = `Overall: <strong>${formatLevel(overallZ)}</strong> dBZ / <strong>${formatLevel(overallA)}</strong> dBA`;
+  };
+  updateOverallLabel();
+
+  const gainRow = document.createElement('div');
+  gainRow.className = 'spectrum-gain-row';
+  const gainLabel = document.createElement('span');
+  gainLabel.textContent = 'Gain:';
+  const gainInput = document.createElement('input');
+  gainInput.type = 'number';
+  gainInput.className = 'ui-inset spectrum-gain-input';
+  gainInput.step = '1';
+  gainInput.value = source.gain.toString();
+  gainInput.title = 'Master gain offset (dB)';
+  gainInput.addEventListener('change', () => {
+    const next = Number(gainInput.value);
+    if (Number.isFinite(next)) {
+      source.gain = next;
+      onChangeGain(next);
+    }
+  });
+  const gainUnit = document.createElement('span');
+  gainUnit.textContent = 'dB';
+  gainRow.appendChild(gainLabel);
+  gainRow.appendChild(gainInput);
+  gainRow.appendChild(gainUnit);
+
+  header.appendChild(overallLabel);
+  header.appendChild(gainRow);
+  container.appendChild(header);
+
+  // Band grid
+  const grid = document.createElement('div');
+  grid.className = 'spectrum-grid';
+
+  // Frequency labels row
+  const freqRow = document.createElement('div');
+  freqRow.className = 'spectrum-freq-row';
+  for (let i = 0; i < OCTAVE_BANDS.length; i++) {
+    const freq = OCTAVE_BANDS[i];
+    const label = document.createElement('span');
+    label.className = 'spectrum-freq-label';
+    label.textContent = freq >= 1000 ? `${freq / 1000}k` : String(freq);
+    freqRow.appendChild(label);
+  }
+  grid.appendChild(freqRow);
+
+  // Band inputs row
+  const inputRow = document.createElement('div');
+  inputRow.className = 'spectrum-input-row';
+  const inputs: HTMLInputElement[] = [];
+  
+  for (let i = 0; i < OCTAVE_BANDS.length; i++) {
+    const bandIndex = i;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'ui-inset spectrum-band-input';
+    input.step = '1';
+    input.value = Math.round(source.spectrum[i]).toString();
+    input.title = `${OCTAVE_BANDS[i]} Hz`;
+    input.addEventListener('change', () => {
+      const next = Number(input.value);
+      if (Number.isFinite(next)) {
+        source.spectrum[bandIndex] = next;
+        // Update overall power display
+        source.power = calculateOverallLevel(source.spectrum, 'Z');
+        updateOverallLabel();
+        onChangeSpectrum([...source.spectrum] as Spectrum9);
+      }
+    });
+    inputs.push(input);
+    inputRow.appendChild(input);
+  }
+  grid.appendChild(inputRow);
+
+  // Weighting reference row (A-weighting values)
+  const weightRow = document.createElement('div');
+  weightRow.className = 'spectrum-weight-row';
+  for (let i = 0; i < A_WEIGHTING_ARRAY.length; i++) {
+    const weight = A_WEIGHTING_ARRAY[i];
+    const label = document.createElement('span');
+    label.className = 'spectrum-weight-label';
+    label.textContent = weight >= 0 ? `+${weight}` : String(weight);
+    label.title = `A-weighting: ${weight} dB`;
+    weightRow.appendChild(label);
+  }
+  grid.appendChild(weightRow);
+
+  container.appendChild(grid);
+
+  // Quick presets
+  const presets = document.createElement('div');
+  presets.className = 'spectrum-presets';
+
+  const flatButton = document.createElement('button');
+  flatButton.type = 'button';
+  flatButton.className = 'spectrum-preset-button ui-button ghost';
+  flatButton.textContent = 'Flat';
+  flatButton.title = 'Set all bands to same level';
+  flatButton.addEventListener('click', () => {
+    const level = Math.round(source.power);
+    const bandLevel = level - 10 * Math.log10(9); // Distribute energy across bands
+    for (let i = 0; i < 9; i++) {
+      source.spectrum[i] = Math.round(bandLevel);
+      inputs[i].value = Math.round(bandLevel).toString();
+    }
+    source.power = calculateOverallLevel(source.spectrum, 'Z');
+    updateOverallLabel();
+    onChangeSpectrum([...source.spectrum] as Spectrum9);
+  });
+
+  const pinkButton = document.createElement('button');
+  pinkButton.type = 'button';
+  pinkButton.className = 'spectrum-preset-button ui-button ghost';
+  pinkButton.textContent = 'Pink';
+  pinkButton.title = 'Pink noise (-3 dB/octave)';
+  pinkButton.addEventListener('click', () => {
+    const baseLevel = source.power;
+    // Pink noise: -3 dB per octave from 1kHz reference
+    const refIndex = 4; // 1000 Hz
+    for (let i = 0; i < 9; i++) {
+      const octavesFromRef = i - refIndex;
+      source.spectrum[i] = Math.round(baseLevel - 3 * octavesFromRef);
+      inputs[i].value = Math.round(source.spectrum[i]).toString();
+    }
+    source.power = calculateOverallLevel(source.spectrum, 'Z');
+    updateOverallLabel();
+    onChangeSpectrum([...source.spectrum] as Spectrum9);
+  });
+
+  const trafficButton = document.createElement('button');
+  trafficButton.type = 'button';
+  trafficButton.className = 'spectrum-preset-button ui-button ghost';
+  trafficButton.textContent = 'Traffic';
+  trafficButton.title = 'Typical road traffic spectrum';
+  trafficButton.addEventListener('click', () => {
+    // Typical road traffic spectrum (relative to 1kHz band)
+    const trafficShape = [8, 5, 2, 0, -2, -5, -8, -12, -18];
+    const refLevel = source.power;
+    for (let i = 0; i < 9; i++) {
+      source.spectrum[i] = Math.round(refLevel + trafficShape[i]);
+      inputs[i].value = Math.round(source.spectrum[i]).toString();
+    }
+    source.power = calculateOverallLevel(source.spectrum, 'Z');
+    updateOverallLabel();
+    onChangeSpectrum([...source.spectrum] as Spectrum9);
+  });
+
+  const musicButton = document.createElement('button');
+  musicButton.type = 'button';
+  musicButton.className = 'spectrum-preset-button ui-button ghost';
+  musicButton.textContent = 'Music';
+  musicButton.title = 'Typical music/PA spectrum';
+  musicButton.addEventListener('click', () => {
+    // Typical music/PA spectrum with strong bass
+    const musicShape = [6, 4, 2, 0, -1, -2, -4, -8, -14];
+    const refLevel = source.power;
+    for (let i = 0; i < 9; i++) {
+      source.spectrum[i] = Math.round(refLevel + musicShape[i]);
+      inputs[i].value = Math.round(source.spectrum[i]).toString();
+    }
+    source.power = calculateOverallLevel(source.spectrum, 'Z');
+    updateOverallLabel();
+    onChangeSpectrum([...source.spectrum] as Spectrum9);
+  });
+
+  presets.appendChild(flatButton);
+  presets.appendChild(pinkButton);
+  presets.appendChild(trafficButton);
+  presets.appendChild(musicButton);
+  container.appendChild(presets);
+
+  return container;
+}
+
+/**
+ * Create a compact spectrum bar visualization
+ */
+function createSpectrumBar(spectrum: Spectrum9, weighting: FrequencyWeighting = 'Z'): HTMLElement {
+  const container = document.createElement('div');
+  container.className = 'spectrum-bar';
+
+  const weighted = applyWeightingToSpectrum(spectrum, weighting);
+  const maxLevel = Math.max(...weighted);
+  const minLevel = Math.min(...weighted.filter(l => l > MIN_LEVEL));
+  const range = Math.max(maxLevel - minLevel, 30);
+
+  for (let i = 0; i < 9; i++) {
+    const bar = document.createElement('div');
+    bar.className = 'spectrum-bar-item';
+    const level = weighted[i];
+    const height = level > MIN_LEVEL ? Math.max(5, ((level - minLevel) / range) * 100) : 5;
+    bar.style.height = `${height}%`;
+    bar.title = `${OCTAVE_BANDS[i]} Hz: ${formatLevel(level)} dB${weighting}`;
+    container.appendChild(bar);
+  }
+
+  return container;
+}
+
 function renderSources() {
   if (!sourceTable) return;
   sourceTable.innerHTML = '';
@@ -2844,18 +3169,26 @@ function renderSources() {
 
     const fields = document.createElement('div');
     fields.className = 'source-fields';
-    fields.appendChild(createInlineField('Sound Power ($L_W$)', source.power, (value) => {
-      source.power = value;
-      pushHistory();
-      renderProperties();
-      computeScene();
-    }, 'Total acoustic energy'));
+    
+    // Overall power display (computed from spectrum)
+    const overallZ = calculateOverallLevel(source.spectrum, 'Z');
+    const overallA = calculateOverallLevel(source.spectrum, 'A');
+    const powerDisplay = document.createElement('div');
+    powerDisplay.className = 'source-power-display';
+    powerDisplay.innerHTML = `<span class="source-power-label">Power:</span> <strong>${formatLevel(overallZ)}</strong> dBZ / <strong>${formatLevel(overallA)}</strong> dBA`;
+    fields.appendChild(powerDisplay);
+    
+    // Compact spectrum visualization
+    const spectrumBar = createSpectrumBar(source.spectrum, displayWeighting);
+    fields.appendChild(spectrumBar);
+
     fields.appendChild(createInlineField('Height (m)', source.z, (value) => {
       source.z = value;
       pushHistory();
       renderProperties();
       computeScene();
     }));
+    
     if (!collapsedSources.has(source.id)) {
       row.appendChild(fields);
     }
@@ -2886,6 +3219,7 @@ function duplicateSource(source: Source): Source {
     ...source,
     id: newId,
     name: `${source.name || source.id.toUpperCase()} Copy`,
+    spectrum: [...source.spectrum] as Spectrum9,
   };
 }
 
@@ -3048,16 +3382,33 @@ function renderProperties() {
     propertiesBody.appendChild(createTextRow('Name', source.name, (value) => {
       source.name = value;
     }));
-    propertiesBody.appendChild(createInputRow('Sound Power ($L_W$)', source.power, (value) => {
-      source.power = value;
-      pushHistory();
-      computeScene();
-    }, 'Total acoustic energy'));
     propertiesBody.appendChild(createInputRow('Height (m)', source.z, (value) => {
       source.z = value;
       pushHistory();
       computeScene();
     }));
+
+    // Spectrum editor section
+    const spectrumSection = document.createElement('div');
+    spectrumSection.className = 'property-section';
+    const spectrumTitle = document.createElement('div');
+    spectrumTitle.className = 'property-section-title';
+    spectrumTitle.textContent = 'Frequency Spectrum (dB Lw)';
+    spectrumSection.appendChild(spectrumTitle);
+
+    const spectrumEditor = createSpectrumEditor(
+      source,
+      () => {
+        pushHistory();
+        computeScene();
+      },
+      () => {
+        pushHistory();
+        computeScene();
+      }
+    );
+    spectrumSection.appendChild(spectrumEditor);
+    propertiesBody.appendChild(spectrumSection);
   }
 
   if (current.type === 'receiver') {
@@ -3286,6 +3637,37 @@ function wireMapSettings() {
   mapAutoScaleToggle?.addEventListener('change', () => {
     mapAutoScale = mapAutoScaleToggle.checked;
     refreshNoiseMapVisualization();
+  });
+}
+
+function wireDisplaySettings() {
+  if (!displayWeightingSelect && !displayBandSelect) return;
+
+  // Initialize from current state
+  if (displayWeightingSelect) {
+    displayWeightingSelect.value = displayWeighting;
+  }
+  if (displayBandSelect) {
+    displayBandSelect.value = displayBand === 'overall' ? 'overall' : String(displayBand);
+  }
+
+  displayWeightingSelect?.addEventListener('change', () => {
+    displayWeighting = displayWeightingSelect.value as FrequencyWeighting;
+    renderSources();
+    renderResults();
+    renderProperties();
+    refreshNoiseMapVisualization();
+    requestRender();
+  });
+
+  displayBandSelect?.addEventListener('change', () => {
+    const value = displayBandSelect.value;
+    displayBand = value === 'overall' ? 'overall' : (Number(value) as DisplayBand);
+    renderSources();
+    renderResults();
+    renderProperties();
+    refreshNoiseMapVisualization();
+    requestRender();
   });
 }
 
@@ -3658,6 +4040,7 @@ function addBuildingAt(point: Point) {
 }
 
 function addSourceAt(point: Point) {
+  const defaultSpectrum = createFlatSpectrum(100) as Spectrum9;
   const source: Source = {
     id: createId('s', sourceSeq++),
     name: `Source ${sourceSeq - 1}`,
@@ -3665,6 +4048,8 @@ function addSourceAt(point: Point) {
     y: point.y,
     z: 1.5,
     power: 100,
+    spectrum: defaultSpectrum,
+    gain: 0,
     enabled: true,
   };
   scene.sources.push(source);
@@ -3997,7 +4382,8 @@ function drawReceiverBadges() {
     const result = map.get(receiver.id);
     if (!result) continue;
     const p = worldToCanvas(receiver);
-    const label = `${formatLevel(result.LAeq)} dB`;
+    const { level, unit } = getReceiverDisplayLevel(result);
+    const label = `${formatLevel(level)} ${unit}`;
     ctx.font = '12px "Work Sans", sans-serif';
     ctx.fillStyle = canvasTheme.badgeBg;
     ctx.strokeStyle = canvasTheme.badgeBorder;
@@ -5194,6 +5580,7 @@ function init() {
   wireComputeButton();
   wireMeshButton();
   wireMapSettings();
+  wireDisplaySettings();
   wireRefineButton();
   wireLayersPopover();
   wireSettingsPopover();

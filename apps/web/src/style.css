@@ -1859,6 +1859,40 @@ textarea:focus-visible,
   font-size: 13px;
 }
 
+.result-row--spectrum {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.result-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.result-spectrum-mini {
+  display: flex;
+  gap: 2px;
+  height: 24px;
+  align-items: flex-end;
+  padding: 2px 0;
+}
+
+.spectrum-bar-mini {
+  flex: 1;
+  min-width: 0;
+  background: linear-gradient(to top, var(--accent), var(--accent-light));
+  border-radius: 1px 1px 0 0;
+  transition: height 0.2s ease;
+}
+
+.spectrum-bar-mini.is-selected {
+  background: linear-gradient(to top, var(--warn), var(--warn-light, #ffb74d));
+  box-shadow: 0 0 4px var(--warn);
+}
+
 .source-row {
   display: flex;
   flex-direction: column;
