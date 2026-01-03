@@ -41,8 +41,25 @@ export const ColorSchema = z.object({
 // Source Schemas
 // ============================================================================
 
-/** Sound power spectrum (per octave band) */
-export const SpectrumSchema = z.object({
+/**
+ * 9-band sound power spectrum schema
+ * Array of 9 dB values for octave bands: [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000] Hz
+ * This is the PRIMARY data source for sound power - the overall level is computed from this.
+ */
+export const Spectrum9Schema = z.tuple([
+  z.number(), // 63 Hz
+  z.number(), // 125 Hz
+  z.number(), // 250 Hz
+  z.number(), // 500 Hz
+  z.number(), // 1000 Hz
+  z.number(), // 2000 Hz
+  z.number(), // 4000 Hz
+  z.number(), // 8000 Hz
+  z.number(), // 16000 Hz
+]);
+
+/** Legacy spectrum schema (for migration) - keyed by frequency string */
+export const LegacySpectrumSchema = z.object({
   '63': z.number().optional(),
   '125': z.number().optional(),
   '250': z.number().optional(),
@@ -51,6 +68,7 @@ export const SpectrumSchema = z.object({
   '2000': z.number().optional(),
   '4000': z.number().optional(),
   '8000': z.number().optional(),
+  '16000': z.number().optional(),
   overall: z.number().optional(),
 });
 
@@ -61,14 +79,28 @@ export const DirectivitySchema = z.object({
   data: z.record(z.number()).optional(), // custom directivity data
 });
 
-/** Point source schema */
+/**
+ * Point source schema
+ * 
+ * SPECTRAL ENGINE: The `spectrum` array is the primary data source.
+ * The `soundPowerLevel` is computed from the spectrum and is kept for backward compatibility.
+ * The `gain` field acts as a master volume fader applied on top of the spectrum.
+ */
 export const PointSourceSchema = z.object({
   id: z.string(),
   type: z.literal('point'),
   name: z.string().default('Source'),
   position: LocalMetersSchema,
-  soundPowerLevel: z.number(), // Overall Lw in dB
-  spectrum: SpectrumSchema.optional(),
+  
+  // PRIMARY: 9-band spectrum [63Hz - 16kHz] in dB Lw
+  spectrum: Spectrum9Schema,
+  
+  // COMPUTED: Overall sound power level (derived from spectrum, kept for compatibility)
+  soundPowerLevel: z.number().optional(),
+  
+  // OPTIONAL: Gain offset in dB (master volume fader, applied on top of spectrum)
+  gain: z.number().default(0),
+  
   directivity: DirectivitySchema.optional(),
   enabled: z.boolean().default(true),
   color: ColorSchema.optional(),
@@ -284,7 +316,8 @@ export type LatLon = z.infer<typeof LatLonSchema>;
 export type LocalMeters = z.infer<typeof LocalMetersSchema>;
 export type Point2D = z.infer<typeof Point2DSchema>;
 export type Color = z.infer<typeof ColorSchema>;
-export type Spectrum = z.infer<typeof SpectrumSchema>;
+export type Spectrum9 = z.infer<typeof Spectrum9Schema>;
+export type LegacySpectrum = z.infer<typeof LegacySpectrumSchema>;
 export type Directivity = z.infer<typeof DirectivitySchema>;
 export type PointSource = z.infer<typeof PointSourceSchema>;
 export type Source = z.infer<typeof SourceSchema>;

@@ -52,11 +52,21 @@ export type ComputeRequest = ComputeReceiversRequest | ComputePanelRequest | Com
 // Response Types
 // ============================================================================
 
+/** 9-band spectrum type alias for API */
+export type Spectrum9 = [number, number, number, number, number, number, number, number, number];
+
 /** Single receiver result */
 export interface ReceiverResult {
   receiverId: ReceiverId;
+  /** A-weighted overall level (computed from spectrum) */
   LAeq: number;
+  /** C-weighted overall level (computed from spectrum) */
   LCeq?: number;
+  /** Z-weighted overall level (computed from spectrum) */
+  LZeq?: number;
+  /** Full 9-band spectrum at receiver [63Hz - 16kHz] */
+  Leq_spectrum?: Spectrum9;
+  /** Legacy format - deprecated, use Leq_spectrum */
   Leq_bands?: Record<string, number>;
   contributions?: SourceContribution[];
 }
@@ -64,9 +74,15 @@ export interface ReceiverResult {
 /** Source contribution to a receiver */
 export interface SourceContribution {
   sourceId: string;
+  /** A-weighted level from this source */
   LAeq: number;
+  /** Full 9-band spectrum from this source at receiver */
+  Leq_spectrum?: Spectrum9;
   distance: number;
+  /** Total attenuation (distance + atmospheric + barriers) */
   attenuation: number;
+  /** Per-band attenuation [63Hz - 16kHz] */
+  attenuation_spectrum?: Spectrum9;
 }
 
 /** Panel result */
@@ -87,6 +103,8 @@ export interface PanelSampleResult {
   y: number;
   z: number;
   LAeq: number;
+  /** Full spectrum at this sample point */
+  Leq_spectrum?: Spectrum9;
 }
 
 /** Grid result */
@@ -145,6 +163,10 @@ export type ComputeResponse =
 export interface ProbeSource {
   id: string;
   position: { x: number; y: number; z: number };
+  /** Source 9-band spectrum [63Hz - 16kHz] in dB Lw */
+  spectrum: Spectrum9;
+  /** Gain offset applied on top of spectrum */
+  gain?: number;
 }
 
 /** Minimal wall/obstacle payload for probe analysis */

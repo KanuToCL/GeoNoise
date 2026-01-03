@@ -56,6 +56,7 @@ export function buildCsv(results: SceneResults) {
       '',
       '',
       '',
+      '',
     ].join(','));
   }
 
@@ -68,6 +69,7 @@ export function buildCsv(results: SceneResults) {
         formatMeters(sample.y),
         formatMeters(sample.z),
         formatLevel(sample.LAeq),
+        '',
         '',
         '',
         '',

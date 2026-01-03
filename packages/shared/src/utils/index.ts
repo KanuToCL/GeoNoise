@@ -2,7 +2,17 @@
  * Shared utility functions
  */
 
-import { EPSILON, MIN_LEVEL, MAX_LEVEL } from '../constants/index.js';
+import {
+  EPSILON,
+  MIN_LEVEL,
+  MAX_LEVEL,
+  OCTAVE_BANDS,
+  OCTAVE_BAND_COUNT,
+  A_WEIGHTING_ARRAY,
+  C_WEIGHTING_ARRAY,
+  Z_WEIGHTING_ARRAY,
+  type FrequencyWeighting,
+} from '../constants/index.js';
 
 // ============================================================================
 // Acoustic Math Utilities
@@ -194,4 +204,197 @@ export function isValidNumber(value: unknown): value is number {
  */
 export function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+// ============================================================================
+// Spectral Utilities
+// ============================================================================
+
+/** 9-band spectrum type (indices 0-8 correspond to 63Hz-16kHz) */
+export type Spectrum9 = [number, number, number, number, number, number, number, number, number];
+
+/**
+ * Create a default flat spectrum at a given level
+ */
+export function createFlatSpectrum(level: number): Spectrum9 {
+  return [level, level, level, level, level, level, level, level, level];
+}
+
+/**
+ * Create an empty spectrum (all MIN_LEVEL)
+ */
+export function createEmptySpectrum(): Spectrum9 {
+  return [MIN_LEVEL, MIN_LEVEL, MIN_LEVEL, MIN_LEVEL, MIN_LEVEL, MIN_LEVEL, MIN_LEVEL, MIN_LEVEL, MIN_LEVEL];
+}
+
+/**
+ * Get weighting offsets array for a given weighting type
+ */
+function getWeightingOffsets(weighting: FrequencyWeighting): readonly number[] {
+  switch (weighting) {
+    case 'A': return A_WEIGHTING_ARRAY;
+    case 'C': return C_WEIGHTING_ARRAY;
+    case 'Z': return Z_WEIGHTING_ARRAY;
+  }
+}
+
+/**
+ * Calculate overall (summed) dB level from a 9-band spectrum with optional weighting
+ * 
+ * @param spectrum - 9-element array of dB levels [63Hz, 125Hz, ... 16kHz]
+ * @param weighting - Frequency weighting to apply: 'A', 'C', or 'Z' (linear)
+ * @returns Overall weighted level in dB
+ * 
+ * @example
+ * const spectrum: Spectrum9 = [85, 88, 82, 80, 78, 75, 72, 68, 60];
+ * const overallA = calculateOverallLevel(spectrum, 'A'); // dBA
+ * const overallZ = calculateOverallLevel(spectrum, 'Z'); // dBZ (linear)
+ */
+export function calculateOverallLevel(spectrum: Spectrum9 | number[], weighting: FrequencyWeighting = 'Z'): number {
+  if (spectrum.length !== OCTAVE_BAND_COUNT) {
+    throw new Error(`Spectrum must have ${OCTAVE_BAND_COUNT} bands, got ${spectrum.length}`);
+  }
+
+  const offsets = getWeightingOffsets(weighting);
+  let sumPower = 0;
+
+  for (let i = 0; i < OCTAVE_BAND_COUNT; i++) {
+    const level = spectrum[i];
+    if (level <= MIN_LEVEL) continue;
+    
+    const weightedLevel = level + offsets[i];
+    sumPower += Math.pow(10, weightedLevel / 10);
+  }
+
+  if (sumPower <= 0) return MIN_LEVEL;
+  return 10 * Math.log10(sumPower);
+}
+
+/**
+ * Apply weighting to a spectrum, returning a new weighted spectrum
+ */
+export function applyWeightingToSpectrum(spectrum: Spectrum9 | number[], weighting: FrequencyWeighting): Spectrum9 {
+  if (spectrum.length !== OCTAVE_BAND_COUNT) {
+    throw new Error(`Spectrum must have ${OCTAVE_BAND_COUNT} bands, got ${spectrum.length}`);
+  }
+
+  const offsets = getWeightingOffsets(weighting);
+  const result: number[] = [];
+
+  for (let i = 0; i < OCTAVE_BAND_COUNT; i++) {
+    result.push(spectrum[i] + offsets[i]);
+  }
+
+  return result as Spectrum9;
+}
+
+/**
+ * Sum two spectra energetically (per-band power sum)
+ */
+export function sumSpectra(spectrum1: Spectrum9 | number[], spectrum2: Spectrum9 | number[]): Spectrum9 {
+  const result: number[] = [];
+
+  for (let i = 0; i < OCTAVE_BAND_COUNT; i++) {
+    result.push(addDecibels(spectrum1[i], spectrum2[i]));
+  }
+
+  return result as Spectrum9;
+}
+
+/**
+ * Sum multiple spectra energetically
+ */
+export function sumMultipleSpectra(spectra: (Spectrum9 | number[])[]): Spectrum9 {
+  if (spectra.length === 0) return createEmptySpectrum();
+  if (spectra.length === 1) return [...spectra[0]] as Spectrum9;
+
+  const result = createEmptySpectrum();
+
+  for (let bandIdx = 0; bandIdx < OCTAVE_BAND_COUNT; bandIdx++) {
+    const bandLevels = spectra.map(s => s[bandIdx]).filter(l => l > MIN_LEVEL);
+    result[bandIdx] = bandLevels.length > 0 ? sumDecibels(bandLevels) : MIN_LEVEL;
+  }
+
+  return result;
+}
+
+/**
+ * Apply a gain offset (master volume fader) to a spectrum
+ */
+export function applyGainToSpectrum(spectrum: Spectrum9 | number[], gain: number): Spectrum9 {
+  const result: number[] = [];
+
+  for (let i = 0; i < OCTAVE_BAND_COUNT; i++) {
+    const level = spectrum[i];
+    result.push(level <= MIN_LEVEL ? MIN_LEVEL : level + gain);
+  }
+
+  return result as Spectrum9;
+}
+
+/**
+ * Subtract a scalar attenuation from all bands of a spectrum
+ */
+export function attenuateSpectrum(spectrum: Spectrum9 | number[], attenuation: number): Spectrum9 {
+  return applyGainToSpectrum(spectrum, -attenuation);
+}
+
+/**
+ * Apply per-band attenuation to a spectrum
+ */
+export function attenuateSpectrumBanded(
+  spectrum: Spectrum9 | number[],
+  attenuations: Spectrum9 | number[]
+): Spectrum9 {
+  const result: number[] = [];
+
+  for (let i = 0; i < OCTAVE_BAND_COUNT; i++) {
+    const level = spectrum[i];
+    result.push(level <= MIN_LEVEL ? MIN_LEVEL : level - attenuations[i]);
+  }
+
+  return result as Spectrum9;
+}
+
+/**
+ * Get the level at a specific band index
+ */
+export function getBandLevel(spectrum: Spectrum9 | number[], bandIndex: number): number {
+  if (bandIndex < 0 || bandIndex >= OCTAVE_BAND_COUNT) {
+    throw new Error(`Band index must be 0-${OCTAVE_BAND_COUNT - 1}, got ${bandIndex}`);
+  }
+  return spectrum[bandIndex];
+}
+
+/**
+ * Get the level at a specific frequency
+ */
+export function getLevelAtFrequency(spectrum: Spectrum9 | number[], frequency: number): number {
+  const bandIndex = OCTAVE_BANDS.indexOf(frequency as typeof OCTAVE_BANDS[number]);
+  if (bandIndex === -1) {
+    throw new Error(`Invalid octave band frequency: ${frequency}Hz. Valid bands: ${OCTAVE_BANDS.join(', ')}`);
+  }
+  return spectrum[bandIndex];
+}
+
+/**
+ * Get band index from frequency
+ */
+export function getBandIndex(frequency: number): number {
+  const index = OCTAVE_BANDS.indexOf(frequency as typeof OCTAVE_BANDS[number]);
+  if (index === -1) {
+    throw new Error(`Invalid octave band frequency: ${frequency}Hz`);
+  }
+  return index;
+}
+
+/**
+ * Convert an overall dB level to a flat spectrum (same level in all bands)
+ * This is a simple approximation - real spectra vary by frequency
+ */
+export function overallToFlatSpectrum(overallLevel: number): Spectrum9 {
+  // For a flat spectrum, overall = band + 10*log10(N) where N is number of bands
+  // So band = overall - 10*log10(9) ≈ overall - 9.54
+  const bandLevel = overallLevel - 10 * Math.log10(OCTAVE_BAND_COUNT);
+  return createFlatSpectrum(bandLevel);
 }

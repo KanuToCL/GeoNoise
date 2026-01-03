@@ -1,8 +1,25 @@
 /**
  * CPU compute implementation - Reference implementation
+ * 
+ * SPECTRAL ENGINE: This module now works with 9-band spectra.
+ * - Source power is defined per-band (Spectrum9)
+ * - Propagation is computed per-band
+ * - Results include full spectrum and weighted totals (LAeq, LCeq, LZeq)
  */
 
-import { sumDecibels, receiverId, MIN_LEVEL, EPSILON } from '@geonoise/shared';
+import {
+  sumDecibels,
+  receiverId,
+  MIN_LEVEL,
+  EPSILON,
+  OCTAVE_BANDS,
+  OCTAVE_BAND_COUNT,
+  type Spectrum9,
+  createEmptySpectrum,
+  sumMultipleSpectra,
+  applyGainToSpectrum,
+  calculateOverallLevel,
+} from '@geonoise/shared';
 import type { Point2D, Point3D } from '@geonoise/core/coords';
 import { distance2D, distance3D } from '@geonoise/core/coords';
 import { generateRectangleSamples, generatePolygonSamples, generateGrid } from '@geonoise/geo';
@@ -12,7 +29,7 @@ import type {
   ReceiverResult, PanelResult, GridResult, SourceContribution,
 } from '../api/index.js';
 import { getDefaultEngineConfig, createRequestHash } from '../api/index.js';
-import { calculatePropagation, calculateSPL } from '../propagation/index.js';
+import { calculateBandedPropagation } from '../propagation/index.js';
 import type { Scene } from '@geonoise/core';
 
 // ============================================================================
@@ -314,16 +331,21 @@ export class CPUEngine implements Engine {
 
     const results: ReceiverResult[] = receivers.map(recv => {
       const contributions: SourceContribution[] = [];
-      const levels: number[] = [];
+      const sourceSpectra: Spectrum9[] = [];
 
       for (const src of enabledSources) {
         const dist = distance3D(src.position, recv.position);
+        // Get source spectrum with gain applied
+        const sourceSpectrum = applyGainToSpectrum(src.spectrum, src.gain ?? 0);
+        
         // Barrier geometry stage: 2D intersection test + 3D path-difference delta.
         // `blocked` toggles which attenuation terms are applied in calculatePropagation().
         const barrier = barrierGeometry
           ? computeBarrierPathDiff(src.position, recv.position, barrierGeometry)
           : { blocked: false, pathDifference: 0 };
-        const prop = calculatePropagation(
+        
+        // Calculate per-band propagation
+        const bandedProp = calculateBandedPropagation(
           dist,
           src.position.z,
           recv.position.z,
@@ -332,14 +354,56 @@ export class CPUEngine implements Engine {
           barrier.pathDifference,
           barrier.blocked
         );
-        const spl = calculateSPL(src.soundPowerLevel, prop);
-        if (spl > MIN_LEVEL) {
-          levels.push(spl);
-          contributions.push({ sourceId: src.id, LAeq: spl, distance: dist, attenuation: prop.totalAttenuation });
+        
+        // Apply per-band attenuation to source spectrum
+        const receiverSpectrum = createEmptySpectrum();
+        const attenuationSpectrum = createEmptySpectrum();
+        
+        for (let i = 0; i < OCTAVE_BAND_COUNT; i++) {
+          const freq = OCTAVE_BANDS[i];
+          const bandProp = bandedProp.bands.get(freq);
+          if (bandProp && !bandProp.blocked) {
+            const attenuation = bandProp.totalAttenuation;
+            receiverSpectrum[i] = sourceSpectrum[i] - attenuation;
+            attenuationSpectrum[i] = attenuation;
+          } else {
+            receiverSpectrum[i] = MIN_LEVEL;
+            attenuationSpectrum[i] = bandedProp.overall.totalAttenuation;
+          }
+        }
+        
+        const LAeqContrib = calculateOverallLevel(receiverSpectrum, 'A');
+        
+        if (LAeqContrib > MIN_LEVEL) {
+          sourceSpectra.push(receiverSpectrum);
+          contributions.push({
+            sourceId: src.id,
+            LAeq: LAeqContrib,
+            Leq_spectrum: receiverSpectrum,
+            distance: dist,
+            attenuation: bandedProp.overall.totalAttenuation,
+            attenuation_spectrum: attenuationSpectrum,
+          });
         }
       }
 
-      return { receiverId: receiverId(recv.id), LAeq: levels.length ? sumDecibels(levels) : MIN_LEVEL, contributions };
+      // Sum all source spectra at receiver
+      const totalSpectrum = sourceSpectra.length > 0
+        ? sumMultipleSpectra(sourceSpectra)
+        : createEmptySpectrum();
+      
+      const LAeq = calculateOverallLevel(totalSpectrum, 'A');
+      const LCeq = calculateOverallLevel(totalSpectrum, 'C');
+      const LZeq = calculateOverallLevel(totalSpectrum, 'Z');
+
+      return {
+        receiverId: receiverId(recv.id),
+        LAeq,
+        LCeq,
+        LZeq,
+        Leq_spectrum: totalSpectrum,
+        contributions,
+      };
     });
 
     return {
@@ -392,19 +456,48 @@ export class CPUEngine implements Engine {
     }
 
     const enabledSources = scene.sources.filter(s => s.enabled);
+    
     const sampleResults = samples.map(pt => {
-      const levels = enabledSources.map(src => {
+      const sourceSpectra: Spectrum9[] = [];
+      
+      for (const src of enabledSources) {
         const dist = distance3D(src.position, pt);
+        const sourceSpectrum = applyGainToSpectrum(src.spectrum, src.gain ?? 0);
+        
         // Barrier logic is applied per source->sample path.
         const barrier = barrierGeometry
           ? computeBarrierPathDiff(src.position, pt, barrierGeometry)
           : { blocked: false, pathDifference: 0 };
-        return calculateSPL(
-          src.soundPowerLevel,
-          calculatePropagation(dist, src.position.z, pt.z, propConfig, meteo, barrier.pathDifference, barrier.blocked)
+        
+        const bandedProp = calculateBandedPropagation(
+          dist, src.position.z, pt.z, propConfig, meteo,
+          barrier.pathDifference, barrier.blocked
         );
-      }).filter(l => l > MIN_LEVEL);
-      return { x: pt.x, y: pt.y, z: pt.z, LAeq: levels.length ? sumDecibels(levels) : MIN_LEVEL };
+        
+        // Apply per-band attenuation
+        const receiverSpectrum = createEmptySpectrum();
+        for (let i = 0; i < OCTAVE_BAND_COUNT; i++) {
+          const freq = OCTAVE_BANDS[i];
+          const bandProp = bandedProp.bands.get(freq);
+          if (bandProp && !bandProp.blocked) {
+            receiverSpectrum[i] = sourceSpectrum[i] - bandProp.totalAttenuation;
+          } else {
+            receiverSpectrum[i] = MIN_LEVEL;
+          }
+        }
+        
+        const LAeqContrib = calculateOverallLevel(receiverSpectrum, 'A');
+        if (LAeqContrib > MIN_LEVEL) {
+          sourceSpectra.push(receiverSpectrum);
+        }
+      }
+      
+      const totalSpectrum = sourceSpectra.length > 0
+        ? sumMultipleSpectra(sourceSpectra)
+        : createEmptySpectrum();
+      const LAeq = calculateOverallLevel(totalSpectrum, 'A');
+      
+      return { x: pt.x, y: pt.y, z: pt.z, LAeq, Leq_spectrum: totalSpectrum };
     });
 
     const laeqs = sampleResults.map(s => s.LAeq).filter(l => l > MIN_LEVEL);
@@ -442,18 +535,44 @@ export class CPUEngine implements Engine {
     const enabledSources = scene.sources.filter(s => s.enabled);
     
     const values = points.map(pt => {
-      const levels = enabledSources.map(src => {
+      const sourceSpectra: Spectrum9[] = [];
+      
+      for (const src of enabledSources) {
         const dist = distance3D(src.position, pt);
+        const sourceSpectrum = applyGainToSpectrum(src.spectrum, src.gain ?? 0);
+        
         // Barrier logic is applied per source->grid-point path.
         const barrier = barrierGeometry
           ? computeBarrierPathDiff(src.position, pt, barrierGeometry)
           : { blocked: false, pathDifference: 0 };
-        return calculateSPL(
-          src.soundPowerLevel,
-          calculatePropagation(dist, src.position.z, pt.z, propConfig, meteo, barrier.pathDifference, barrier.blocked)
+        
+        const bandedProp = calculateBandedPropagation(
+          dist, src.position.z, pt.z, propConfig, meteo,
+          barrier.pathDifference, barrier.blocked
         );
-      }).filter(l => l > MIN_LEVEL);
-      return levels.length ? sumDecibels(levels) : MIN_LEVEL;
+        
+        // Apply per-band attenuation
+        const receiverSpectrum = createEmptySpectrum();
+        for (let i = 0; i < OCTAVE_BAND_COUNT; i++) {
+          const freq = OCTAVE_BANDS[i];
+          const bandProp = bandedProp.bands.get(freq);
+          if (bandProp && !bandProp.blocked) {
+            receiverSpectrum[i] = sourceSpectrum[i] - bandProp.totalAttenuation;
+          } else {
+            receiverSpectrum[i] = MIN_LEVEL;
+          }
+        }
+        
+        const LAeqContrib = calculateOverallLevel(receiverSpectrum, 'A');
+        if (LAeqContrib > MIN_LEVEL) {
+          sourceSpectra.push(receiverSpectrum);
+        }
+      }
+      
+      const totalSpectrum = sourceSpectra.length > 0
+        ? sumMultipleSpectra(sourceSpectra)
+        : createEmptySpectrum();
+      return calculateOverallLevel(totalSpectrum, 'A');
     });
 
     const validValues = values.filter(v => v > MIN_LEVEL);

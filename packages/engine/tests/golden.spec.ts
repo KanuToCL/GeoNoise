@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { CPUEngine } from '../src/compute/index.js';
 import { createEmptyScene } from '@geonoise/core';
+import { createFlatSpectrum, type Spectrum9 } from '@geonoise/shared';
 
 describe('Golden case harness', () => {
   it('computes a simple point source to single receiver', async () => {
@@ -13,6 +14,8 @@ describe('Golden case harness', () => {
       name: 'Test Source',
       position: { x: 0, y: 0, z: 1 },
       soundPowerLevel: 100,
+      spectrum: createFlatSpectrum(100) as Spectrum9,
+      gain: 0,
       enabled: true,
     } as any);
 

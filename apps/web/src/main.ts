@@ -22,7 +22,7 @@ import {
   type ProbeRequest,
   type ProbeResult,
 } from '@geonoise/engine';
-import { panelId, MIN_LEVEL } from '@geonoise/shared';
+import { panelId, MIN_LEVEL, createFlatSpectrum, type Spectrum9 } from '@geonoise/shared';
 import { buildCsv } from './export.js';
 import type { SceneResults, PanelResult } from './export.js';
 import { formatLevel, formatMeters } from './format.js';
@@ -523,13 +523,13 @@ const probePending = new Set<string>();
 type ProbeSnapshot = {
   id: string;
   data: ProbeResult['data'];
-  panel: HTMLDivElement;
+  panel: HTMLElement;
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
 };
 type PinnedProbePanel = {
   id: string;
-  panel: HTMLDivElement;
+  panel: HTMLElement;
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
   status: HTMLSpanElement;
@@ -1340,9 +1340,11 @@ function buildEngineScene() {
 
   engineScene.sources = scene.sources.map((source) => ({
     id: source.id,
-    type: 'point',
+    type: 'point' as const,
     name: source.name.trim() || `Source ${source.id.toUpperCase()}`,
     position: { x: source.x, y: source.y, z: source.z },
+    spectrum: createFlatSpectrum(source.power) as Spectrum9,
+    gain: 0,
     soundPowerLevel: source.power,
     enabled: isSourceEnabled(source),
   }));
@@ -2090,6 +2092,7 @@ function buildProbeRequest(probe: Probe): ProbeRequest {
     .map((source) => ({
       id: source.id,
       position: { x: source.x, y: source.y, z: source.z },
+      spectrum: createFlatSpectrum(source.power) as Spectrum9,
     }));
   const walls = [
     ...scene.barriers.map((barrier) => ({

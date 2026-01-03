@@ -4,6 +4,7 @@ import { GroundType } from '@geonoise/core';
 import { getDefaultEngineConfig } from '../src/api/index.js';
 import { CPUEngine } from '../src/compute/index.js';
 import { createEmptyScene } from '@geonoise/core';
+import { createFlatSpectrum, type Spectrum9 } from '@geonoise/shared';
 
 function createScene(sourceCount: number) {
   const scene = createEmptyScene({ latLon: { lat: 0, lon: 0 }, altitude: 0 }, 'prop');
@@ -13,6 +14,8 @@ function createScene(sourceCount: number) {
       type: 'point',
       position: { x: 0, y: 0, z: 1 },
       soundPowerLevel: 100,
+      spectrum: createFlatSpectrum(100) as Spectrum9,
+      gain: 0,
       enabled: true,
     } as any);
   }
@@ -81,6 +84,8 @@ describe('Propagation v1 behavior', () => {
       type: 'point',
       position: { x: 0, y: 0, z: 1 },
       soundPowerLevel: 100,
+      spectrum: createFlatSpectrum(100) as Spectrum9,
+      gain: 0,
       enabled: true,
     } as any);
     scene.receivers.push(

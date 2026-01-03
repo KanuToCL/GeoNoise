@@ -50,16 +50,25 @@ export const GEOMETRY_EPSILON = 0.001;
 // Frequency Bands
 // ============================================================================
 
-/** Standard octave band center frequencies (Hz) */
-export const OCTAVE_BANDS = [63, 125, 250, 500, 1000, 2000, 4000, 8000] as const;
+/** Standard octave band center frequencies (Hz) - 9 bands for spectral engine */
+export const OCTAVE_BANDS = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000] as const;
+
+/** Number of octave bands */
+export const OCTAVE_BAND_COUNT = 9;
+
+/** Octave band type */
+export type OctaveBand = (typeof OCTAVE_BANDS)[number];
 
 /** Standard 1/3 octave band center frequencies (Hz) */
 export const THIRD_OCTAVE_BANDS = [
   50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150,
-  4000, 5000, 6300, 8000, 10000,
+  4000, 5000, 6300, 8000, 10000, 12500, 16000,
 ] as const;
 
-/** A-weighting corrections for octave bands (dB) */
+/** Weighting type */
+export type FrequencyWeighting = 'A' | 'C' | 'Z';
+
+/** A-weighting corrections for octave bands (dB) - indexed by band [63, 125, ... 16000] */
 export const A_WEIGHTING_OCTAVE: Record<number, number> = {
   63: -26.2,
   125: -16.1,
@@ -69,7 +78,11 @@ export const A_WEIGHTING_OCTAVE: Record<number, number> = {
   2000: 1.2,
   4000: 1.0,
   8000: -1.1,
+  16000: -6.6,
 };
+
+/** A-weighting as array matching OCTAVE_BANDS order */
+export const A_WEIGHTING_ARRAY = [-26.2, -16.1, -8.6, -3.2, 0, 1.2, 1.0, -1.1, -6.6] as const;
 
 /** C-weighting corrections for octave bands (dB) */
 export const C_WEIGHTING_OCTAVE: Record<number, number> = {
@@ -81,7 +94,45 @@ export const C_WEIGHTING_OCTAVE: Record<number, number> = {
   2000: -0.2,
   4000: -0.8,
   8000: -3.0,
+  16000: -8.5,
 };
+
+/** C-weighting as array matching OCTAVE_BANDS order */
+export const C_WEIGHTING_ARRAY = [-0.8, -0.2, 0, 0, 0, -0.2, -0.8, -3.0, -8.5] as const;
+
+/** Z-weighting (linear/unweighted) corrections for octave bands (dB) */
+export const Z_WEIGHTING_OCTAVE: Record<number, number> = {
+  63: 0,
+  125: 0,
+  250: 0,
+  500: 0,
+  1000: 0,
+  2000: 0,
+  4000: 0,
+  8000: 0,
+  16000: 0,
+};
+
+/** Z-weighting as array matching OCTAVE_BANDS order */
+export const Z_WEIGHTING_ARRAY = [0, 0, 0, 0, 0, 0, 0, 0, 0] as const;
+
+/** Get weighting array by type */
+export function getWeightingArray(weighting: FrequencyWeighting): readonly number[] {
+  switch (weighting) {
+    case 'A': return A_WEIGHTING_ARRAY;
+    case 'C': return C_WEIGHTING_ARRAY;
+    case 'Z': return Z_WEIGHTING_ARRAY;
+  }
+}
+
+/** Get weighting record by type */
+export function getWeightingRecord(weighting: FrequencyWeighting): Record<number, number> {
+  switch (weighting) {
+    case 'A': return A_WEIGHTING_OCTAVE;
+    case 'C': return C_WEIGHTING_OCTAVE;
+    case 'Z': return Z_WEIGHTING_OCTAVE;
+  }
+}
 
 // ============================================================================
 // Grid & Resolution Constants
