@@ -520,11 +520,27 @@ const layers = {
 };
 
 const DEFAULT_MAP_RANGE: MapRange = { min: 30, max: 85 };
-const DEFAULT_MAP_BAND_STEP = 5;
+const DEFAULT_MAP_BAND_STEP = 3; // Finer default for overall level display
+const DEFAULT_MAP_BAND_STEP_PERBAND = 10; // Coarser for per-frequency band display
 const MAX_MAP_LEGEND_LABELS = 7;
-// Noise map render steps (px) for preview vs. final quality.
-const RES_HIGH = 2;
-const RES_LOW = 4;
+
+// =============================================================================
+// NOISE MAP RESOLUTION STRATEGY
+// =============================================================================
+// The noise map uses adaptive resolution based on interaction state:
+//
+// | Scenario           | Point Cap | Pixel Step | Purpose                      |
+// |--------------------|-----------|------------|------------------------------|
+// | Initial load       | 2,500     | adaptive   | Fast startup                 |
+// | During drag        | 35,000    | RES_LOW=8  | Smooth interaction (coarse)  |
+// | Static after drag  | 35,000    | RES_HIGH=2 | Good quality                 |
+// | Refine button      | 50,000    | RES_HIGH=2 | Maximum detail               |
+//
+// Lower pixel step = finer grid (more points, slower)
+// Higher pixel step = coarser grid (fewer points, faster)
+// =============================================================================
+const RES_HIGH = 2;   // Fine quality: 2px per grid cell
+const RES_LOW = 8;    // Coarse preview: 8px per grid cell (fast drag updates)
 // Cap drag updates to ~33 FPS.
 const DRAG_FRAME_MS = 30;
 // Cap probe updates to ~10 FPS while dragging.
@@ -1072,7 +1088,9 @@ function getActiveMapRange(): MapRange {
 }
 
 function getMapBandStep() {
-  if (!Number.isFinite(mapBandStep)) return DEFAULT_MAP_BAND_STEP;
+  // Use coarser step when viewing a specific frequency band (wider level variation)
+  const defaultStep = displayBand === 'overall' ? DEFAULT_MAP_BAND_STEP : DEFAULT_MAP_BAND_STEP_PERBAND;
+  if (!Number.isFinite(mapBandStep)) return defaultStep;
   return Math.min(20, Math.max(1, mapBandStep));
 }
 
@@ -1508,10 +1526,10 @@ function mergeBounds(a: { minX: number; minY: number; maxX: number; maxY: number
   };
 }
 
-function buildNoiseMapGridConfig(resolutionPx?: number) {
+function buildNoiseMapGridConfig(resolutionPx?: number, maxPoints?: number) {
   // Resolution strategy:
   // - target ~40 cells across the max dimension (step ~= max(width,height)/40)
-  // - clamp to ~2,500 points total for responsiveness
+  // - clamp to point cap for responsiveness
   const bounds = getSceneBounds();
   if (!bounds) return null;
 
@@ -1549,15 +1567,19 @@ function buildNoiseMapGridConfig(resolutionPx?: number) {
 
   let cols = Math.ceil(paddedWidth / resolution) + 1;
   let rows = Math.ceil(paddedHeight / resolution) + 1;
-  if (!Number.isFinite(resolutionPx)) {
-    const targetPoints = 2500;
-    const pointCount = cols * rows;
-    if (pointCount > targetPoints) {
-      const scale = Math.sqrt(pointCount / targetPoints);
-      resolution *= scale;
-      cols = Math.ceil(paddedWidth / resolution) + 1;
-      rows = Math.ceil(paddedHeight / resolution) + 1;
-    }
+  
+  // Point cap strategy (see NOISE MAP RESOLUTION STRATEGY comment above):
+  // - Initial/no-resolution: 2,500 points for fast startup
+  // - With resolution (static/drag): 35,000 points for good quality
+  // - Refine button passes maxPoints=50,000 for maximum detail
+  const defaultCap = Number.isFinite(resolutionPx) ? 35000 : 2500;
+  const targetPoints = maxPoints ?? defaultCap;
+  const pointCount = cols * rows;
+  if (pointCount > targetPoints) {
+    const scale = Math.sqrt(pointCount / targetPoints);
+    resolution *= scale;
+    cols = Math.ceil(paddedWidth / resolution) + 1;
+    rows = Math.ceil(paddedHeight / resolution) + 1;
   }
 
   return { enabled: true, bounds: padded, resolution, elevation: 1.5 };
@@ -1732,6 +1754,7 @@ function invalidateNoiseMap() {
 
 type NoiseMapComputeOptions = {
   resolutionPx?: number;
+  maxPoints?: number;
   silent?: boolean;
   requestId?: string;
 };
@@ -1749,7 +1772,7 @@ async function computeNoiseMapInternal(options: NoiseMapComputeOptions = {}) {
     return;
   }
 
-  const gridConfig = buildNoiseMapGridConfig(options.resolutionPx);
+  const gridConfig = buildNoiseMapGridConfig(options.resolutionPx, options.maxPoints);
   if (!gridConfig) {
     if (!silent) {
       setMapToast('Add sources, receivers, or barriers to define the map bounds.', 'error', 3000);
@@ -1849,7 +1872,8 @@ async function computeNoiseMap() {
     return;
   }
   queuedMapResolutionPx = null;
-  await computeNoiseMapInternal();
+  // Use fine resolution for user-initiated map generation (capped at 10000 points)
+  await computeNoiseMapInternal({ resolutionPx: RES_HIGH, requestId: 'grid:generate' });
 }
 
 function recalculateNoiseMap(resolutionPx: number) {
@@ -3686,6 +3710,9 @@ function wireDisplaySettings() {
   displayBandSelect?.addEventListener('change', () => {
     const value = displayBandSelect.value;
     displayBand = value === 'overall' ? 'overall' : (Number(value) as DisplayBand);
+    // Update band step to use appropriate default for overall vs per-band display
+    mapBandStep = displayBand === 'overall' ? DEFAULT_MAP_BAND_STEP : DEFAULT_MAP_BAND_STEP_PERBAND;
+    updateMapSettingsControls();
     renderSources();
     renderResults();
     renderProperties();
@@ -3701,7 +3728,16 @@ function wireRefineButton() {
     queuedMapResolutionPx = null;
     setInteractionActive(false);
     ctx.imageSmoothingEnabled = false;
-    recalculateNoiseMap(RES_HIGH);
+    // Force a high-resolution map recompute even if layers.noiseMap is currently off
+    // Refine uses 50,000 points for maximum detail
+    if (layers.noiseMap) {
+      void computeNoiseMapInternal({ resolutionPx: RES_HIGH, maxPoints: 50000, silent: false, requestId: 'grid:refine' });
+    } else {
+      // Enable the noise map layer and compute
+      layers.noiseMap = true;
+      if (layerNoiseMap) layerNoiseMap.checked = true;
+      void computeNoiseMapInternal({ resolutionPx: RES_HIGH, maxPoints: 50000, silent: false, requestId: 'grid:refine' });
+    }
     needsUpdate = true;
     requestRender();
   });
@@ -5626,6 +5662,7 @@ function init() {
   pushHistory({ markDirty: false });
   markSaved();
   computeScene();
+  // Initial map uses adaptive resolution (capped at 2500 points for fast startup)
   void computeNoiseMapInternal({ silent: true, requestId: 'grid:init' });
   window.addEventListener('resize', resizeCanvas);
 }
