@@ -2986,12 +2986,23 @@ function createSpectrumEditor(
   pinkButton.textContent = 'Pink';
   pinkButton.title = 'Pink noise (-3 dB/octave)';
   pinkButton.addEventListener('click', () => {
-    const baseLevel = source.power;
     // Pink noise: -3 dB per octave from 1kHz reference
+    // First, create the shape relative to 1kHz
     const refIndex = 4; // 1000 Hz
+    const pinkShape: number[] = [];
     for (let i = 0; i < 9; i++) {
       const octavesFromRef = i - refIndex;
-      source.spectrum[i] = Math.round(baseLevel - 3 * octavesFromRef);
+      pinkShape[i] = -3 * octavesFromRef;
+    }
+    
+    // Now normalize to target overall power
+    const targetPower = source.power;
+    const tempSpectrum = pinkShape.map(offset => 100 + offset); // Temp spectrum at 100 dB ref
+    const tempOverall = calculateOverallLevel(tempSpectrum as Spectrum9, 'Z');
+    const adjustment = targetPower - tempOverall;
+    
+    for (let i = 0; i < 9; i++) {
+      source.spectrum[i] = Math.round(100 + pinkShape[i] + adjustment);
       inputs[i].value = Math.round(source.spectrum[i]).toString();
     }
     source.power = calculateOverallLevel(source.spectrum, 'Z');
@@ -3007,9 +3018,15 @@ function createSpectrumEditor(
   trafficButton.addEventListener('click', () => {
     // Typical road traffic spectrum (relative to 1kHz band)
     const trafficShape = [8, 5, 2, 0, -2, -5, -8, -12, -18];
-    const refLevel = source.power;
+    
+    // Normalize to target overall power
+    const targetPower = source.power;
+    const tempSpectrum = trafficShape.map(offset => 100 + offset); // Temp spectrum at 100 dB ref
+    const tempOverall = calculateOverallLevel(tempSpectrum as Spectrum9, 'Z');
+    const adjustment = targetPower - tempOverall;
+    
     for (let i = 0; i < 9; i++) {
-      source.spectrum[i] = Math.round(refLevel + trafficShape[i]);
+      source.spectrum[i] = Math.round(100 + trafficShape[i] + adjustment);
       inputs[i].value = Math.round(source.spectrum[i]).toString();
     }
     source.power = calculateOverallLevel(source.spectrum, 'Z');
@@ -3025,9 +3042,15 @@ function createSpectrumEditor(
   musicButton.addEventListener('click', () => {
     // Typical music/PA spectrum with strong bass
     const musicShape = [6, 4, 2, 0, -1, -2, -4, -8, -14];
-    const refLevel = source.power;
+    
+    // Normalize to target overall power
+    const targetPower = source.power;
+    const tempSpectrum = musicShape.map(offset => 100 + offset); // Temp spectrum at 100 dB ref
+    const tempOverall = calculateOverallLevel(tempSpectrum as Spectrum9, 'Z');
+    const adjustment = targetPower - tempOverall;
+    
     for (let i = 0; i < 9; i++) {
-      source.spectrum[i] = Math.round(refLevel + musicShape[i]);
+      source.spectrum[i] = Math.round(100 + musicShape[i] + adjustment);
       inputs[i].value = Math.round(source.spectrum[i]).toString();
     }
     source.power = calculateOverallLevel(source.spectrum, 'Z');
