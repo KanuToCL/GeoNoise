@@ -10,6 +10,8 @@ This document outlines proposed enhancements to the probe system to upgrade it f
 
 The following enhancements have been implemented on branch `feature/probe-coherent-raytracing`:
 
+**Commit:** `8457217` - feat(probe): implement coherent ray-tracing with phase summation (WIP)
+
 ### Completed Features
 
 | Feature | Status | Location |
@@ -28,6 +30,34 @@ The following enhancements have been implemented on branch `feature/probe-cohere
 | **Overall weighted level** | ✅ Done | Shows "72 dB(A)" on probe chart |
 | **Ghost source count** | ✅ Done | `interferenceDetails.ghostCount` populated |
 | **Unit tests** | ✅ Done | 26 tests in `phasor/index.spec.ts` |
+
+### 🐛 Known Bug: Probe Not Updating Dynamically
+
+**Status:** Under Investigation
+
+The probe displays an initial calculation but does not update when:
+- Moving sources or probes
+- Changing source power levels or spectrum
+- Adding/removing barriers
+
+**Debug Logging Added:**
+- `[Main] requestLiveProbeUpdates called, liveIds: [...], activeProbeId: ...`
+- `[Main] Posting probe request for: <id> sources: N`
+- `[ProbeWorker] Worker initialized and ready`
+- `[ProbeWorker] Received message: CALCULATE_PROBE <id>`
+- `[ProbeWorker] Calculation complete, posting result for probe: <id>`
+- `[Main] Received probe result: PROBE_UPDATE <id>`
+
+**Suspected Causes:**
+1. `getLiveProbeIds()` may return empty array if no probe is selected/pinned
+2. Worker message handling may have timing issues
+3. Throttle function may be suppressing updates
+
+**To Debug:**
+1. Open browser dev console (F12)
+2. Select a probe (click on it) to make it active
+3. Change source settings and watch console for log messages
+4. If `requestLiveProbeUpdates called, liveIds: []` → probe not selected
 
 ### New Files Created
 
@@ -60,8 +90,14 @@ All paths from a single source are summed **coherently** (with phase) to capture
 
 Different sources are summed **energetically** (incoherent).
 
-### Remaining Work (Future Phases)
+### Remaining Work
 
+**Immediate (Bug Fixes):**
+- [ ] Fix probe not updating on scene changes
+- [ ] Verify worker message flow end-to-end
+- [ ] Test with probe selected vs. pinned
+
+**Future Enhancements:**
 - [ ] Ghost source visualization on canvas
 - [ ] LOD system for performance modes
 - [ ] Higher-order reflections

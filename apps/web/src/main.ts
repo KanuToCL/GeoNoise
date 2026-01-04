@@ -2347,7 +2347,10 @@ function getLiveProbeIds() {
 
 function requestLiveProbeUpdates(options?: { immediate?: boolean }) {
   // Keep pinned monitors and the active inspector in sync with the engine.
-  requestProbeUpdates(getLiveProbeIds(), options);
+  const liveIds = getLiveProbeIds();
+  // eslint-disable-next-line no-console
+  console.log('[Main] requestLiveProbeUpdates called, liveIds:', liveIds, 'activeProbeId:', activeProbeId);
+  requestProbeUpdates(liveIds, options);
 }
 
 function handleProbeResult(result: ProbeResult) {
