@@ -1371,12 +1371,13 @@ button.primary.is-cancel {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.5px;
-  color: var(--text-muted);
+  /* Match dock instruction contrast for canvas overlays. */
+  color: rgba(var(--text-on-dark-rgb), 0.55);
   pointer-events: auto;
 }
 
 .canvas-status-sep {
-  color: var(--text-soft);
+  color: inherit;
   opacity: 0.7;
 }
 
@@ -1390,7 +1391,7 @@ button.primary.is-cancel {
   font-family: inherit;
   font-size: inherit;
   letter-spacing: inherit;
-  color: var(--text-muted);
+  color: inherit;
   text-transform: none;
   cursor: pointer;
   transition: color 160ms ease;
