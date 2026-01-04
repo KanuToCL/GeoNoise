@@ -4,6 +4,73 @@
 
 This document outlines proposed enhancements to the probe system to upgrade it from a simplified real-time preview tool to a more acoustically accurate analysis instrument.
 
+---
+
+## ✅ Implementation Status (Jan 3, 2026)
+
+The following enhancements have been implemented on branch `feature/probe-coherent-raytracing`:
+
+### Completed Features
+
+| Feature | Status | Location |
+|---------|--------|----------|
+| **Phasor arithmetic library** | ✅ Done | `packages/shared/src/phasor/index.ts` |
+| **Complex number operations** | ✅ Done | `complexAdd`, `complexMul`, `complexExpj`, etc. |
+| **Coherent phasor summation** | ✅ Done | `sumPhasorsCoherent()`, `sumSpectralPhasorsCoherent()` |
+| **Ray-tracing module** | ✅ Done | `packages/engine/src/raytracing/index.ts` |
+| **Image source method** | ✅ Done | First-order reflections via `createImageSources()` |
+| **Direct path tracing** | ✅ Done | With barrier/building blocking detection |
+| **Ground reflection** | ✅ Done | Two-ray phasor model with Delany-Bazley impedance |
+| **Wall reflections** | ✅ Done | Image source method for buildings |
+| **Barrier diffraction** | ✅ Done | Maekawa model (`maekawaDiffraction()`) |
+| **Atmospheric absorption** | ✅ Done | Simplified ISO 9613-1 |
+| **Frequency weighting display** | ✅ Done | A/C/Z weighting in probe chart |
+| **Overall weighted level** | ✅ Done | Shows "72 dB(A)" on probe chart |
+| **Ghost source count** | ✅ Done | `interferenceDetails.ghostCount` populated |
+| **Unit tests** | ✅ Done | 26 tests in `phasor/index.spec.ts` |
+
+### New Files Created
+
+```
+packages/shared/src/phasor/index.ts       # Phasor arithmetic (~430 lines)
+packages/shared/src/phasor/index.spec.ts  # Unit tests (26 tests)
+packages/engine/src/raytracing/index.ts   # Ray-tracing module (~610 lines)
+packages/engine/src/probeCompute/index.ts # Reference implementation (~500 lines)
+```
+
+### Modified Files
+
+- `apps/web/src/probeWorker.ts` - Complete rewrite (~600 lines, was ~100)
+- `apps/web/src/main.ts` - Added weighting to `renderProbeChartOn()`
+- `packages/engine/src/index.ts` - Added exports for new modules
+- `packages/shared/src/index.ts` - Added phasor export
+
+### Physics Model
+
+The probe now traces multiple paths per source-receiver pair:
+
+1. **Direct path** - Line of sight with barrier/building blocking
+2. **Ground reflection** - Two-ray model with phase from `agrTwoRayDb()`
+3. **Wall reflections** - Image source method for first-order reflections
+4. **Barrier diffraction** - Maekawa insertion loss for blocked paths
+
+All paths from a single source are summed **coherently** (with phase) to capture:
+- Comb filtering from ground reflections
+- Constructive/destructive interference patterns
+
+Different sources are summed **energetically** (incoherent).
+
+### Remaining Work (Future Phases)
+
+- [ ] Ghost source visualization on canvas
+- [ ] LOD system for performance modes
+- [ ] Higher-order reflections
+- [ ] Probe comparison mode
+- [ ] WebAssembly/GPU acceleration
+- [ ] Spatial caching for nearby positions
+
+---
+
 ## Current Limitations (as of Jan 2026)
 
 The probe worker currently uses a highly simplified model:

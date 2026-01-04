@@ -1,91 +1,626 @@
 /**
- * Probe Worker - Real-time spectral analysis for probe positions
+ * Probe Worker - Coherent Ray-Tracing Spectral Analysis
  * 
  * This worker calculates the 9-band frequency spectrum at a probe position
- * by summing contributions from all sources. It uses a simplified propagation
- * model (spherical spreading only) for fast interactive updates.
+ * using coherent ray-tracing with phase summation. It traces multiple paths:
+ * - Direct path (line of sight)
+ * - Ground reflection (two-ray model with phase)
+ * - First-order wall/building reflections (image source method)
+ * - Barrier diffraction (Maekawa model)
  * 
- * Spectral Source Migration (Jan 2026):
- * - Now uses actual source spectrum instead of stub calculation
- * - Returns full 9-band spectrum matching engine output format
- * - Applies source gain offset to each band
+ * All paths from a single source are summed coherently (with phase) to capture
+ * constructive and destructive interference patterns (e.g., comb filtering
+ * from ground reflections). Paths from different sources are summed energetically
+ * since independent sources are incoherent.
+ * 
+ * Enhanced from simple spherical spreading (Jan 2026) to full coherent model.
  */
 
 import type { ProbeRequest, ProbeResult } from '@geonoise/engine';
 
-// 9-band octave frequencies matching the source spectrum and engine output
-const PROBE_BANDS = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+// ============================================================================
+// Constants
+// ============================================================================
 
-/**
- * Calculate spherical spreading loss for point source
- * Adiv = 20*log10(r) + 11 dB (for r in meters)
- */
-function calculateDivergence(distance: number): number {
-  return 20 * Math.log10(Math.max(distance, 1)) + 11;
+const OCTAVE_BANDS = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000] as const;
+const OCTAVE_BAND_COUNT = 9;
+const MIN_LEVEL = -100;
+const SPEED_OF_SOUND = 343;
+const P_REF = 2e-5; // Pa - reference pressure
+const EPSILON = 1e-10;
+
+// ============================================================================
+// Types
+// ============================================================================
+
+interface Point2D { x: number; y: number }
+interface Point3D { x: number; y: number; z: number }
+
+interface Segment2D {
+  p1: Point2D;
+  p2: Point2D;
 }
 
-/**
- * Energetically sum multiple dB levels
- * L_total = 10*log10(sum(10^(Li/10)))
- */
-function sumEnergies(levels: number[]): number {
-  if (levels.length === 0) return -Infinity;
-  const total = levels.reduce((sum, level) => sum + Math.pow(10, level / 10), 0);
-  return 10 * Math.log10(total);
+interface WallSegment extends Segment2D {
+  height: number;
+  type: 'barrier' | 'building';
+  id: string;
 }
 
-/**
- * Calculate the 9-band spectrum at a probe position
- * 
- * For each source:
- * 1. Calculate 3D distance to probe
- * 2. Apply spreading loss (same for all bands in this simplified model)
- * 3. Apply source gain offset
- * 4. Accumulate per-band energy
- * 
- * Note: This is a simplified model for fast interactive updates.
- * For accurate results, use the full engine computation.
- */
-function calculateProbe(req: ProbeRequest): ProbeResult {
-  const hasSources = req.sources.length > 0;
-  
-  // Per-band energy accumulation
-  const bandEnergies = PROBE_BANDS.map(() => [] as number[]);
-  
-  if (hasSources) {
-    for (const source of req.sources) {
-      const dx = req.position.x - source.position.x;
-      const dy = req.position.y - source.position.y;
-      const dz = (req.position.z ?? 0) - (source.position.z ?? 0);
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      const divLoss = calculateDivergence(dist);
-      const gain = source.gain ?? 0;
-      
-      // Apply spectrum from source for each band
-      PROBE_BANDS.forEach((_, bandIdx) => {
-        // Use source spectrum if available, otherwise assume flat 100 dB
-        const sourcePower = source.spectrum?.[bandIdx] ?? 100;
-        const levelAtProbe = sourcePower + gain - divLoss;
-        bandEnergies[bandIdx].push(levelAtProbe);
-      });
+interface Phasor {
+  pressure: number;  // Pa (linear)
+  phase: number;     // radians
+}
+
+interface RayPath {
+  type: 'direct' | 'ground' | 'wall' | 'diffracted';
+  totalDistance: number;
+  directDistance: number;
+  pathDifference: number;
+  reflectionPhaseChange: number;
+  absorptionFactor: number;
+  valid: boolean;
+}
+
+type Spectrum9 = [number, number, number, number, number, number, number, number, number];
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+interface ProbeConfig {
+  groundReflection: boolean;
+  groundType: 'hard' | 'soft' | 'mixed';
+  groundMixedFactor: number;
+  wallReflections: boolean;
+  barrierDiffraction: boolean;
+  coherentSummation: boolean;
+  atmosphericAbsorption: boolean;
+  temperature: number;
+  humidity: number;
+  speedOfSound: number;
+}
+
+const DEFAULT_CONFIG: ProbeConfig = {
+  groundReflection: true,
+  groundType: 'mixed',
+  groundMixedFactor: 0.5,
+  wallReflections: true,
+  barrierDiffraction: true,
+  coherentSummation: true,
+  atmosphericAbsorption: true,
+  temperature: 20,
+  humidity: 50,
+  speedOfSound: SPEED_OF_SOUND,
+};
+
+// ============================================================================
+// Pressure/dB Conversion
+// ============================================================================
+
+function dBToPressure(dB: number): number {
+  if (!Number.isFinite(dB) || dB < -200) return 1e-12;
+  return P_REF * Math.pow(10, dB / 20);
+}
+
+function pressureTodB(pressure: number): number {
+  if (!Number.isFinite(pressure) || pressure <= 0) return -200;
+  return 20 * Math.log10(pressure / P_REF);
+}
+
+// ============================================================================
+// Geometry Utilities
+// ============================================================================
+
+function distance2D(a: Point2D, b: Point2D): number {
+  return Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+}
+
+function distance3D(a: Point3D, b: Point3D): number {
+  return Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2 + (b.z - a.z) ** 2);
+}
+
+function cross2D(a: Point2D, b: Point2D): number {
+  return a.x * b.y - a.y * b.x;
+}
+
+function segmentIntersection(
+  p1: Point2D, p2: Point2D,
+  q1: Point2D, q2: Point2D
+): Point2D | null {
+  const r = { x: p2.x - p1.x, y: p2.y - p1.y };
+  const s = { x: q2.x - q1.x, y: q2.y - q1.y };
+  const rxs = cross2D(r, s);
+  const qmp = { x: q1.x - p1.x, y: q1.y - p1.y };
+
+  if (Math.abs(rxs) < EPSILON) return null;
+
+  const t = cross2D(qmp, s) / rxs;
+  const u = cross2D(qmp, r) / rxs;
+
+  if (t < -EPSILON || t > 1 + EPSILON || u < -EPSILON || u > 1 + EPSILON) {
+    return null;
+  }
+
+  return { x: p1.x + t * r.x, y: p1.y + t * r.y };
+}
+
+function mirrorPoint2D(point: Point2D, segment: Segment2D): Point2D {
+  const { p1, p2 } = segment;
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq < EPSILON) return point;
+
+  const t = ((point.x - p1.x) * dx + (point.y - p1.y) * dy) / lenSq;
+  const projX = p1.x + t * dx;
+  const projY = p1.y + t * dy;
+
+  return { x: 2 * projX - point.x, y: 2 * projY - point.y };
+}
+
+function isPathBlocked(
+  from: Point2D,
+  to: Point2D,
+  barriers: WallSegment[],
+  excludeId?: string
+): boolean {
+  for (const barrier of barriers) {
+    if (barrier.type !== 'barrier') continue;
+    if (barrier.id === excludeId) continue;
+    const intersection = segmentIntersection(from, to, barrier.p1, barrier.p2);
+    if (intersection) {
+      const distToFrom = distance2D(intersection, from);
+      const distToTo = distance2D(intersection, to);
+      if (distToFrom > EPSILON && distToTo > EPSILON) {
+        return true;
+      }
     }
   }
-  
-  // Sum all contributions per band
-  const magnitudes = bandEnergies.map((bandLevels) => {
-    if (bandLevels.length === 0) return 35; // ambient floor
-    return sumEnergies(bandLevels);
-  });
+  return false;
+}
+
+// ============================================================================
+// Attenuation Calculations
+// ============================================================================
+
+function spreadingLoss(distance: number): number {
+  const d = Math.max(distance, 0.1);
+  return 20 * Math.log10(d) + 11;
+}
+
+function atmosphericAbsorptionCoeff(frequency: number, temp: number, _humidity: number): number {
+  // Simplified ISO 9613-1 approximation
+  // Note: _humidity is reserved for future full ISO 9613-1 model with
+  // proper molecular relaxation calculations
+  const f2 = frequency * frequency;
+  const t = temp + 273.15;
+
+  const alpha = 8.686 * f2 * (
+    1.84e-11 * Math.pow(t / 293.15, 0.5) +
+    Math.pow(t / 293.15, -2.5) * (
+      0.01275 * Math.exp(-2239.1 / t) / (f2 / 4e9 + 0.1068 * Math.exp(-3352 / t)) +
+      0.1068 * Math.exp(-3352 / t) / (f2 / 4e9 + 0.01275 * Math.exp(-2239.1 / t))
+    )
+  );
+
+  return Math.max(alpha, 0);
+}
+
+function maekawaDiffraction(pathDiff: number, frequency: number, c: number): number {
+  const lambda = c / frequency;
+  const N = (2 * pathDiff) / lambda;
+  if (N < -0.1) return 0;
+  const atten = 10 * Math.log10(3 + 20 * N);
+  return Math.min(Math.max(atten, 0), 25);
+}
+
+// ============================================================================
+// Two-Ray Ground Reflection Model
+// ============================================================================
+
+function twoRayGroundEffect(
+  frequency: number,
+  d: number,
+  hs: number,
+  hr: number,
+  groundType: 'hard' | 'soft' | 'mixed',
+  mixedFactor: number,
+  c: number
+): number {
+  if (d <= 0 || hs <= 0 || hr <= 0) return 0;
+
+  const r1 = Math.sqrt(d * d + (hs - hr) ** 2);
+  const r2 = Math.sqrt(d * d + (hs + hr) ** 2);
+
+  let gammaMag: number;
+  let gammaPhase: number;
+
+  if (groundType === 'hard') {
+    gammaMag = 0.95;
+    gammaPhase = 0;
+  } else if (groundType === 'soft') {
+    gammaMag = 0.7;
+    gammaPhase = Math.PI;
+  } else {
+    gammaMag = 0.85 - 0.15 * mixedFactor;
+    gammaPhase = Math.PI * mixedFactor;
+  }
+
+  const amplitudeRatio = r1 / r2;
+  const k = (2 * Math.PI * frequency) / c;
+  const pathPhase = -k * (r2 - r1);
+  const totalPhase = pathPhase + gammaPhase;
+
+  const real = 1 + gammaMag * amplitudeRatio * Math.cos(totalPhase);
+  const imag = gammaMag * amplitudeRatio * Math.sin(totalPhase);
+  const mag = Math.sqrt(real * real + imag * imag);
+
+  if (!Number.isFinite(mag) || mag < 1e-6) return 0;
+  return -20 * Math.log10(Math.max(mag, 1e-6));
+}
+
+// ============================================================================
+// Wall Segment Extraction
+// ============================================================================
+
+function extractWallSegments(walls: ProbeRequest['walls']): WallSegment[] {
+  const segments: WallSegment[] = [];
+
+  for (const wall of walls) {
+    const verts = wall.vertices;
+    if (wall.type === 'barrier') {
+      for (let i = 0; i < verts.length - 1; i++) {
+        segments.push({
+          p1: verts[i],
+          p2: verts[i + 1],
+          height: wall.height,
+          type: 'barrier',
+          id: wall.id,
+        });
+      }
+    } else {
+      for (let i = 0; i < verts.length; i++) {
+        segments.push({
+          p1: verts[i],
+          p2: verts[(i + 1) % verts.length],
+          height: wall.height,
+          type: 'building',
+          id: wall.id,
+        });
+      }
+    }
+  }
+
+  return segments;
+}
+
+// ============================================================================
+// Path Tracing
+// ============================================================================
+
+function traceDirectPath(
+  source: Point3D,
+  receiver: Point3D,
+  barriers: WallSegment[]
+): RayPath {
+  const s2d = { x: source.x, y: source.y };
+  const r2d = { x: receiver.x, y: receiver.y };
+  const dist = distance3D(source, receiver);
+  const blocked = isPathBlocked(s2d, r2d, barriers);
+
+  return {
+    type: 'direct',
+    totalDistance: dist,
+    directDistance: dist,
+    pathDifference: 0,
+    reflectionPhaseChange: 0,
+    absorptionFactor: 1,
+    valid: !blocked,
+  };
+}
+
+function traceDiffractionPath(
+  source: Point3D,
+  receiver: Point3D,
+  barrier: WallSegment
+): RayPath | null {
+  const s2d = { x: source.x, y: source.y };
+  const r2d = { x: receiver.x, y: receiver.y };
+
+  const intersection = segmentIntersection(s2d, r2d, barrier.p1, barrier.p2);
+  if (!intersection) return null;
+
+  const diffPoint: Point3D = { x: intersection.x, y: intersection.y, z: barrier.height };
+
+  const pathA = distance3D(source, diffPoint);
+  const pathB = distance3D(diffPoint, receiver);
+  const totalDist = pathA + pathB;
+  const directDist = distance3D(source, receiver);
+
+  return {
+    type: 'diffracted',
+    totalDistance: totalDist,
+    directDistance: directDist,
+    pathDifference: totalDist - directDist,
+    reflectionPhaseChange: -Math.PI / 4,
+    absorptionFactor: 1,
+    valid: true,
+  };
+}
+
+function traceWallReflectionPaths(
+  source: Point3D,
+  receiver: Point3D,
+  segments: WallSegment[],
+  barriers: WallSegment[]
+): RayPath[] {
+  const paths: RayPath[] = [];
+  const buildingSegments = segments.filter(s => s.type === 'building');
+
+  for (const segment of buildingSegments) {
+    const imagePos2D = mirrorPoint2D({ x: source.x, y: source.y }, segment);
+    const r2d = { x: receiver.x, y: receiver.y };
+
+    const reflPoint = segmentIntersection(r2d, imagePos2D, segment.p1, segment.p2);
+    if (!reflPoint) continue;
+
+    const segLen = distance2D(segment.p1, segment.p2);
+    const d1 = distance2D(reflPoint, segment.p1);
+    const d2 = distance2D(reflPoint, segment.p2);
+    if (d1 > segLen + EPSILON || d2 > segLen + EPSILON) continue;
+
+    const reflPoint3D: Point3D = {
+      x: reflPoint.x,
+      y: reflPoint.y,
+      z: Math.min(segment.height, Math.max(source.z, receiver.z)),
+    };
+
+    const s2d = { x: source.x, y: source.y };
+    const blockedA = isPathBlocked(s2d, reflPoint, barriers, segment.id);
+    const blockedB = isPathBlocked(reflPoint, r2d, barriers, segment.id);
+
+    if (blockedA || blockedB) continue;
+
+    const pathA = distance3D(source, reflPoint3D);
+    const pathB = distance3D(reflPoint3D, receiver);
+    const totalDist = pathA + pathB;
+    const directDist = distance3D(source, receiver);
+
+    paths.push({
+      type: 'wall',
+      totalDistance: totalDist,
+      directDistance: directDist,
+      pathDifference: totalDist - directDist,
+      reflectionPhaseChange: 0,
+      absorptionFactor: 0.9,
+      valid: reflPoint3D.z <= segment.height,
+    });
+  }
+
+  return paths;
+}
+
+// ============================================================================
+// Coherent Spectral Computation
+// ============================================================================
+
+function applyGainToSpectrum(spectrum: number[], gain: number): number[] {
+  return spectrum.map(level => level <= MIN_LEVEL ? MIN_LEVEL : level + gain);
+}
+
+interface SourcePhasorResult {
+  spectrum: Spectrum9;
+  pathTypes: Set<string>;
+}
+
+function computeSourceCoherent(
+  source: ProbeRequest['sources'][0],
+  probePos: Point3D,
+  segments: WallSegment[],
+  barriers: WallSegment[],
+  config: ProbeConfig
+): SourcePhasorResult {
+  const spectrum = applyGainToSpectrum(
+    source.spectrum as number[],
+    source.gain ?? 0
+  );
+  const pathTypes = new Set<string>();
+  const c = config.speedOfSound;
+
+  const srcPos: Point3D = source.position;
+
+  // Trace direct path
+  const directPath = traceDirectPath(srcPos, probePos, barriers);
+  pathTypes.add('direct');
+
+  // Trace diffraction paths if direct is blocked
+  const diffractionPaths: RayPath[] = [];
+  if (!directPath.valid && config.barrierDiffraction) {
+    for (const barrier of barriers) {
+      const diffPath = traceDiffractionPath(srcPos, probePos, barrier);
+      if (diffPath && diffPath.valid) {
+        diffractionPaths.push(diffPath);
+        pathTypes.add('diffracted');
+      }
+    }
+  }
+
+  // Trace wall reflection paths
+  const wallPaths: RayPath[] = [];
+  if (config.wallReflections) {
+    const reflPaths = traceWallReflectionPaths(srcPos, probePos, segments, barriers);
+    wallPaths.push(...reflPaths.filter(p => p.valid));
+    if (wallPaths.length > 0) pathTypes.add('wall');
+  }
+
+  // Compute per-band levels with coherent summation
+  const resultSpectrum: number[] = [];
+
+  for (let bandIdx = 0; bandIdx < OCTAVE_BAND_COUNT; bandIdx++) {
+    const freq = OCTAVE_BANDS[bandIdx];
+    const sourceLevel = spectrum[bandIdx];
+    const phasors: Phasor[] = [];
+
+    // Direct path contribution
+    if (directPath.valid) {
+      const atten = spreadingLoss(directPath.totalDistance);
+      const atm = config.atmosphericAbsorption
+        ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity) * directPath.totalDistance
+        : 0;
+      const level = sourceLevel - atten - atm;
+      const k = (2 * Math.PI * freq) / c;
+      const phase = -k * directPath.totalDistance;
+      phasors.push({ pressure: dBToPressure(level), phase });
+    }
+
+    // Ground reflection using two-ray model
+    if (config.groundReflection && srcPos.z > 0 && probePos.z > 0) {
+      const d = distance2D({ x: srcPos.x, y: srcPos.y }, { x: probePos.x, y: probePos.y });
+      const r1 = Math.sqrt(d * d + (srcPos.z - probePos.z) ** 2);
+
+      const atten = spreadingLoss(r1);
+      const atm = config.atmosphericAbsorption
+        ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity) * r1
+        : 0;
+
+      const groundEffect = twoRayGroundEffect(
+        freq, d, srcPos.z, probePos.z,
+        config.groundType, config.groundMixedFactor, c
+      );
+
+      const level = sourceLevel - atten - atm - groundEffect;
+      const k = (2 * Math.PI * freq) / c;
+      const phase = -k * r1;
+      phasors.push({ pressure: dBToPressure(level), phase });
+      pathTypes.add('ground');
+    }
+
+    // Diffraction contributions
+    for (const path of diffractionPaths) {
+      const atten = spreadingLoss(path.totalDistance);
+      const atm = config.atmosphericAbsorption
+        ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity) * path.totalDistance
+        : 0;
+      const diffLoss = maekawaDiffraction(path.pathDifference, freq, c);
+      const level = sourceLevel - atten - atm - diffLoss;
+      const k = (2 * Math.PI * freq) / c;
+      const phase = -k * path.totalDistance + path.reflectionPhaseChange;
+      phasors.push({ pressure: dBToPressure(level), phase });
+    }
+
+    // Wall reflection contributions
+    for (const path of wallPaths) {
+      const atten = spreadingLoss(path.totalDistance);
+      const atm = config.atmosphericAbsorption
+        ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity) * path.totalDistance
+        : 0;
+      const absLoss = -20 * Math.log10(path.absorptionFactor);
+      const level = sourceLevel - atten - atm - absLoss;
+      const k = (2 * Math.PI * freq) / c;
+      const phase = -k * path.totalDistance + path.reflectionPhaseChange;
+      phasors.push({ pressure: dBToPressure(level), phase });
+    }
+
+    // Sum phasors
+    if (phasors.length === 0) {
+      resultSpectrum.push(MIN_LEVEL);
+    } else if (config.coherentSummation) {
+      let totalReal = 0;
+      let totalImag = 0;
+      for (const p of phasors) {
+        if (p.pressure <= 0) continue;
+        totalReal += p.pressure * Math.cos(p.phase);
+        totalImag += p.pressure * Math.sin(p.phase);
+      }
+      const totalPressure = Math.sqrt(totalReal * totalReal + totalImag * totalImag);
+      resultSpectrum.push(pressureTodB(totalPressure));
+    } else {
+      let totalEnergy = 0;
+      for (const p of phasors) {
+        totalEnergy += p.pressure * p.pressure;
+      }
+      resultSpectrum.push(pressureTodB(Math.sqrt(totalEnergy)));
+    }
+  }
+
+  return {
+    spectrum: resultSpectrum as Spectrum9,
+    pathTypes,
+  };
+}
+
+// ============================================================================
+// Energy Summation for Multiple Sources
+// ============================================================================
+
+function sumMultipleSpectra(spectra: number[][]): number[] {
+  if (spectra.length === 0) return new Array(OCTAVE_BAND_COUNT).fill(MIN_LEVEL);
+  if (spectra.length === 1) return [...spectra[0]];
+
+  const result: number[] = [];
+  for (let i = 0; i < OCTAVE_BAND_COUNT; i++) {
+    const levels = spectra.map(s => s[i]).filter(l => l > MIN_LEVEL);
+    if (levels.length === 0) {
+      result.push(MIN_LEVEL);
+    } else {
+      const energy = levels.reduce((sum, l) => sum + Math.pow(10, l / 10), 0);
+      result.push(10 * Math.log10(energy));
+    }
+  }
+  return result;
+}
+
+// ============================================================================
+// Main Probe Calculation
+// ============================================================================
+
+function calculateProbe(req: ProbeRequest): ProbeResult {
+  const probePos: Point3D = {
+    x: req.position.x,
+    y: req.position.y,
+    z: req.position.z ?? 1.5,
+  };
+
+  const segments = extractWallSegments(req.walls);
+  const barriers = segments.filter(s => s.type === 'barrier');
+
+  const sourceSpectra: number[][] = [];
+  let totalGhostCount = 0;
+
+  for (const source of req.sources) {
+    const result = computeSourceCoherent(source, probePos, segments, barriers, DEFAULT_CONFIG);
+    sourceSpectra.push(result.spectrum);
+
+    for (const pathType of result.pathTypes) {
+      if (pathType === 'wall' || pathType === 'diffracted') {
+        totalGhostCount++;
+      }
+    }
+  }
+
+  // Sum all source spectra energetically
+  const totalSpectrum = sumMultipleSpectra(sourceSpectra);
+
+  // Apply ambient floor
+  const magnitudes = totalSpectrum.map(level => Math.max(level, 35));
 
   return {
     type: 'PROBE_UPDATE',
     probeId: req.probeId,
     data: {
-      frequencies: PROBE_BANDS,
+      frequencies: [...OCTAVE_BANDS],
       magnitudes,
+      interferenceDetails: {
+        ghostCount: totalGhostCount,
+      },
     },
   };
 }
+
+// ============================================================================
+// Worker Message Handler
+// ============================================================================
 
 type ProbeWorkerScope = {
   postMessage: (message: ProbeResult) => void;
@@ -94,9 +629,33 @@ type ProbeWorkerScope = {
 
 const workerContext = self as unknown as ProbeWorkerScope;
 
+// eslint-disable-next-line no-console
+console.log('[ProbeWorker] Worker initialized and ready');
+
 workerContext.addEventListener('message', (event) => {
+  // eslint-disable-next-line no-console
+  console.log('[ProbeWorker] Received message:', event.data?.type, event.data?.probeId);
+  
   const req = event.data;
   if (!req || req.type !== 'CALCULATE_PROBE') return;
-  const result = calculateProbe(req);
-  workerContext.postMessage(result);
+  
+  try {
+    const result = calculateProbe(req);
+    // eslint-disable-next-line no-console
+    console.log('[ProbeWorker] Calculation complete, posting result for probe:', req.probeId);
+    workerContext.postMessage(result);
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[ProbeWorker] Error calculating probe:', error);
+    // Return a fallback result so the UI doesn't hang
+    workerContext.postMessage({
+      type: 'PROBE_UPDATE',
+      probeId: req.probeId,
+      data: {
+        frequencies: [...OCTAVE_BANDS],
+        magnitudes: [35, 35, 35, 35, 35, 35, 35, 35, 35],
+        interferenceDetails: { ghostCount: 0 },
+      },
+    });
+  }
 });

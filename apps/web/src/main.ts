@@ -2199,17 +2199,23 @@ function getActiveProbe() {
 function initProbeWorker() {
   if (probeWorker) return;
   try {
+    // eslint-disable-next-line no-console
+    console.log('[Main] Initializing probe worker...');
     probeWorker = new Worker(new URL('./probeWorker.js', import.meta.url), { type: 'module' });
     probeWorker.addEventListener('message', (event: MessageEvent<ProbeResult>) => {
+      // eslint-disable-next-line no-console
+      console.log('[Main] Received probe result:', event.data?.type, event.data?.probeId);
       handleProbeResult(event.data);
     });
     probeWorker.addEventListener('error', (error) => {
       // eslint-disable-next-line no-console
-      console.error('Probe worker error', error);
+      console.error('[Main] Probe worker error', error);
     });
+    // eslint-disable-next-line no-console
+    console.log('[Main] Probe worker initialized successfully');
   } catch (error) {
     // eslint-disable-next-line no-console
-    console.error('Probe worker unavailable', error);
+    console.error('[Main] Probe worker unavailable', error);
     probeWorker = null;
   }
 }
@@ -2283,11 +2289,15 @@ function sendProbeRequest(probe: Probe) {
   renderProbeInspector();
   renderPinnedProbePanel(probe.id);
   if (!probeWorker) {
+    // eslint-disable-next-line no-console
+    console.log('[Main] No worker available, using stub for probe:', probe.id);
     window.setTimeout(() => {
       handleProbeResult(calculateProbeStub(request));
     }, 0);
     return;
   }
+  // eslint-disable-next-line no-console
+  console.log('[Main] Posting probe request for:', probe.id, 'sources:', request.sources.length);
   probeWorker.postMessage(request);
 }
 
@@ -2367,7 +2377,7 @@ function renderProbeChartOn(canvas: HTMLCanvasElement, ctx: CanvasRenderingConte
   if (!width || !height) return;
 
   const ctxChart = ctx;
-  const padding = { left: 36, right: 14, top: 12, bottom: 24 };
+  const padding = { left: 36, right: 60, top: 12, bottom: 24 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
@@ -2382,12 +2392,17 @@ function renderProbeChartOn(canvas: HTMLCanvasElement, ctx: CanvasRenderingConte
     return;
   }
 
+  // Apply frequency weighting based on displayWeighting setting
+  const weightedMagnitudes = applyWeightingToSpectrum(data.magnitudes as Spectrum9, displayWeighting);
+  const overallLevel = calculateOverallLevel(data.magnitudes as Spectrum9, displayWeighting);
+  const weightingUnit = displayWeighting === 'Z' ? 'dB' : `dB(${displayWeighting})`;
+
   const minFreq = Math.min(...data.frequencies);
   const maxFreq = Math.max(...data.frequencies);
   const logMin = Math.log10(minFreq);
   const logMax = Math.log10(maxFreq);
-  const minMag = Math.min(...data.magnitudes);
-  const maxMag = Math.max(...data.magnitudes);
+  const minMag = Math.min(...weightedMagnitudes);
+  const maxMag = Math.max(...weightedMagnitudes);
   const magMin = Math.floor((minMag - 2) / 5) * 5;
   const magMax = Math.ceil((maxMag + 2) / 5) * 5;
 
@@ -2405,7 +2420,7 @@ function renderProbeChartOn(canvas: HTMLCanvasElement, ctx: CanvasRenderingConte
 
   const points = data.frequencies.map((freq, idx) => {
     const x = padding.left + ((Math.log10(freq) - logMin) / (logMax - logMin)) * chartWidth;
-    const value = data.magnitudes[idx];
+    const value = weightedMagnitudes[idx];
     const ratio = (value - magMin) / (magMax - magMin || 1);
     const y = padding.top + (1 - ratio) * chartHeight;
     return { x, y, value, freq };
@@ -2440,6 +2455,14 @@ function renderProbeChartOn(canvas: HTMLCanvasElement, ctx: CanvasRenderingConte
   ctxChart.font = '10px "Work Sans", sans-serif';
   ctxChart.fillText(`${magMax} dB`, 6, padding.top + 4);
   ctxChart.fillText(`${magMin} dB`, 6, height - padding.bottom + 4);
+
+  // Display overall weighted level on the right side
+  ctxChart.font = 'bold 12px "Work Sans", sans-serif';
+  ctxChart.textAlign = 'right';
+  ctxChart.fillText(`${formatLevel(overallLevel)}`, width - 4, padding.top + 12);
+  ctxChart.font = '9px "Work Sans", sans-serif';
+  ctxChart.fillText(weightingUnit, width - 4, padding.top + 24);
+  ctxChart.textAlign = 'left';
 
   const labelIndices = [0, Math.floor(points.length / 2), points.length - 1];
   for (const idx of labelIndices) {
