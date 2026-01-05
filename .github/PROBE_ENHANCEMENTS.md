@@ -33,31 +33,70 @@ The following enhancements have been implemented on branch `feature/probe-cohere
 
 ### 🐛 Known Bug: Probe Not Updating Dynamically
 
-**Status:** Under Investigation
+**Status:** 🟡 Under Investigation (Jan 5, 2026)
 
 The probe displays an initial calculation but does not update when:
 - Moving sources or probes
 - Changing source power levels or spectrum
 - Adding/removing barriers
 
-**Debug Logging Added:**
-- `[Main] requestLiveProbeUpdates called, liveIds: [...], activeProbeId: ...`
-- `[Main] Posting probe request for: <id> sources: N`
-- `[ProbeWorker] Worker initialized and ready`
-- `[ProbeWorker] Received message: CALCULATE_PROBE <id>`
-- `[ProbeWorker] Calculation complete, posting result for probe: <id>`
-- `[Main] Received probe result: PROBE_UPDATE <id>`
+---
 
-**Suspected Causes:**
-1. `getLiveProbeIds()` may return empty array if no probe is selected/pinned
-2. Worker message handling may have timing issues
-3. Throttle function may be suppressing updates
+## ✅ RESOLVED: Stale Build Cache Issue (Jan 5, 2026)
 
-**To Debug:**
-1. Open browser dev console (F12)
-2. Select a probe (click on it) to make it active
-3. Change source settings and watch console for log messages
-4. If `requestLiveProbeUpdates called, liveIds: []` → probe not selected
+### Problem
+Application appeared completely non-functional (blank canvas, non-responsive UI) after making code changes.
+
+### Root Cause
+**Stale build cache** - The `dist/` folder was missing compiled JavaScript files (`main.js`, `probeWorker.js`). The build script's order was:
+1. Delete dist folder
+2. Run TypeScript compilation
+3. Copy HTML/CSS files (which overwrote the compiled JS)
+
+This resulted in the HTML loading but no JavaScript being available.
+
+### Solution
+Added new npm scripts to `package.json` for cache management:
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev:clean` | Clears all caches, then starts dev server |
+| `npm run build:clean` | Clears all caches, then runs forced full build |
+| `npm run clean:cache` | Clears turbo, vite, and dist caches only |
+| `npm run rebuild` | Full clean + TypeScript rebuild from scratch |
+
+### What Gets Cleared
+- `.turbo` - Turborepo cache
+- `node_modules/.cache` - General Node cache
+- `node_modules/.vite` - Vite cache
+- `apps/*/dist` - All compiled app output
+- `packages/*/dist` - All compiled package output
+- `apps/*/.vite` - App-level Vite caches
+
+### Usage
+```bash
+# Normal dev (uses cache - faster)
+npm run dev
+
+# Clean start when things seem broken
+npm run dev:clean
+
+# Full nuclear option - clean TypeScript rebuild
+npm run rebuild
+```
+
+### Lesson Learned
+When the application appears completely broken after code changes, **always check for stale caches first** before debugging the code itself. Run `npm run rebuild` to ensure a clean slate.
+
+---
+
+### Previous Debug Session (Archived)
+
+The probe was displaying an initial calculation but not updating dynamically. Investigation showed:
+- `computeSceneIncremental()` had an early return when priming drag contributions
+- `applyDrag()` didn't explicitly trigger probe updates for propagation-affecting elements
+
+This issue is still under investigation - the cache issue was masking the actual debugging work.
 
 ### New Files Created
 
@@ -168,9 +207,9 @@ interface Phasor {
 }
 
 function sumPhasors(phasors: Phasor[]): number {
-  const real = phasors.reduce((sum, p) => 
+  const real = phasors.reduce((sum, p) =>
     sum + p.magnitude * Math.cos(p.phase), 0);
-  const imag = phasors.reduce((sum, p) => 
+  const imag = phasors.reduce((sum, p) =>
     sum + p.magnitude * Math.sin(p.phase), 0);
   return 20 * Math.log10(Math.sqrt(real*real + imag*imag));
 }
