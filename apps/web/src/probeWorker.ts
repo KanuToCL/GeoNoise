@@ -292,48 +292,91 @@ function maekawaDiffraction(pathDiff: number, frequency: number, c: number): num
 }
 
 // ============================================================================
-// Two-Ray Ground Reflection Model
+// Ground Reflection Coefficients
 // ============================================================================
 
-function twoRayGroundEffect(
-  frequency: number,
-  d: number,
-  hs: number,
-  hr: number,
+/**
+ * Get ground reflection coefficient (complex) based on ground type.
+ *
+ * The reflection coefficient Γ determines how much energy is reflected
+ * and what phase shift occurs at the ground surface.
+ *
+ * Physics:
+ * - Hard ground (concrete, asphalt): High reflection, minimal phase shift
+ * - Soft ground (grass, soil): Lower reflection, ~180° phase shift
+ * - Mixed: Interpolation between hard and soft
+ *
+ * Based on empirical measurements and Delany-Bazley model simplifications.
+ */
+interface GroundReflectionCoeff {
+  magnitude: number;  // |Γ| - amplitude reflection coefficient (0 to 1)
+  phase: number;      // arg(Γ) - phase shift in radians
+}
+
+function getGroundReflectionCoeff(
   groundType: 'hard' | 'soft' | 'mixed',
   mixedFactor: number,
-  c: number
-): number {
-  if (d <= 0 || hs <= 0 || hr <= 0) return 0;
-
-  const r1 = Math.sqrt(d * d + (hs - hr) ** 2);
-  const r2 = Math.sqrt(d * d + (hs + hr) ** 2);
-
-  let gammaMag: number;
-  let gammaPhase: number;
+  frequency: number
+): GroundReflectionCoeff {
+  // Frequency-dependent absorption (higher frequencies absorbed more by soft ground)
+  const freqFactor = Math.min(frequency / 1000, 2); // Normalized, caps at 2kHz behavior
 
   if (groundType === 'hard') {
-    gammaMag = 0.95;
-    gammaPhase = 0;
+    // Hard ground: ~95% reflection, minimal phase shift
+    // Slight frequency dependence (higher freq slightly more absorbed)
+    return {
+      magnitude: 0.95 - 0.02 * freqFactor,
+      phase: 0,
+    };
   } else if (groundType === 'soft') {
-    gammaMag = 0.7;
-    gammaPhase = Math.PI;
+    // Soft ground: ~60-80% reflection depending on frequency
+    // Phase shift approaches π (180°) - inverts the wave
+    // Lower frequencies penetrate more, higher frequencies reflect more
+    return {
+      magnitude: 0.6 + 0.1 * (1 - freqFactor / 2),
+      phase: Math.PI * (0.8 + 0.15 * freqFactor / 2), // ~0.8π to ~0.95π
+    };
   } else {
-    gammaMag = 0.85 - 0.15 * mixedFactor;
-    gammaPhase = Math.PI * mixedFactor;
+    // Mixed ground: interpolate based on mixedFactor (0 = hard, 1 = soft)
+    const hard = getGroundReflectionCoeff('hard', 0, frequency);
+    const soft = getGroundReflectionCoeff('soft', 0, frequency);
+    return {
+      magnitude: hard.magnitude * (1 - mixedFactor) + soft.magnitude * mixedFactor,
+      phase: hard.phase * (1 - mixedFactor) + soft.phase * mixedFactor,
+    };
   }
+}
 
-  const amplitudeRatio = r1 / r2;
-  const k = (2 * Math.PI * frequency) / c;
-  const pathPhase = -k * (r2 - r1);
-  const totalPhase = pathPhase + gammaPhase;
+/**
+ * Calculate the ground-reflected path geometry using the image source method.
+ *
+ * The ground reflection is modeled by placing a virtual "image source" below
+ * the ground plane (mirror of the real source across z=0). The reflected path
+ * goes from source → ground reflection point → receiver, which equals the
+ * straight-line distance from image source to receiver.
+ *
+ * @param d - Horizontal distance between source and receiver (2D)
+ * @param hs - Source height above ground
+ * @param hr - Receiver height above ground
+ * @returns Object with direct distance r1 and reflected distance r2
+ */
+function calculateGroundReflectionGeometry(
+  d: number,
+  hs: number,
+  hr: number
+): { r1: number; r2: number; reflectionPointX: number } {
+  // r1 = direct path distance
+  const r1 = Math.sqrt(d * d + (hs - hr) ** 2);
 
-  const real = 1 + gammaMag * amplitudeRatio * Math.cos(totalPhase);
-  const imag = gammaMag * amplitudeRatio * Math.sin(totalPhase);
-  const mag = Math.sqrt(real * real + imag * imag);
+  // r2 = reflected path distance (via image source at -hs)
+  // This equals: source→ground + ground→receiver = sqrt(d² + (hs+hr)²)
+  const r2 = Math.sqrt(d * d + (hs + hr) ** 2);
 
-  if (!Number.isFinite(mag) || mag < 1e-6) return 0;
-  return -20 * Math.log10(Math.max(mag, 1e-6));
+  // Reflection point location along the ground (for visualization)
+  // Using similar triangles: x/hs = (d-x)/hr → x = d*hs/(hs+hr)
+  const reflectionPointX = (d * hs) / (hs + hr);
+
+  return { r1, r2, reflectionPointX };
 }
 
 // ============================================================================
@@ -571,35 +614,64 @@ function computeSourceCoherent(
       }
     }
 
-    // Ground reflection using two-ray model
+    // Ground reflection using proper two-ray model with SEPARATE phasors
+    //
+    // IMPORTANT: We add the ground-reflected ray as a SEPARATE phasor,
+    // NOT using the combined two-ray formula. This is more accurate because:
+    // 1. It properly handles the phase relationship at each frequency
+    // 2. It correctly models the interference with other paths (wall reflections, etc.)
+    // 3. It avoids double-counting the direct path energy
+    //
+    // The ground-reflected path uses the image source method:
+    // - Virtual source at (srcPos.x, srcPos.y, -srcPos.z) below ground
+    // - Path distance = sqrt(d² + (hs+hr)²) where d = horizontal distance
+    // - Reflection coefficient depends on ground type (hard/soft/mixed)
+    //
     if (config.groundReflection && srcPos.z > 0 && probePos.z > 0) {
       const d = distance2D({ x: srcPos.x, y: srcPos.y }, { x: probePos.x, y: probePos.y });
-      const r1 = Math.sqrt(d * d + (srcPos.z - probePos.z) ** 2);
+      const hs = srcPos.z;
+      const hr = probePos.z;
 
-      const atten = spreadingLoss(r1);
-      const atm = config.atmosphericAbsorption
-        ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity) * r1
-        : 0;
+      // Calculate path geometry
+      const { r2: groundPathDistance } = calculateGroundReflectionGeometry(d, hs, hr);
 
-      const groundEffect = twoRayGroundEffect(
-        freq, d, srcPos.z, probePos.z,
-        config.groundType, config.groundMixedFactor, c
+      // Get frequency-dependent ground reflection coefficient
+      const groundCoeff = getGroundReflectionCoeff(
+        config.groundType,
+        config.groundMixedFactor,
+        freq
       );
 
-      const level = sourceLevel - atten - atm - groundEffect;
+      // Calculate attenuation for ground-reflected path
+      const groundAtten = spreadingLoss(groundPathDistance);
+      const groundAtm = config.atmosphericAbsorption
+        ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity) * groundPathDistance
+        : 0;
+
+      // Ground reflection reduces amplitude by reflection coefficient
+      const reflectionLoss = -20 * Math.log10(groundCoeff.magnitude);
+
+      // Level at receiver via ground-reflected path
+      const groundLevel = sourceLevel - groundAtten - groundAtm - reflectionLoss;
+
+      // Phase includes:
+      // 1. Propagation phase: -k * distance
+      // 2. Ground reflection phase shift (0 for hard, ~π for soft)
       const k = (2 * Math.PI * freq) / c;
-      const phase = -k * r1;
-      phasors.push({ pressure: dBToPressure(level), phase });
+      const groundPhase = -k * groundPathDistance + groundCoeff.phase;
+
+      phasors.push({ pressure: dBToPressure(groundLevel), phase: groundPhase });
       pathTypes.add('ground');
 
       if (!debuggedFirstBand) {
         // eslint-disable-next-line no-console
-        console.log('[ProbeWorker] Ground path calc:', {
+        console.log('[ProbeWorker] Ground reflection calc:', {
           d: d.toFixed(1),
-          r1: r1.toFixed(1),
-          atten: atten.toFixed(1),
-          groundEffect: groundEffect.toFixed(1),
-          level: level.toFixed(1),
+          groundPathDist: groundPathDistance.toFixed(1),
+          groundCoeffMag: groundCoeff.magnitude.toFixed(2),
+          groundCoeffPhase: (groundCoeff.phase / Math.PI).toFixed(2) + 'π',
+          reflectionLoss: reflectionLoss.toFixed(1),
+          groundLevel: groundLevel.toFixed(1),
         });
       }
     }

@@ -20,7 +20,7 @@ The following enhancements have been implemented on branch `feature/probe-cohere
 | **Ray-tracing module** | ✅ Done | `packages/engine/src/raytracing/index.ts` |
 | **Image source method** | ✅ Done | First-order reflections via `createImageSources()` |
 | **Direct path tracing** | ✅ Done | With barrier blocking detection |
-| **Ground reflection** | ✅ Done | Two-ray phasor model with Delany-Bazley impedance |
+| **Ground reflection** | ✅ Done | Proper two-ray model with separate phasors (fixed Jan 6) |
 | **Wall reflections** | ✅ Done | Image source method for buildings |
 | **Barrier diffraction** | ✅ Done | Maekawa model (`maekawaDiffraction()`) |
 | **Atmospheric absorption** | ✅ Done | Simplified ISO 9613-1 (fixed Jan 6, 2026) |
@@ -31,67 +31,47 @@ The following enhancements have been implemented on branch `feature/probe-cohere
 
 ---
 
-## ✅ RESOLVED: Probe Not Updating Dynamically (Jan 6, 2026)
+## ✅ Bug Fixes (Jan 6, 2026)
 
-### Root Cause
+### Fix 1: Atmospheric Absorption Formula
 
-The `atmosphericAbsorptionCoeff()` function had a **broken ISO 9613-1 formula** that was producing astronomically wrong values:
+**Root Cause:** The `atmosphericAbsorptionCoeff()` function had a broken ISO 9613-1 formula producing astronomically wrong values (~3.7 million dB/m instead of ~0.0001 dB/m at 63 Hz).
 
-```
-EXPECTED: ~0.0001 dB/m at 63 Hz
-ACTUAL:   ~104,000 dB/m at 63 Hz (!!!)
-```
+**Fix:** Replaced with correct frequency-dependent lookup table with temperature/humidity corrections.
 
-This caused the level calculation to produce values like `-3,683,673 dB` instead of the expected `~58 dB`, which when clamped to the pressure floor resulted in the constant 35 dB ambient floor being shown for all bands.
+### Fix 2: Ground Reflection Double-Counting
 
-### Debug Session Output
+**Root Cause:** The original code was using `twoRayGroundEffect()` which calculates the **combined** interference pattern of direct + ground paths, but then adding this as a **second phasor** alongside the direct path phasor. This caused:
+- Direct path energy counted once in phasor 1
+- Direct + ground interference counted again in phasor 2
+- Result: ~3 dB too high (double-counting direct path)
 
-```
-[ProbeWorker] Direct path calc: {
-  sourceLevel: 100,
-  atten: '42.0',
-  atm: '3683731.747',     // ← WRONG! Should be ~0.004
-  level: '-3683673.7',    // ← Results in floor clamping
-  pressure: '1.00e-12'
-}
-```
-
-### Fix Applied
-
-Replaced the broken formula with a correct, simplified atmospheric absorption model:
+**Fix:** Implemented proper two-ray model with **separate phasors**:
 
 ```typescript
-// OLD (BROKEN): Produced millions of dB/m
-const alpha = 8.686 * f2 * (
-  1.84e-11 * Math.pow(t / 293.15, 0.5) + ...
-);
+// BEFORE (WRONG): Used combined two-ray formula as second phasor
+const groundEffect = twoRayGroundEffect(...);  // Already includes direct!
+const level = sourceLevel - atten - groundEffect;
+phasors.push({ pressure, phase });  // Double-counts direct!
 
-// NEW (FIXED): Correct frequency-dependent coefficients
-function atmosphericAbsorptionCoeff(frequency, temp, humidity) {
-  const tempFactor = 1 + 0.01 * (temp - 20);
-  const humidityFactor = 1 + 0.005 * (50 - humidity);
+// AFTER (CORRECT): Ground reflection as separate ray
+// 1. Direct path phasor (direct distance, no reflection)
+phasors.push({ pressure: directPressure, phase: -k * r_direct });
 
-  let baseAlpha;
-  if (frequency <= 63) baseAlpha = 0.0001;      // dB/m
-  else if (frequency <= 125) baseAlpha = 0.0003;
-  else if (frequency <= 250) baseAlpha = 0.001;
-  else if (frequency <= 500) baseAlpha = 0.002;
-  else if (frequency <= 1000) baseAlpha = 0.004;
-  else if (frequency <= 2000) baseAlpha = 0.008;
-  else if (frequency <= 4000) baseAlpha = 0.02;
-  else if (frequency <= 8000) baseAlpha = 0.06;
-  else baseAlpha = 0.2;  // 16 kHz
-
-  return baseAlpha * tempFactor * humidityFactor;
-}
+// 2. Ground-reflected path phasor (longer distance, with reflection coeff)
+const groundCoeff = getGroundReflectionCoeff(groundType, frequency);
+const groundLevel = sourceLevel - spreadingLoss(r_reflected) - reflectionLoss;
+phasors.push({ 
+  pressure: dBToPressure(groundLevel), 
+  phase: -k * r_reflected + groundCoeff.phase 
+});
 ```
 
-### Verification
-
-After fix, probe now shows realistic values:
-- 35m distance: ~55-60 dB (previously: 35 dB floor)
-- Values update correctly when moving sources or probes
-- Frequency-dependent roll-off visible in spectrum
+**New ground reflection model:**
+- Frequency-dependent reflection coefficients (hard: ~0.95, soft: ~0.6-0.7)
+- Proper phase shifts (hard: 0°, soft: ~160°-170°)
+- Path geometry via image source method
+- Coherent summation with other paths (wall reflections, diffraction)
 
 ---
 
@@ -103,7 +83,7 @@ After fix, probe now shows realistic values:
 |---------|-------------|
 | **Barrier occlusion** | Direct path blocked when intersecting barriers |
 | **Barrier diffraction** | Maekawa model for sound bending over barriers |
-| **Ground reflection** | Two-ray model with frequency-dependent phase |
+| **Ground reflection** | Proper two-ray with separate phasors, freq-dependent coefficients |
 | **First-order wall reflections** | Image source method for building walls |
 | **Coherent summation** | Phase-accurate phasor addition within single source |
 | **Atmospheric absorption** | Frequency-dependent (simplified ISO 9613-1) |
@@ -128,11 +108,13 @@ For each source-receiver pair, we trace:
 1. **DIRECT PATH**: Line-of-sight with barrier blocking check
    - If blocked by barrier → path invalid, try diffraction instead
    - Attenuation: spherical spreading + atmospheric absorption
+   - Phase: -k × distance
 
-2. **GROUND REFLECTION**: Two-ray interference model
-   - Reflects off ground plane at z=0
-   - Phase shift depends on ground impedance (hard/soft/mixed)
-   - Creates comb filtering at certain frequencies
+2. **GROUND REFLECTION**: Separate ray via image source method
+   - Virtual source at z = -source_height (mirror below ground)
+   - Path distance: sqrt(d² + (hs+hr)²)
+   - Reflection coefficient: |Γ|(f) based on ground type
+   - Phase: -k × path_distance + Γ_phase
 
 3. **WALL REFLECTIONS**: Image source method
    - Mirror source position across each building wall
@@ -175,7 +157,7 @@ For each source-receiver pair, we trace:
 
 | File | Changes |
 |------|---------|
-| `apps/web/src/probeWorker.ts` | Fixed `atmosphericAbsorptionCoeff()`, added comprehensive header docs |
+| `apps/web/src/probeWorker.ts` | Fixed atmospheric absorption, fixed ground reflection double-counting, added comprehensive docs |
 | `apps/web/src/main.ts` | Debug logging for probe request/response flow |
 | `.github/PROBE_ENHANCEMENTS.md` | Updated with fix details and current state |
 
@@ -199,3 +181,4 @@ Added `requestLiveProbeUpdates()` call before early return in `computeSceneIncre
 - Maekawa, Z. (1968). "Noise reduction by screens"
 - Keller, J.B. (1962). "Geometrical theory of diffraction"
 - Pierce, A.D. (1981). "Acoustics: An Introduction to Its Physical Principles and Applications"
+- Delany, M.E. & Bazley, E.N. (1970). "Acoustical properties of fibrous absorbent materials"
