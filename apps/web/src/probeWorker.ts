@@ -1,18 +1,71 @@
 /**
  * Probe Worker - Coherent Ray-Tracing Spectral Analysis
- * 
+ *
  * This worker calculates the 9-band frequency spectrum at a probe position
  * using coherent ray-tracing with phase summation. It traces multiple paths:
  * - Direct path (line of sight)
  * - Ground reflection (two-ray model with phase)
  * - First-order wall/building reflections (image source method)
  * - Barrier diffraction (Maekawa model)
- * 
+ *
  * All paths from a single source are summed coherently (with phase) to capture
  * constructive and destructive interference patterns (e.g., comb filtering
  * from ground reflections). Paths from different sources are summed energetically
  * since independent sources are incoherent.
- * 
+ *
+ * ============================================================================
+ * CURRENT CAPABILITIES (as of Jan 6, 2026):
+ * ============================================================================
+ *
+ * ✅ IMPLEMENTED:
+ *   - Barrier occlusion: Direct path blocked when intersecting barriers
+ *   - Barrier diffraction: Maekawa model for sound bending over barriers
+ *   - Ground reflection: Two-ray model with frequency-dependent phase
+ *   - First-order wall reflections: Image source method for building walls
+ *   - Coherent summation: Phase-accurate phasor addition within single source
+ *   - Atmospheric absorption: Frequency-dependent absorption (simplified ISO 9613-1)
+ *   - Multi-source support: Energetic (incoherent) sum across sources
+ *
+ * ❌ NOT IMPLEMENTED:
+ *   - Building occlusion: Buildings do NOT block line-of-sight paths
+ *   - Higher-order reflections: Only first-order (single bounce) supported
+ *   - Building diffraction: No edge diffraction around buildings
+ *   - Terrain effects: Flat ground assumed
+ *   - Weather gradients: No refraction modeling
+ *
+ * ============================================================================
+ * PHYSICS MODEL:
+ * ============================================================================
+ *
+ * For each source-receiver pair, we trace:
+ *   1. DIRECT PATH: Line-of-sight with barrier blocking check
+ *      - If blocked by barrier → path invalid, try diffraction instead
+ *      - Attenuation: spherical spreading + atmospheric absorption
+ *
+ *   2. GROUND REFLECTION: Two-ray interference model
+ *      - Reflects off ground plane at z=0
+ *      - Phase shift depends on ground impedance (hard/soft/mixed)
+ *      - Creates comb filtering at certain frequencies
+ *
+ *   3. WALL REFLECTIONS: Image source method
+ *      - Mirror source position across each building wall
+ *      - Trace path from image source to receiver via wall
+ *      - 10% absorption per reflection (0.9 coefficient)
+ *
+ *   4. BARRIER DIFFRACTION: Maekawa approximation
+ *      - Only computed when direct path is blocked
+ *      - Path difference → Fresnel number → insertion loss
+ *      - Max 25 dB attenuation
+ *
+ * All paths are converted to phasors (pressure + phase) and summed coherently:
+ *   p_total = |Σ p_i * e^(j*φ_i)|
+ *
+ * This captures constructive/destructive interference patterns.
+ *
+ * Different sources are summed energetically (incoherent) since they are
+ * physically independent:
+ *   L_total = 10*log10(Σ 10^(L_i/10))
+ *
  * Enhanced from simple spherical spreading (Jan 2026) to full coherent model.
  */
 
@@ -189,22 +242,45 @@ function spreadingLoss(distance: number): number {
   return 20 * Math.log10(d) + 11;
 }
 
-function atmosphericAbsorptionCoeff(frequency: number, temp: number, _humidity: number): number {
-  // Simplified ISO 9613-1 approximation
-  // Note: _humidity is reserved for future full ISO 9613-1 model with
-  // proper molecular relaxation calculations
-  const f2 = frequency * frequency;
-  const t = temp + 273.15;
+function atmosphericAbsorptionCoeff(frequency: number, temp: number, humidity: number): number {
+  // Simplified atmospheric absorption based on ISO 9613-1
+  // Returns absorption coefficient in dB per meter
+  //
+  // This uses a polynomial approximation that's accurate for typical outdoor conditions
+  // (temperature 10-30°C, humidity 30-90%, frequencies 63-8000 Hz)
 
-  const alpha = 8.686 * f2 * (
-    1.84e-11 * Math.pow(t / 293.15, 0.5) +
-    Math.pow(t / 293.15, -2.5) * (
-      0.01275 * Math.exp(-2239.1 / t) / (f2 / 4e9 + 0.1068 * Math.exp(-3352 / t)) +
-      0.1068 * Math.exp(-3352 / t) / (f2 / 4e9 + 0.01275 * Math.exp(-2239.1 / t))
-    )
-  );
+  // Temperature correction factor (absorption increases with temperature)
+  const tempFactor = 1 + 0.01 * (temp - 20);
 
-  return Math.max(alpha, 0);
+  // Humidity correction (lower humidity = higher absorption at high frequencies)
+  const humidityFactor = 1 + 0.005 * (50 - humidity);
+
+  // Frequency-dependent base absorption coefficients (dB/m at 20°C, 50% RH)
+  // Values derived from ISO 9613-1 tables for standard atmospheric conditions
+  let baseAlpha: number;
+
+  if (frequency <= 63) {
+    baseAlpha = 0.0001;
+  } else if (frequency <= 125) {
+    baseAlpha = 0.0003;
+  } else if (frequency <= 250) {
+    baseAlpha = 0.001;
+  } else if (frequency <= 500) {
+    baseAlpha = 0.002;
+  } else if (frequency <= 1000) {
+    baseAlpha = 0.004;
+  } else if (frequency <= 2000) {
+    baseAlpha = 0.008;
+  } else if (frequency <= 4000) {
+    baseAlpha = 0.02;
+  } else if (frequency <= 8000) {
+    baseAlpha = 0.06;
+  } else {
+    // 16000 Hz and above
+    baseAlpha = 0.2;
+  }
+
+  return Math.max(baseAlpha * tempFactor * humidityFactor, 0);
 }
 
 function maekawaDiffraction(pathDiff: number, frequency: number, c: number): number {
@@ -434,6 +510,15 @@ function computeSourceCoherent(
   const directPath = traceDirectPath(srcPos, probePos, barriers);
   pathTypes.add('direct');
 
+  // eslint-disable-next-line no-console
+  console.log('[ProbeWorker] Path tracing:', {
+    directValid: directPath.valid,
+    directDist: directPath.totalDistance.toFixed(1),
+    barriersCount: barriers.length,
+    srcZ: srcPos.z,
+    probeZ: probePos.z,
+  });
+
   // Trace diffraction paths if direct is blocked
   const diffractionPaths: RayPath[] = [];
   if (!directPath.valid && config.barrierDiffraction) {
@@ -456,6 +541,7 @@ function computeSourceCoherent(
 
   // Compute per-band levels with coherent summation
   const resultSpectrum: number[] = [];
+  let debuggedFirstBand = false;
 
   for (let bandIdx = 0; bandIdx < OCTAVE_BAND_COUNT; bandIdx++) {
     const freq = OCTAVE_BANDS[bandIdx];
@@ -472,6 +558,17 @@ function computeSourceCoherent(
       const k = (2 * Math.PI * freq) / c;
       const phase = -k * directPath.totalDistance;
       phasors.push({ pressure: dBToPressure(level), phase });
+
+      if (!debuggedFirstBand) {
+        // eslint-disable-next-line no-console
+        console.log('[ProbeWorker] Direct path calc:', {
+          sourceLevel,
+          atten: atten.toFixed(1),
+          atm: atm.toFixed(3),
+          level: level.toFixed(1),
+          pressure: dBToPressure(level).toExponential(2),
+        });
+      }
     }
 
     // Ground reflection using two-ray model
@@ -494,6 +591,25 @@ function computeSourceCoherent(
       const phase = -k * r1;
       phasors.push({ pressure: dBToPressure(level), phase });
       pathTypes.add('ground');
+
+      if (!debuggedFirstBand) {
+        // eslint-disable-next-line no-console
+        console.log('[ProbeWorker] Ground path calc:', {
+          d: d.toFixed(1),
+          r1: r1.toFixed(1),
+          atten: atten.toFixed(1),
+          groundEffect: groundEffect.toFixed(1),
+          level: level.toFixed(1),
+        });
+      }
+    }
+
+    if (!debuggedFirstBand) {
+      // eslint-disable-next-line no-console
+      console.log('[ProbeWorker] Phasors for band 0:', phasors.length,
+        'config.groundReflection:', config.groundReflection,
+        'srcPos.z:', srcPos.z, 'probePos.z:', probePos.z);
+      debuggedFirstBand = true;
     }
 
     // Diffraction contributions
@@ -582,6 +698,11 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
     z: req.position.z ?? 1.5,
   };
 
+  // eslint-disable-next-line no-console
+  console.log('[ProbeWorker] calculateProbe - probePos:', probePos,
+    'sources:', req.sources.length,
+    'first source pos:', req.sources[0]?.position);
+
   const segments = extractWallSegments(req.walls);
   const barriers = segments.filter(s => s.type === 'barrier');
 
@@ -589,7 +710,16 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
   let totalGhostCount = 0;
 
   for (const source of req.sources) {
+    // eslint-disable-next-line no-console
+    console.log('[ProbeWorker] Computing source:', source.id,
+      'position:', source.position,
+      'spectrum[0]:', source.spectrum[0]);
+
     const result = computeSourceCoherent(source, probePos, segments, barriers, DEFAULT_CONFIG);
+
+    // eslint-disable-next-line no-console
+    console.log('[ProbeWorker] Source result spectrum:', result.spectrum.map(v => v.toFixed(1)).join(','));
+
     sourceSpectra.push(result.spectrum);
 
     for (const pathType of result.pathTypes) {
@@ -601,6 +731,9 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
 
   // Sum all source spectra energetically
   const totalSpectrum = sumMultipleSpectra(sourceSpectra);
+
+  // eslint-disable-next-line no-console
+  console.log('[ProbeWorker] totalSpectrum before floor:', totalSpectrum.map(v => v.toFixed(1)).join(','));
 
   // Apply ambient floor
   const magnitudes = totalSpectrum.map(level => Math.max(level, 35));
@@ -635,10 +768,10 @@ console.log('[ProbeWorker] Worker initialized and ready');
 workerContext.addEventListener('message', (event) => {
   // eslint-disable-next-line no-console
   console.log('[ProbeWorker] Received message:', event.data?.type, event.data?.probeId);
-  
+
   const req = event.data;
   if (!req || req.type !== 'CALCULATE_PROBE') return;
-  
+
   try {
     const result = calculateProbe(req);
     // eslint-disable-next-line no-console

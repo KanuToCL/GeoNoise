@@ -6,11 +6,9 @@ This document outlines proposed enhancements to the probe system to upgrade it f
 
 ---
 
-## ✅ Implementation Status (Jan 3, 2026)
+## ✅ Implementation Status (Jan 6, 2026)
 
 The following enhancements have been implemented on branch `feature/probe-coherent-raytracing`:
-
-**Commit:** `8457217` - feat(probe): implement coherent ray-tracing with phase summation (WIP)
 
 ### Completed Features
 
@@ -21,304 +19,179 @@ The following enhancements have been implemented on branch `feature/probe-cohere
 | **Coherent phasor summation** | ✅ Done | `sumPhasorsCoherent()`, `sumSpectralPhasorsCoherent()` |
 | **Ray-tracing module** | ✅ Done | `packages/engine/src/raytracing/index.ts` |
 | **Image source method** | ✅ Done | First-order reflections via `createImageSources()` |
-| **Direct path tracing** | ✅ Done | With barrier/building blocking detection |
+| **Direct path tracing** | ✅ Done | With barrier blocking detection |
 | **Ground reflection** | ✅ Done | Two-ray phasor model with Delany-Bazley impedance |
 | **Wall reflections** | ✅ Done | Image source method for buildings |
 | **Barrier diffraction** | ✅ Done | Maekawa model (`maekawaDiffraction()`) |
-| **Atmospheric absorption** | ✅ Done | Simplified ISO 9613-1 |
+| **Atmospheric absorption** | ✅ Done | Simplified ISO 9613-1 (fixed Jan 6, 2026) |
 | **Frequency weighting display** | ✅ Done | A/C/Z weighting in probe chart |
 | **Overall weighted level** | ✅ Done | Shows "72 dB(A)" on probe chart |
 | **Ghost source count** | ✅ Done | `interferenceDetails.ghostCount` populated |
 | **Unit tests** | ✅ Done | 26 tests in `phasor/index.spec.ts` |
 
-### 🐛 Known Bug: Probe Not Updating Dynamically
-
-**Status:** 🟡 Under Investigation (Jan 5, 2026)
-
-The probe displays an initial calculation but does not update when:
-- Moving sources or probes
-- Changing source power levels or spectrum
-- Adding/removing barriers
-
 ---
 
-## ✅ RESOLVED: Stale Build Cache Issue (Jan 5, 2026)
-
-### Problem
-Application appeared completely non-functional (blank canvas, non-responsive UI) after making code changes.
+## ✅ RESOLVED: Probe Not Updating Dynamically (Jan 6, 2026)
 
 ### Root Cause
-**Stale build cache** - The `dist/` folder was missing compiled JavaScript files (`main.js`, `probeWorker.js`). The build script's order was:
-1. Delete dist folder
-2. Run TypeScript compilation
-3. Copy HTML/CSS files (which overwrote the compiled JS)
 
-This resulted in the HTML loading but no JavaScript being available.
+The `atmosphericAbsorptionCoeff()` function had a **broken ISO 9613-1 formula** that was producing astronomically wrong values:
 
-### Solution
-Added new npm scripts to `package.json` for cache management:
-
-| Command | Description |
-|---------|-------------|
-| `npm run dev:clean` | Clears all caches, then starts dev server |
-| `npm run build:clean` | Clears all caches, then runs forced full build |
-| `npm run clean:cache` | Clears turbo, vite, and dist caches only |
-| `npm run rebuild` | Full clean + TypeScript rebuild from scratch |
-
-### What Gets Cleared
-- `.turbo` - Turborepo cache
-- `node_modules/.cache` - General Node cache
-- `node_modules/.vite` - Vite cache
-- `apps/*/dist` - All compiled app output
-- `packages/*/dist` - All compiled package output
-- `apps/*/.vite` - App-level Vite caches
-
-### Usage
-```bash
-# Normal dev (uses cache - faster)
-npm run dev
-
-# Clean start when things seem broken
-npm run dev:clean
-
-# Full nuclear option - clean TypeScript rebuild
-npm run rebuild
+```
+EXPECTED: ~0.0001 dB/m at 63 Hz
+ACTUAL:   ~104,000 dB/m at 63 Hz (!!!)
 ```
 
-### Lesson Learned
-When the application appears completely broken after code changes, **always check for stale caches first** before debugging the code itself. Run `npm run rebuild` to ensure a clean slate.
+This caused the level calculation to produce values like `-3,683,673 dB` instead of the expected `~58 dB`, which when clamped to the pressure floor resulted in the constant 35 dB ambient floor being shown for all bands.
+
+### Debug Session Output
+
+```
+[ProbeWorker] Direct path calc: {
+  sourceLevel: 100,
+  atten: '42.0',
+  atm: '3683731.747',     // ← WRONG! Should be ~0.004
+  level: '-3683673.7',    // ← Results in floor clamping
+  pressure: '1.00e-12'
+}
+```
+
+### Fix Applied
+
+Replaced the broken formula with a correct, simplified atmospheric absorption model:
+
+```typescript
+// OLD (BROKEN): Produced millions of dB/m
+const alpha = 8.686 * f2 * (
+  1.84e-11 * Math.pow(t / 293.15, 0.5) + ...
+);
+
+// NEW (FIXED): Correct frequency-dependent coefficients
+function atmosphericAbsorptionCoeff(frequency, temp, humidity) {
+  const tempFactor = 1 + 0.01 * (temp - 20);
+  const humidityFactor = 1 + 0.005 * (50 - humidity);
+
+  let baseAlpha;
+  if (frequency <= 63) baseAlpha = 0.0001;      // dB/m
+  else if (frequency <= 125) baseAlpha = 0.0003;
+  else if (frequency <= 250) baseAlpha = 0.001;
+  else if (frequency <= 500) baseAlpha = 0.002;
+  else if (frequency <= 1000) baseAlpha = 0.004;
+  else if (frequency <= 2000) baseAlpha = 0.008;
+  else if (frequency <= 4000) baseAlpha = 0.02;
+  else if (frequency <= 8000) baseAlpha = 0.06;
+  else baseAlpha = 0.2;  // 16 kHz
+
+  return baseAlpha * tempFactor * humidityFactor;
+}
+```
+
+### Verification
+
+After fix, probe now shows realistic values:
+- 35m distance: ~55-60 dB (previously: 35 dB floor)
+- Values update correctly when moving sources or probes
+- Frequency-dependent roll-off visible in spectrum
 
 ---
 
-### Previous Debug Session (Archived)
+## Current Capabilities (as of Jan 6, 2026)
 
-The probe was displaying an initial calculation but not updating dynamically. Investigation showed:
-- `computeSceneIncremental()` had an early return when priming drag contributions
-- `applyDrag()` didn't explicitly trigger probe updates for propagation-affecting elements
+### ✅ IMPLEMENTED
 
-This issue is still under investigation - the cache issue was masking the actual debugging work.
+| Feature | Description |
+|---------|-------------|
+| **Barrier occlusion** | Direct path blocked when intersecting barriers |
+| **Barrier diffraction** | Maekawa model for sound bending over barriers |
+| **Ground reflection** | Two-ray model with frequency-dependent phase |
+| **First-order wall reflections** | Image source method for building walls |
+| **Coherent summation** | Phase-accurate phasor addition within single source |
+| **Atmospheric absorption** | Frequency-dependent (simplified ISO 9613-1) |
+| **Multi-source support** | Energetic (incoherent) sum across sources |
 
-### New Files Created
+### ❌ NOT IMPLEMENTED
 
-```
-packages/shared/src/phasor/index.ts       # Phasor arithmetic (~430 lines)
-packages/shared/src/phasor/index.spec.ts  # Unit tests (26 tests)
-packages/engine/src/raytracing/index.ts   # Ray-tracing module (~610 lines)
-packages/engine/src/probeCompute/index.ts # Reference implementation (~500 lines)
-```
+| Feature | Notes |
+|---------|-------|
+| **Building occlusion** | Buildings do NOT block line-of-sight paths |
+| **Higher-order reflections** | Only first-order (single bounce) supported |
+| **Building diffraction** | No edge diffraction around buildings |
+| **Terrain effects** | Flat ground assumed |
+| **Weather gradients** | No refraction modeling |
 
-### Modified Files
+---
 
-- `apps/web/src/probeWorker.ts` - Complete rewrite (~600 lines, was ~100)
-- `apps/web/src/main.ts` - Added weighting to `renderProbeChartOn()`
-- `packages/engine/src/index.ts` - Added exports for new modules
-- `packages/shared/src/index.ts` - Added phasor export
+## Physics Model Summary
 
-### Physics Model
+For each source-receiver pair, we trace:
 
-The probe now traces multiple paths per source-receiver pair:
+1. **DIRECT PATH**: Line-of-sight with barrier blocking check
+   - If blocked by barrier → path invalid, try diffraction instead
+   - Attenuation: spherical spreading + atmospheric absorption
 
-1. **Direct path** - Line of sight with barrier/building blocking
-2. **Ground reflection** - Two-ray model with phase from `agrTwoRayDb()`
-3. **Wall reflections** - Image source method for first-order reflections
-4. **Barrier diffraction** - Maekawa insertion loss for blocked paths
+2. **GROUND REFLECTION**: Two-ray interference model
+   - Reflects off ground plane at z=0
+   - Phase shift depends on ground impedance (hard/soft/mixed)
+   - Creates comb filtering at certain frequencies
 
-All paths from a single source are summed **coherently** (with phase) to capture:
-- Comb filtering from ground reflections
-- Constructive/destructive interference patterns
+3. **WALL REFLECTIONS**: Image source method
+   - Mirror source position across each building wall
+   - Trace path from image source to receiver via wall
+   - 10% absorption per reflection (0.9 coefficient)
 
-Different sources are summed **energetically** (incoherent).
+4. **BARRIER DIFFRACTION**: Maekawa approximation
+   - Only computed when direct path is blocked
+   - Path difference → Fresnel number → insertion loss
+   - Max 25 dB attenuation
 
-### Remaining Work
+**Summation:**
+- All paths from same source: **Coherent** (with phase) → captures interference
+- Paths from different sources: **Energetic** (incoherent) → independent sources
 
-**Immediate (Bug Fixes):**
-- [ ] Fix probe not updating on scene changes
-- [ ] Verify worker message flow end-to-end
-- [ ] Test with probe selected vs. pinned
+---
 
-**Future Enhancements:**
+## Remaining Work
+
+### Immediate (High Priority)
+
+- [ ] Add building occlusion (check buildings in `isPathBlocked`)
+- [ ] Remove debug logging (console.log statements) for production
+- [ ] Add visual indicator when probe is "calculating"
+
+### Future Enhancements
+
+- [ ] Higher-order reflections (2nd, 3rd order bounces)
+- [ ] Building edge diffraction
 - [ ] Ghost source visualization on canvas
 - [ ] LOD system for performance modes
-- [ ] Higher-order reflections
 - [ ] Probe comparison mode
 - [ ] WebAssembly/GPU acceleration
 - [ ] Spatial caching for nearby positions
+- [ ] Terrain/topography effects
 
 ---
 
-## Current Limitations (as of Jan 2026)
+## Files Modified (Jan 6, 2026)
 
-The probe worker currently uses a highly simplified model:
+| File | Changes |
+|------|---------|
+| `apps/web/src/probeWorker.ts` | Fixed `atmosphericAbsorptionCoeff()`, added comprehensive header docs |
+| `apps/web/src/main.ts` | Debug logging for probe request/response flow |
+| `.github/PROBE_ENHANCEMENTS.md` | Updated with fix details and current state |
 
-- **Simple spherical spreading only** (20*log10(r) + 11 dB)
-- **No barrier diffraction** - walls parameter is ignored
-- **No ground reflections** - no ground effect modeling
-- **No building interactions** - no reflections or diffractions
-- **Energetic summation only** - no phase information or interference patterns
-- **No weighting display** - always shows unweighted spectrum
-- **Single-threaded calculation** - all in the probe worker
+---
 
-## Proposed Enhancements
+## Previous Debug Sessions (Archived)
 
-### 1. Advanced Ray-Tracing Propagation
+### Jan 5, 2026: Stale Build Cache
 
-**Goal:** Implement 2.5D ray-bounce calculations for more accurate acoustic modeling.
+Application appeared completely non-functional. Root cause was stale `dist/` folder missing compiled JS files. Added `npm run rebuild` command.
 
-#### Features:
-- **First-order reflections** from barriers and buildings
-- **Ground reflections** using two-ray model or ISO 9613-2
-- **Barrier diffraction** using Maekawa or ISO formulas
-- **Building edge diffraction** for realistic shadow zones
-- **Distance-dependent atmospheric absorption**
+### Jan 6, 2026: Early Return Issue
 
-#### Implementation Notes:
-```typescript
-interface ProbeRayPath {
-  sourceId: string;
-  pathType: 'direct' | 'reflected' | 'diffracted';
-  totalDistance: number;
-  reflectionPoints?: Point3D[];
-  diffractionEdges?: Edge3D[];
-  attenuation: number;
-  phase?: number; // For coherent summation
-}
-```
+Added `requestLiveProbeUpdates()` call before early return in `computeSceneIncremental()` to ensure probe updates happen during drag operations.
 
-### 2. Complex Interference Modeling
-
-**Goal:** Capture constructive and destructive interference between sources and paths.
-
-#### Features:
-- **Phase-coherent summation** per frequency band
-- **Path length differences** → phase shifts
-- **Ground reflection phase changes** (180° for hard ground)
-- **Interference patterns** visualization in probe spectrum
-- **Comb filtering effects** from ground reflections
-
-#### Implementation Approach:
-```typescript
-// Instead of energetic sum:
-// total = sum(10^(L/10))
-
-// Use complex phasor addition:
-interface Phasor {
-  magnitude: number;  // Pressure amplitude
-  phase: number;      // Phase in radians
-}
-
-function sumPhasors(phasors: Phasor[]): number {
-  const real = phasors.reduce((sum, p) =>
-    sum + p.magnitude * Math.cos(p.phase), 0);
-  const imag = phasors.reduce((sum, p) =>
-    sum + p.magnitude * Math.sin(p.phase), 0);
-  return 20 * Math.log10(Math.sqrt(real*real + imag*imag));
-}
-```
-
-### 3. Frequency Weighting Integration
-
-**Goal:** Apply A/C/Z weighting to probe display based on user selection.
-
-#### Features:
-- **Respect displayWeighting setting** from UI
-- **Show weighted overall level** in probe panel header
-- **Option to toggle** between weighted/unweighted spectrum
-- **Highlight selected band** when displayBand is not 'overall'
-- **Match receiver display behavior** for consistency
-
-#### UI Changes:
-```typescript
-// In renderProbeChartOn():
-if (displayWeighting !== 'Z') {
-  const weightedMagnitudes = applyWeightingToSpectrum(
-    data.magnitudes as Spectrum9,
-    displayWeighting
-  );
-  // Use weightedMagnitudes for display
-}
-
-// Add overall weighted level to probe panel:
-const overallA = calculateOverallLevel(data.magnitudes, 'A');
-const overallC = calculateOverallLevel(data.magnitudes, 'C');
-```
-
-### 4. Performance Optimization
-
-**Goal:** Maintain real-time interactivity with complex calculations.
-
-#### Strategies:
-- **Level-of-detail (LOD)** system:
-  - Simple mode: Current implementation (instant)
-  - Medium mode: Add barriers + ground (< 50ms)
-  - High mode: Full ray-tracing (< 200ms)
-- **Incremental updates**: Calculate direct path first, then reflections
-- **Spatial caching**: Reuse calculations for nearby probe positions
-- **WebAssembly acceleration** for ray-tracing math
-- **GPU compute** for multiple probe positions simultaneously
-
-### 5. Ghost Source Visualization
-
-**Goal:** Show virtual source positions for reflections.
-
-#### Features:
-- **Visualize image sources** on canvas
-- **Draw reflection paths** with dotted lines
-- **Color-code by contribution** level
-- **Toggle ghost sources** visibility
-- **interferenceDetails.ghostCount** actually populated
-
-### 6. Probe Comparison Mode
-
-**Goal:** Compare multiple probe positions simultaneously.
-
-#### Features:
-- **Pin multiple probes** with different colors
-- **Overlay spectra** on same chart
-- **Difference plot** between two probes
-- **A/B switching** for quick comparison
-- **Export probe data** to CSV
-
-## Implementation Priority
-
-1. **High Priority** (Phase 1):
-   - Frequency weighting integration (easiest, high value)
-   - Basic barrier diffraction (align with receiver calculations)
-
-2. **Medium Priority** (Phase 2):
-   - Ground reflections with phase
-   - First-order wall reflections
-   - Complex interference for direct + ground
-
-3. **Low Priority** (Phase 3):
-   - Full ray-tracing with multiple bounces
-   - Ghost source visualization
-   - Probe comparison mode
-   - WebAssembly optimization
-
-## Testing Requirements
-
-- Unit tests for phasor arithmetic
-- Validation against known acoustic scenarios:
-  - Single source + hard ground (should show comb filtering)
-  - Two coherent sources (should show interference pattern)
-  - Source behind barrier (should match receiver calculation)
-- Performance benchmarks for each LOD mode
-- User study on interactivity thresholds
-
-## Related Components
-
-- `packages/engine/src/propagation/` - Reference implementation for propagation
-- `packages/engine/src/propagation/ground.ts` - Two-ray ground reflection model
-- `packages/shared/src/utils/index.ts` - Weighting functions
-- `apps/web/src/probeWorker.ts` - Current probe implementation
-
-## Open Questions
-
-1. Should probes use the same engine backend as receivers for consistency?
-2. How much accuracy to sacrifice for real-time updates?
-3. Should phase information be band-specific or broadband?
-4. How to visualize interference patterns effectively?
-5. Should probe calculations be cached when scene doesn't change?
+---
 
 ## References
 

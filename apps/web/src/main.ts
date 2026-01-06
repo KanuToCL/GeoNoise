@@ -48,7 +48,7 @@ type DisplayBand = 'overall' | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 /**
  * Sound source with full spectral definition
- * 
+ *
  * Spectral Source Migration (Jan 2026):
  * - Added `spectrum` for 9-band octave levels
  * - Added `gain` for master level offset
@@ -1567,7 +1567,7 @@ function buildNoiseMapGridConfig(resolutionPx?: number, maxPoints?: number) {
 
   let cols = Math.ceil(paddedWidth / resolution) + 1;
   let rows = Math.ceil(paddedHeight / resolution) + 1;
-  
+
   // Point cap strategy (see NOISE MAP RESOLUTION STRATEGY comment above):
   // - Initial/no-resolution: 2,500 points for fast startup
   // - With resolution (static/drag): 35,000 points for good quality
@@ -2087,6 +2087,8 @@ async function computePanelIncremental(
 function computeSceneIncremental(sourceId: string) {
   if (!dragContribution || dragContribution.sourceId !== sourceId) {
     primeDragContribution(sourceId);
+    // Still need to update probes even when priming drag contribution
+    requestLiveProbeUpdates();
     return;
   }
 
@@ -2102,12 +2104,12 @@ function computeSceneIncremental(sourceId: string) {
 
 /**
  * Get the appropriate display level for a receiver based on user's weighting/band selection
- * 
+ *
  * Spectral Source Migration (Jan 2026):
  * - Supports displaying individual octave bands from Leq_spectrum
  * - Supports A/C/Z weighting selection for overall level
  * - Falls back to LAeq if weighted values not available
- * 
+ *
  * @param receiver - Receiver result with spectrum data
  * @returns Object with level (dB) and unit string for display
  */
@@ -2119,7 +2121,7 @@ function getReceiverDisplayLevel(receiver: SceneResults['receivers'][number]): {
       unit: `dB @ ${OCTAVE_BAND_LABELS[displayBand]}`,
     };
   }
-  
+
   // Show weighted overall level based on selected weighting
   switch (displayWeighting) {
     case 'C':
@@ -2140,22 +2142,22 @@ function renderResults() {
     for (const receiver of results.receivers) {
       const row = document.createElement('div');
       row.className = 'result-row result-row--spectrum';
-      
+
       // Header with ID and weighted/band-specific level
       const { level, unit } = getReceiverDisplayLevel(receiver);
       const header = document.createElement('div');
       header.className = 'result-row-header';
       header.innerHTML = `<span>${receiver.id.toUpperCase()}</span><strong>${formatLevel(level)} ${unit}</strong>`;
       row.appendChild(header);
-      
+
       // Add spectrum bars if available
       if (receiver.Leq_spectrum) {
         const spectrumContainer = document.createElement('div');
         spectrumContainer.className = 'result-spectrum-mini';
-        
+
         const maxLevel = Math.max(...receiver.Leq_spectrum);
         const minDisplay = Math.max(0, maxLevel - 60);
-        
+
         receiver.Leq_spectrum.forEach((level, i) => {
           const bar = document.createElement('div');
           bar.className = 'spectrum-bar-mini';
@@ -2168,10 +2170,10 @@ function renderResults() {
           }
           spectrumContainer.appendChild(bar);
         });
-        
+
         row.appendChild(spectrumContainer);
       }
-      
+
       receiverTable.appendChild(row);
     }
   }
@@ -2285,6 +2287,11 @@ function calculateProbeStub(req: ProbeRequest): ProbeResult {
 
 function sendProbeRequest(probe: Probe) {
   const request = buildProbeRequest(probe);
+  // eslint-disable-next-line no-console
+  console.log('[Main] sendProbeRequest called for probe:', probe.id,
+    'position:', { x: probe.x.toFixed(1), y: probe.y.toFixed(1) },
+    'sources:', request.sources.length,
+    'walls:', request.walls.length);
   probePending.add(probe.id);
   renderProbeInspector();
   renderPinnedProbePanel(probe.id);
@@ -2350,11 +2357,15 @@ function requestLiveProbeUpdates(options?: { immediate?: boolean }) {
   const liveIds = getLiveProbeIds();
   // eslint-disable-next-line no-console
   console.log('[Main] requestLiveProbeUpdates called, liveIds:', liveIds, 'activeProbeId:', activeProbeId);
-  requestProbeUpdates(liveIds, options);
+  // Force immediate updates to ensure probe responds to scene changes
+  requestProbeUpdates(liveIds, { immediate: true, ...options });
 }
 
 function handleProbeResult(result: ProbeResult) {
   if (!result || result.type !== 'PROBE_UPDATE') return;
+  // eslint-disable-next-line no-console
+  console.log('[Main] handleProbeResult received:', result.probeId,
+    'magnitudes:', result.data.magnitudes.map(m => m.toFixed(1)).join(','));
   probeResults.set(result.probeId, result.data);
   probePending.delete(result.probeId);
   if (activeProbeId === result.probeId) {
@@ -2970,7 +2981,7 @@ function createSpectrumEditor(
   const inputRow = document.createElement('div');
   inputRow.className = 'spectrum-input-row';
   const inputs: HTMLInputElement[] = [];
-  
+
   for (let i = 0; i < OCTAVE_BANDS.length; i++) {
     const bandIndex = i;
     const input = document.createElement('input');
@@ -3044,13 +3055,13 @@ function createSpectrumEditor(
       const octavesFromRef = i - refIndex;
       pinkShape[i] = -3 * octavesFromRef;
     }
-    
+
     // Now normalize to target overall power
     const targetPower = source.power;
     const tempSpectrum = pinkShape.map(offset => 100 + offset); // Temp spectrum at 100 dB ref
     const tempOverall = calculateOverallLevel(tempSpectrum as Spectrum9, 'Z');
     const adjustment = targetPower - tempOverall;
-    
+
     for (let i = 0; i < 9; i++) {
       source.spectrum[i] = Math.round(100 + pinkShape[i] + adjustment);
       inputs[i].value = Math.round(source.spectrum[i]).toString();
@@ -3068,13 +3079,13 @@ function createSpectrumEditor(
   trafficButton.addEventListener('click', () => {
     // Typical road traffic spectrum (relative to 1kHz band)
     const trafficShape = [8, 5, 2, 0, -2, -5, -8, -12, -18];
-    
+
     // Normalize to target overall power
     const targetPower = source.power;
     const tempSpectrum = trafficShape.map(offset => 100 + offset); // Temp spectrum at 100 dB ref
     const tempOverall = calculateOverallLevel(tempSpectrum as Spectrum9, 'Z');
     const adjustment = targetPower - tempOverall;
-    
+
     for (let i = 0; i < 9; i++) {
       source.spectrum[i] = Math.round(100 + trafficShape[i] + adjustment);
       inputs[i].value = Math.round(source.spectrum[i]).toString();
@@ -3092,13 +3103,13 @@ function createSpectrumEditor(
   musicButton.addEventListener('click', () => {
     // Typical music/PA spectrum with strong bass
     const musicShape = [6, 4, 2, 0, -1, -2, -4, -8, -14];
-    
+
     // Normalize to target overall power
     const targetPower = source.power;
     const tempSpectrum = musicShape.map(offset => 100 + offset); // Temp spectrum at 100 dB ref
     const tempOverall = calculateOverallLevel(tempSpectrum as Spectrum9, 'Z');
     const adjustment = targetPower - tempOverall;
-    
+
     for (let i = 0; i < 9; i++) {
       source.spectrum[i] = Math.round(100 + musicShape[i] + adjustment);
       inputs[i].value = Math.round(source.spectrum[i]).toString();
@@ -3242,7 +3253,7 @@ function renderSources() {
 
     const fields = document.createElement('div');
     fields.className = 'source-fields';
-    
+
     // Overall power display (computed from spectrum)
     const overallZ = calculateOverallLevel(source.spectrum, 'Z');
     const overallA = calculateOverallLevel(source.spectrum, 'A');
@@ -3250,7 +3261,7 @@ function renderSources() {
     powerDisplay.className = 'source-power-display';
     powerDisplay.innerHTML = `<span class="source-power-label">Power:</span> <strong>${formatLevel(overallZ)}</strong> dBZ / <strong>${formatLevel(overallA)}</strong> dBA`;
     fields.appendChild(powerDisplay);
-    
+
     // Compact spectrum visualization
     const spectrumBar = createSpectrumBar(source.spectrum, displayWeighting);
     fields.appendChild(spectrumBar);
@@ -3261,7 +3272,7 @@ function renderSources() {
       renderProperties();
       computeScene();
     }));
-    
+
     if (!collapsedSources.has(source.id)) {
       row.appendChild(fields);
     }
