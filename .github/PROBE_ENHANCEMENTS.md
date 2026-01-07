@@ -16,12 +16,13 @@ This document outlines proposed enhancements to the probe system to upgrade it f
 - Ground reflection (two-ray model with separate phasors)
 - Wall reflections (first-order, image source method)
 - Barrier diffraction (Maekawa model, over-top only)
+- Building occlusion (polygon-based with 3D height check)
+- Building diffraction (double-edge over roof + around corners, per-band)
 - Atmospheric absorption (simplified ISO 9613-1)
 - Frequency weighting display (A/C/Z)
 - Multi-source support (energetic summation)
 
 ### 🔨 In Progress / High Priority
-- Building occlusion (polygon-based blocking)
 - Remove debug logging for production
 - Visual indicator when probe is "calculating"
 
@@ -33,7 +34,7 @@ This document outlines proposed enhancements to the probe system to upgrade it f
 ### 🔮 Future Enhancements
 - Configurable diffraction model selection (Maekawa / Kurze-Anderson / ISO 9613-2)
 - Higher-order reflections (2nd, 3rd order bounces)
-- Building edge/corner diffraction
+- Wall reflections for diffracted paths (see detailed plan below)
 - Ghost source visualization on canvas
 - LOD system for performance modes
 - Probe comparison mode
@@ -130,9 +131,8 @@ phasors.push({
 
 | Feature | Notes |
 |---------|-------|
-| **Building occlusion** | Buildings do NOT block line-of-sight paths |
 | **Higher-order reflections** | Only first-order (single bounce) supported |
-| **Building diffraction** | No edge diffraction around buildings |
+| **Wall reflections for diffracted paths** | Diffracted paths don't spawn reflections (documented for future) |
 | **Terrain effects** | Flat ground assumed |
 | **Weather gradients** | No refraction modeling |
 
@@ -1283,6 +1283,103 @@ Low frequencies diffract more easily around corners → less attenuation.
 
 ---
 
+## ✅ Building Occlusion Implementation (Jan 7, 2026)
+
+### Features Implemented
+
+1. **Building Occlusion (Polygon-Based)**
+   - `pointInPolygon()` - Ray casting algorithm for polygon intersection
+   - `segmentIntersectsPolygon()` - Check if a line segment crosses a polygon with entry/exit points
+   - `pathHeightAtPoint()` - Calculate path height at any 2D point (for 3D height check)
+   - `extractBuildingFootprints()` - Extract building data from wall segments
+   - `findBlockingBuilding()` - Find which building blocks a 3D path (with height awareness)
+
+2. **Building Diffraction (Per-Band Frequency Dependence)**
+   - `findVisibleCorners()` - Find building corners visible from a point (for horizontal diffraction)
+   - `traceBuildingDiffractionPaths()` - Compute all valid diffraction paths (roof + corners)
+   - `doubleEdgeDiffraction()` - Uses coefficient **40** for roof paths: `A = 10·log₁₀(3 + 40·N)`, capped at 25 dB
+   - `singleEdgeDiffraction()` - Uses coefficient **20** for corner paths: `A = 10·log₁₀(3 + 20·N)`, capped at 20 dB
+
+3. **Coherent Phasor Summation**
+   - All diffraction paths (roof + corners) are summed coherently with phase
+   - Phase: `φ = -k × total_distance + phase_shift`
+   - Captures frequency-dependent interference patterns
+
+### Physics Model
+
+| Path Type | Diffraction Coefficient | Max Attenuation | Frequency Effect |
+|-----------|------------------------|-----------------|------------------|
+| Over-roof (double-edge) | 40 | 25 dB | Strong (low freq easy, high freq blocked) |
+| Around-corner (single-edge) | 20 | 20 dB | Moderate |
+
+**Example at 1000 Hz with δ = 5m path difference:**
+- Fresnel number: `N = 2 × 5 / 0.343 = 29.2`
+- Roof loss: `10·log₁₀(3 + 40 × 29.2) = 30.7 dB` → capped to **25 dB**
+- Corner loss: `10·log₁₀(3 + 20 × 29.2) = 27.7 dB` → capped to **20 dB**
+
+---
+
+## ✅ Bug Fix: Wall Reflections Bypassing Building Occlusion (Jan 7, 2026)
+
+### Problem
+
+After implementing building occlusion, the probe showed ~61 dB while the receiver showed ~44 dB(Z) - a ~17 dB discrepancy.
+
+**Root Cause:** Wall reflections from building walls were NOT being checked for building occlusion. When the direct path was blocked by a building, the wall reflections from that same building's walls were still being added to the phasor sum, creating invalid paths that bypassed the building.
+
+```
+        S                              R
+         \                            /
+          \   [BLOCKED by building]  /
+           ─────────X───────────────
+                    │ BUILDING │
+                    └──────────┘
+                         │
+                    Wall reflections from building walls
+                    were being added even though they
+                    would pass THROUGH the building!
+```
+
+### Fix
+
+Updated `traceWallReflectionPaths()` to:
+
+1. **Check OTHER buildings:** Both legs of the reflection path (source→wall, wall→receiver) are validated against all buildings except the one owning the wall.
+
+2. **Check SAME building:** Even for the building owning the wall, verify that neither leg passes through the building's interior (which would happen for walls on the "wrong" side).
+
+```typescript
+// Check building blocking for BOTH legs of the reflection path
+const otherBuildings = buildings.filter(b => b.id !== segment.id);
+const leg1Block = findBlockingBuilding(source, reflPoint3D, otherBuildings);
+const leg2Block = findBlockingBuilding(reflPoint3D, receiver, otherBuildings);
+
+// Also check if the path goes through the SAME building
+const sameBuilding = buildings.find(b => b.id === segment.id);
+if (sameBuilding) {
+  const srcToRefl = findBlockingBuilding(source, reflPoint3D, [sameBuilding]);
+  const reflToRecv = findBlockingBuilding(reflPoint3D, receiver, [sameBuilding]);
+  blockedBySameBuilding = srcToRefl.blocked || reflToRecv.blocked;
+}
+
+if (leg1Block.blocked || leg2Block.blocked || blockedBySameBuilding) continue;
+```
+
+### Result
+
+- Probe and receiver now show consistent levels (~44 dB vs ~44 dB)
+- Building occlusion properly blocks invalid wall reflection paths
+- Only geometrically valid reflection paths are included in coherent summation
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `apps/web/src/probeWorker.ts` | Added building occlusion, diffraction, and fixed wall reflection validation |
+| `.github/PROBE_ENHANCEMENTS.md` | Documented implementation and bug fix |
+
+---
+
 ## Previous Debug Sessions (Archived)
 
 ### Jan 5, 2026: Stale Build Cache
@@ -1292,6 +1389,251 @@ Application appeared completely non-functional. Root cause was stale `dist/` fol
 ### Jan 6, 2026: Early Return Issue
 
 Added `requestLiveProbeUpdates()` call before early return in `computeSceneIncremental()` to ensure probe updates happen during drag operations.
+
+---
+
+## 🔮 Future: Wall Reflections for Diffracted Paths
+
+> **Status:** Future Enhancement (User-Selectable)
+> **Priority:** Low
+> **Target:** Enable wall reflections on diffracted paths for increased accuracy
+
+### Problem Statement
+
+Currently, when a direct path is blocked by a building:
+1. We compute diffraction paths (over roof + around corners)
+2. Each diffraction path creates a phasor with proper attenuation and phase
+3. All paths are summed coherently
+
+However, these diffracted paths are treated as **terminal** — they cannot undergo further wall reflections. In reality, a diffracted sound wave can reflect off nearby building walls, creating additional propagation paths.
+
+### Current Behavior
+
+```
+        S                              R
+         \                            /
+          \      DIFFRACTED PATH     /
+           A₁ ──→ ●────────● ←── A₂
+                  │  ROOF  │
+           ═══════╧════════╧═══════   Building A
+
+                                       ┌─────────────┐
+                                       │  Building B │
+                                       │  (nearby)   │
+                                       └─────────────┘
+                                             ↑
+                             Currently: No reflection computed
+                             from diffracted path off Building B
+```
+
+**What we compute:**
+- S → Roof → R (diffracted path) ✅
+
+**What we DON'T compute:**
+- S → Roof → Wall_B → R (diffracted + reflected path) ❌
+
+### Proposed Enhancement
+
+Add an option to trace wall reflections from diffracted paths, creating second-order hybrid paths:
+
+```typescript
+interface DiffractionConfig {
+  // ... existing options ...
+
+  // NEW: Enable wall reflections on diffracted paths
+  enableDiffractedPathReflections: boolean;  // default: false
+
+  // Maximum reflection order for diffracted paths
+  // (0 = no reflections, 1 = first-order only)
+  maxDiffractedPathReflectionOrder: number;  // default: 1
+}
+```
+
+### Physics Model
+
+**Diffraction + Reflection Path:**
+
+```
+        S                              R
+         \                            /
+          \                          /↗
+           A₁ ──→ ●────────●       ╱
+                  │  ROOF  │      ╱
+           ═══════╧════════╧═══  ╱   Building A
+                             ↘  ╱
+                              ●──── Reflection point
+                              │
+                        ┌─────┴─────────┐
+                        │   Building B  │
+                        └───────────────┘
+
+    Path: S → Edge1 → Edge2 → Wall_B → R
+
+    Attenuation = A_diffraction(S→E1→E2) + A_spreading(E2→Wall→R) + A_reflection
+    Phase = -k × total_path_length + φ_diffraction + φ_reflection
+```
+
+**Computation Steps:**
+
+1. Trace diffraction path: S → Edge1 → Edge2 (compute intermediate point)
+2. From Edge2, trace wall reflection paths to R (image source method)
+3. Combine diffraction loss with reflection loss
+4. Create phasor with total attenuation and phase
+5. Add to coherent summation
+
+### Implementation Approach
+
+```typescript
+function traceDiffractedReflectionPaths(
+  source: Point3D,
+  receiver: Point3D,
+  blockingBuilding: BuildingFootprint,
+  reflectingSurfaces: WallSegment[]
+): RayPath[] {
+  const paths: RayPath[] = [];
+
+  // 1. Get diffraction exit point(s) from building
+  const diffractionPaths = traceBuildingDiffractionPaths(source, receiver, blockingBuilding);
+
+  for (const diffPath of diffractionPaths) {
+    if (!diffPath.valid) continue;
+
+    // 2. The "exit point" becomes a virtual source for reflection tracing
+    const exitPoint = diffPath.waypoints[diffPath.waypoints.length - 2]; // Last point before receiver
+
+    // 3. Trace wall reflections from exit point to receiver
+    const reflectionPaths = traceWallReflectionPaths(
+      exitPoint,
+      receiver,
+      reflectingSurfaces,
+      [blockingBuilding.id]  // Exclude the blocking building itself
+    );
+
+    for (const reflPath of reflectionPaths) {
+      if (!reflPath.valid) continue;
+
+      // 4. Combine paths
+      const combinedPath: RayPath = {
+        type: 'diffracted-wall',
+        totalDistance: diffPath.totalDistance + reflPath.totalDistance -
+                       distance3D(exitPoint, receiver), // Avoid double-counting
+        directDistance: diffPath.directDistance,
+        pathDifference: /* computed from total path */,
+        waypoints: [...diffPath.waypoints.slice(0, -1), ...reflPath.waypoints],
+        absorptionFactor: diffPath.absorptionFactor * reflPath.absorptionFactor,
+        reflectionPhaseChange: diffPath.reflectionPhaseChange + reflPath.reflectionPhaseChange,
+        valid: true,
+        diffractionLoss: diffPath.diffractionLoss,
+      };
+
+      paths.push(combinedPath);
+    }
+  }
+
+  return paths;
+}
+```
+
+### Per-Band Calculation
+
+Each diffracted-reflected path gets per-band phasors:
+
+```typescript
+for (const path of diffractedReflectionPaths) {
+  for (let bandIdx = 0; bandIdx < 9; bandIdx++) {
+    const freq = OCTAVE_BANDS[bandIdx];
+    const k = (2 * Math.PI * freq) / c;
+
+    // Diffraction loss (frequency-dependent)
+    const diffLoss = doubleEdgeDiffraction(path.diffractionPathDiff, freq, c);
+
+    // Reflection loss (typically ~1 dB per reflection)
+    const reflLoss = -20 * Math.log10(path.absorptionFactor);
+
+    // Spreading + atmospheric
+    const spreading = spreadingLoss(path.totalDistance);
+    const atm = atmosphericAbsorption(freq, path.totalDistance);
+
+    const level = sourceLevel - spreading - atm - diffLoss - reflLoss;
+    const phase = -k * path.totalDistance + path.reflectionPhaseChange;
+
+    phasors[bandIdx].push({ pressure: dBToPressure(level), phase });
+  }
+}
+```
+
+### UI Configuration
+
+Add toggle in advanced settings:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Advanced Probe Settings                                     │
+├─────────────────────────────────────────────────────────────┤
+│ ☑ Enable coherent phasor summation                          │
+│ ☑ Enable ground reflection                                  │
+│ ☑ Enable wall reflections (first-order)                     │
+│ ☑ Enable building diffraction                               │
+│                                                             │
+│ ☐ Enable wall reflections on diffracted paths               │
+│   └─ ⚠️ Increases computation time significantly            │
+│                                                             │
+│ Maximum reflection order: [1] ▼                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Performance Considerations
+
+This enhancement significantly increases path count:
+- Current: ~1-5 paths per source (direct + ground + walls + diffraction)
+- With diffracted reflections: Potentially 10-20+ paths per source
+
+**Mitigation strategies:**
+1. Default to OFF (user must opt-in)
+2. Limit to first-order reflections only
+3. Distance culling (skip reflections > 100m from receiver)
+4. Amplitude culling (skip paths with estimated level < -80 dB)
+5. Lazy evaluation (only compute if diffraction loss < 20 dB)
+
+### When This Matters
+
+**High Impact Scenarios:**
+- Urban canyons with many reflective surfaces
+- Source behind building, receiver in courtyard surrounded by walls
+- Long diffraction paths with nearby reflective walls
+
+**Low Impact Scenarios:**
+- Open fields with isolated buildings
+- Soft/absorptive building facades
+- Short source-receiver distances
+
+### Implementation Phases
+
+| Phase | Task | Effort |
+|-------|------|--------|
+| 1 | Add `enableDiffractedPathReflections` config option | Low |
+| 2 | Implement `traceDiffractedReflectionPaths()` function | Medium |
+| 3 | Integrate with existing coherent summation | Medium |
+| 4 | Add UI toggle in advanced settings | Low |
+| 5 | Performance optimization (culling, caching) | Medium |
+| 6 | Validation against reference measurements | High |
+
+### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `apps/web/src/probeWorker.ts` | Add diffracted-reflection path tracing |
+| `packages/core/src/schema/index.ts` | Add config option to PropagationConfig |
+| `apps/web/src/main.ts` | Add UI toggle |
+
+### Success Criteria
+
+1. ✅ Diffracted paths can spawn wall reflections
+2. ✅ Per-band frequency dependence preserved
+3. ✅ Coherent phasor summation includes all paths
+4. ✅ Performance acceptable (< 100ms for typical scenes)
+5. ✅ UI toggle to enable/disable feature
+6. ✅ Default OFF for backward compatibility
 
 ---
 
