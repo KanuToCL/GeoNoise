@@ -266,9 +266,14 @@ export function calculatePropagation(
   if (config.groundReflection) {
     if (config.groundModel === 'twoRayPhasor') {
       const c = speedOfSound(meteo.temperature ?? 20);
+      // IMPORTANT: agrTwoRayDb expects 2D horizontal distance, not 3D distance.
+      // It internally computes r1 and r2 using: r = sqrt(d² + h²)
+      // So we need to extract the horizontal component from the 3D distance.
+      const heightDiff = sourceHeight - receiverHeight;
+      const distance2D = Math.sqrt(Math.max(0, distance * distance - heightDiff * heightDiff));
       Agr = agrTwoRayDb(
         frequency,
-        distance,
+        distance2D,
         sourceHeight,
         receiverHeight,
         config.groundType,
