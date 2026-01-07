@@ -635,6 +635,7 @@ let selection: Selection = { type: 'none' };
 let activeProbeId: string | null = null;
 let hoverSelection: Selection | null = null;
 let contextPinned = false; // Whether the inspector panel stays open when clicking elsewhere
+let pinnedSelection: Selection = { type: 'none' }; // The element that was pinned (frozen in inspector)
 let dragState: DragState = null;
 let measureStart: Point | null = null;
 let measureEnd: Point | null = null;
@@ -1360,7 +1361,7 @@ function renderNoiseMapLegend() {
 
 function renderPanelLegend() {
   if (!panelLegend) return;
-  const current = selection;
+  const current = getInspectorSelection();
   if (current.type !== 'panel') {
     panelLegend.innerHTML = '<span class="legend-empty">Select a measure grid to view the color range.</span>';
     return;
@@ -1392,7 +1393,7 @@ function renderPanelStats() {
     panelStats.innerHTML = '<span class="legend-empty">Add a measure grid to see stats.</span>';
     return;
   }
-  const current = selection;
+  const current = getInspectorSelection();
   if (current.type !== 'panel') {
     panelStats.innerHTML = '<span class="legend-empty">Select a measure grid to view stats.</span>';
     return;
@@ -3676,20 +3677,25 @@ function setSelection(next: Selection) {
   if (current.type === 'probe') {
     setActiveProbe(current.id);
   }
-  // Reveal the context inspector only when there's an active selection.
-  // If pinned, keep panel open even when selection becomes 'none'.
+
+  // Determine which selection to use for the inspector
+  // When pinned, keep showing the pinned element's properties
+  const inspectorSelection = contextPinned && pinnedSelection.type !== 'none'
+    ? pinnedSelection
+    : selection;
+
+  // Reveal the context inspector when there's a valid selection to show
   if (contextPanel) {
-    const hasNonProbeSelection = current.type !== 'none' && current.type !== 'probe';
-    const isOpen = hasNonProbeSelection || (contextPinned && contextPanel.classList.contains('is-open'));
-    contextPanel.classList.toggle('is-open', isOpen);
-    contextPanel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    const hasInspectorContent = inspectorSelection.type !== 'none' && inspectorSelection.type !== 'probe';
+    contextPanel.classList.toggle('is-open', hasInspectorContent);
+    contextPanel.setAttribute('aria-hidden', hasInspectorContent ? 'false' : 'true');
   }
   if (panelStatsSection) {
-    panelStatsSection.classList.toggle('is-hidden', current.type !== 'panel');
+    panelStatsSection.classList.toggle('is-hidden', inspectorSelection.type !== 'panel');
   }
   updateContextTitle();
   if (selectionHint) {
-    selectionHint.classList.toggle('is-hidden', current.type !== 'none');
+    selectionHint.classList.toggle('is-hidden', inspectorSelection.type !== 'none');
   }
   renderProperties();
   renderSources();
@@ -3698,9 +3704,14 @@ function setSelection(next: Selection) {
   requestRender();
 }
 
+/** Get the selection to use for the inspector panel (uses pinned selection when pinned) */
+function getInspectorSelection(): Selection {
+  return contextPinned && pinnedSelection.type !== 'none' ? pinnedSelection : selection;
+}
+
 /** Get the display name for the currently selected element */
 function getSelectedElementName(): string {
-  const current = selection;
+  const current = getInspectorSelection();
   if (current.type === 'none') return 'Select an element';
 
   const defaultName = `${selectionTypeLabel(current.type)} ${current.id.toUpperCase()}`;
@@ -3730,7 +3741,7 @@ function getSelectedElementName(): string {
 
 /** Update the selected element's name */
 function setSelectedElementName(name: string): void {
-  const current = selection;
+  const current = getInspectorSelection();
   if (current.type === 'none') return;
 
   if (current.type === 'source') {
@@ -3758,7 +3769,7 @@ function setSelectedElementName(name: string): void {
 /** Update the context panel title with the selected element name */
 function updateContextTitle(): void {
   if (!contextTitle) return;
-  const current = selection;
+  const current = getInspectorSelection();
   if (current.type === 'none') {
     contextTitle.textContent = 'Select an element';
     contextTitle.title = '';
@@ -3773,7 +3784,7 @@ function updateContextTitle(): void {
 function renderProperties() {
   if (!propertiesBody) return;
   propertiesBody.innerHTML = '';
-  const current = selection;
+  const current = getInspectorSelection();
 
   if (current.type === 'none') {
     const empty = document.createElement('div');
@@ -5901,6 +5912,7 @@ function wireContextPanel() {
     // Treat close as clearing selection (panel is tied to selection state).
     contextClose.addEventListener('click', () => {
       contextPinned = false;
+      pinnedSelection = { type: 'none' };
       if (contextPin) {
         contextPin.classList.remove('is-active');
         contextPin.setAttribute('aria-pressed', 'false');
@@ -5909,10 +5921,22 @@ function wireContextPanel() {
     });
   }
 
-  // Pin button to keep panel open when clicking elsewhere
+  // Pin button to freeze the inspector on the current element
   if (contextPin) {
     contextPin.addEventListener('click', () => {
       contextPinned = !contextPinned;
+      if (contextPinned) {
+        // Store the current selection as the pinned selection
+        pinnedSelection = { ...selection };
+      } else {
+        // Clear the pinned selection
+        pinnedSelection = { type: 'none' };
+        // Re-render to update the inspector with current selection
+        updateContextTitle();
+        renderProperties();
+        renderPanelLegend();
+        renderPanelStats();
+      }
       contextPin.classList.toggle('is-active', contextPinned);
       contextPin.setAttribute('aria-pressed', contextPinned ? 'true' : 'false');
     });
