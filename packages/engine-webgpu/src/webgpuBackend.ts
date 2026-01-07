@@ -7,7 +7,7 @@ import type { EngineCapabilities } from '@geonoise/engine';
 import { isWebGPUAvailable } from './capability.js';
 
 export class WebGPUBackend implements Engine {
-  private id: 'webgpu' = 'webgpu';
+  private id = 'webgpu' as const;
   private available = false;
 
   constructor() {

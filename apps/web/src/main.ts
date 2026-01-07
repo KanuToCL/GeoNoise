@@ -645,7 +645,7 @@ let measureLocked = false;
 let barrierDraft: { p1: Point; p2: Point } | null = null;
 let barrierDraftAnchored = false;
 let barrierDragActive = false;
-let results: SceneResults = { receivers: [], panels: [] };
+const results: SceneResults = { receivers: [], panels: [] };
 const probeResults = new Map<string, ProbeResult['data']>();
 let probeWorker: Worker | null = null;
 const probePending = new Set<string>();
@@ -3947,25 +3947,6 @@ function createInlineEditableRow(
   valueContainer.appendChild(input);
   row.appendChild(nameLabel);
   row.appendChild(valueContainer);
-  return row;
-}
-
-function createTextRow(label: string, value: string, onChange: (value: string) => void) {
-  const row = document.createElement('div');
-  row.className = 'property-row';
-  const name = document.createElement('span');
-  name.textContent = label;
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.classList.add('ui-inset');
-  input.value = value;
-  input.addEventListener('input', () => {
-    onChange(input.value);
-    markDirty();
-  });
-  input.addEventListener('change', () => pushHistory());
-  row.appendChild(name);
-  row.appendChild(input);
   return row;
 }
 

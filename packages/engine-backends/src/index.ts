@@ -96,16 +96,12 @@ export async function engineCompute(
   const requestWithId = requestId ? ({ ...req, requestId } as typeof req) : req;
 
   let response: import('@geonoise/engine').ComputeResponse;
-  try {
-    if (requestWithId.kind === 'receivers') {
-      response = await chosen.engine.computeReceivers(requestWithId as any);
-    } else if (requestWithId.kind === 'panel') {
-      response = await chosen.engine.computePanel(requestWithId as any);
-    } else {
-      response = await chosen.engine.computeGrid(requestWithId as any);
-    }
-  } catch (err) {
-    throw err;
+  if (requestWithId.kind === 'receivers') {
+    response = await chosen.engine.computeReceivers(requestWithId as any);
+  } else if (requestWithId.kind === 'panel') {
+    response = await chosen.engine.computePanel(requestWithId as any);
+  } else {
+    response = await chosen.engine.computeGrid(requestWithId as any);
   }
 
   // Check for staleness
