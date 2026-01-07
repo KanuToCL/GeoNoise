@@ -81,7 +81,7 @@ export const DirectivitySchema = z.object({
 
 /**
  * Point source schema
- * 
+ *
  * SPECTRAL ENGINE: The `spectrum` array is the primary data source.
  * The `soundPowerLevel` is computed from the spectrum and is kept for backward compatibility.
  * The `gain` field acts as a master volume fader applied on top of the spectrum.
@@ -91,16 +91,16 @@ export const PointSourceSchema = z.object({
   type: z.literal('point'),
   name: z.string().default('Source'),
   position: LocalMetersSchema,
-  
+
   // PRIMARY: 9-band spectrum [63Hz - 16kHz] in dB Lw
   spectrum: Spectrum9Schema,
-  
+
   // COMPUTED: Overall sound power level (derived from spectrum, kept for compatibility)
   soundPowerLevel: z.number().optional(),
-  
+
   // OPTIONAL: Gain offset in dB (master volume fader, applied on top of spectrum)
   gain: z.number().default(0),
-  
+
   directivity: DirectivitySchema.optional(),
   enabled: z.boolean().default(true),
   color: ColorSchema.optional(),
@@ -211,6 +211,9 @@ export const ObstacleSchema = z.discriminatedUnion('type', [BuildingSchema, Barr
 // Grid Configuration
 // ============================================================================
 
+/** Frequency weighting type for grid display */
+export const FrequencyWeightingSchema = z.enum(['A', 'C', 'Z']);
+
 /** Noise map grid configuration */
 export const GridConfigSchema = z.object({
   enabled: z.boolean().default(false),
@@ -225,6 +228,12 @@ export const GridConfigSchema = z.object({
   resolution: z.number().positive().default(10), // meters
   elevation: z.number().default(1.5), // height above ground
   maxPoints: z.number().int().positive().optional(),
+
+  // Per-band noise map display options (on-demand recomputation)
+  // If targetBand is set, compute and return single-band levels (unweighted)
+  // If targetBand is undefined, compute overall weighted level using `weighting`
+  targetBand: z.number().int().min(0).max(8).optional(), // Band index 0-8 (63Hz-16kHz)
+  weighting: FrequencyWeightingSchema.default('A'), // Used when targetBand is undefined
 });
 
 // ============================================================================
@@ -287,20 +296,20 @@ export const SceneSchemaV1 = z.object({
   description: z.string().optional(),
   createdAt: z.string().datetime().optional(),
   modifiedAt: z.string().datetime().optional(),
-  
+
   // Coordinate system
   origin: OriginSchema,
-  
+
   // Scene elements
   sources: z.array(SourceSchema).default([]),
   receivers: z.array(ReceiverSchema).default([]),
   panels: z.array(PanelSchema).default([]),
   obstacles: z.array(ObstacleSchema).default([]),
-  
+
   // Configuration
   grid: GridConfigSchema.optional(),
   engineConfig: EngineConfigSchema.optional(),
-  
+
   // Metadata
   metadata: z.record(z.unknown()).optional(),
 });

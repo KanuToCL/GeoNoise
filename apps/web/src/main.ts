@@ -1581,7 +1581,13 @@ function buildNoiseMapGridConfig(resolutionPx?: number, maxPoints?: number) {
     rows = Math.ceil(paddedHeight / resolution) + 1;
   }
 
-  return { enabled: true, bounds: padded, resolution, elevation: 1.5 };
+  // Per-band noise map display options:
+  // - If displayBand is 'overall', compute weighted overall level using displayWeighting
+  // - If displayBand is a band index (0-8), compute single-band unweighted level
+  const targetBand = displayBand === 'overall' ? undefined : displayBand;
+  const weighting = displayWeighting;
+
+  return { enabled: true, bounds: padded, resolution, elevation: 1.5, targetBand, weighting };
 }
 
 function buildPanelPayload(panel: Panel) {
@@ -3916,7 +3922,10 @@ function wireDisplaySettings() {
     renderSources();
     renderResults();
     renderProperties();
-    refreshNoiseMapVisualization();
+    // Recompute noise map with new weighting if the map layer is visible
+    if (layers.noiseMap) {
+      void computeNoiseMapInternal({ resolutionPx: RES_HIGH, silent: false, requestId: 'grid:weighting-change' });
+    }
     requestRender();
   });
 
@@ -3929,7 +3938,10 @@ function wireDisplaySettings() {
     renderSources();
     renderResults();
     renderProperties();
-    refreshNoiseMapVisualization();
+    // Recompute noise map with new band selection if the map layer is visible
+    if (layers.noiseMap) {
+      void computeNoiseMapInternal({ resolutionPx: RES_HIGH, silent: false, requestId: 'grid:band-change' });
+    }
     requestRender();
   });
 }
@@ -3962,14 +3974,16 @@ function wireLayersPopover() {
   if (!container) return;
 
   // Keep the popover lightweight: no modal, just a click-away dropdown.
+  // Popover is outside the topbar (to escape backdrop-filter stacking context),
+  // so we toggle .is-open on the popover itself for CSS transitions.
   const close = () => {
-    container.classList.remove('is-open');
+    layersPopover.classList.remove('is-open');
     layersButton.setAttribute('aria-expanded', 'false');
     layersPopover.setAttribute('aria-hidden', 'true');
   };
 
   const toggle = () => {
-    const isOpen = container.classList.toggle('is-open');
+    const isOpen = layersPopover.classList.toggle('is-open');
     layersButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
     layersPopover.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
   };
@@ -3980,7 +3994,8 @@ function wireLayersPopover() {
   });
 
   document.addEventListener('click', (event) => {
-    if (!container.contains(event.target as Node)) {
+    // Close if click is outside both the button container and the popover
+    if (!container.contains(event.target as Node) && !layersPopover.contains(event.target as Node)) {
       close();
     }
   });

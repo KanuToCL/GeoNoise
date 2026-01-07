@@ -131,85 +131,87 @@
               <!-- Lightweight feedback for heavy map computation (keeps UI responsive). -->
               <div class="map-toast" id="mapToast" role="status" aria-live="polite"></div>
             </div>
-            <div class="layers-toggle">
+            <div class="layers-toggle" id="layersToggle">
               <button class="ghost ui-button" id="layersButton" type="button" aria-expanded="false">
                 Layers
               </button>
-              <div class="layers-popover" id="layersPopover" aria-hidden="true">
-                <div class="layers-section">
-                  <div class="layers-title">Layers</div>
-                  <label class="toggle">
-                    <input type="checkbox" id="layerSources" checked />
-                    <span>Sources</span>
-                  </label>
-                  <label class="toggle">
-                    <input type="checkbox" id="layerReceivers" checked />
-                    <span>Receivers</span>
-                  </label>
-                  <label class="toggle">
-                    <input type="checkbox" id="layerPanels" checked />
-                    <span>Measure Grids</span>
-                  </label>
-                  <!-- Heatmap layer produced by Generate Map. -->
-                  <label class="toggle">
-                    <input type="checkbox" id="layerNoiseMap" />
-                    <span>Noise Map</span>
-                  </label>
-                  <label class="toggle">
-                    <input type="checkbox" id="layerGrid" />
-                    <span>Grid Overlay</span>
-                  </label>
-                </div>
-                <div class="layers-divider"></div>
-                <div class="layers-section">
-                  <div class="layers-title">Display Settings</div>
-                  <label class="property-row property-row-stack">
-                    <span>Frequency Weighting</span>
-                    <select class="ui-inset" id="displayWeighting">
-                      <option value="A" selected>A-weighting (dBA)</option>
-                      <option value="C">C-weighting (dBC)</option>
-                      <option value="Z">Z-weighting (dBZ / Linear)</option>
-                    </select>
-                  </label>
-                  <label class="property-row property-row-stack">
-                    <span>Display Band</span>
-                    <select class="ui-inset" id="displayBand">
-                      <option value="overall" selected>Overall (Sum)</option>
-                      <option value="0">63 Hz</option>
-                      <option value="1">125 Hz</option>
-                      <option value="2">250 Hz</option>
-                      <option value="3">500 Hz</option>
-                      <option value="4">1000 Hz</option>
-                      <option value="5">2000 Hz</option>
-                      <option value="6">4000 Hz</option>
-                      <option value="7">8000 Hz</option>
-                      <option value="8">16000 Hz</option>
-                    </select>
-                  </label>
-                </div>
-                <div class="layers-divider"></div>
-                <div class="layers-section">
-                  <div class="layers-title">Map Settings</div>
-                  <label class="toggle">
-                    <input type="checkbox" id="mapRenderStyle" />
-                    <span>Render mode: Smooth / Contours</span>
-                  </label>
-                  <div class="property-row map-band-step" id="mapBandStepRow">
-                    <span>Band Step (dB)</span>
-                    <input class="ui-inset" id="mapBandStep" type="number" min="1" max="20" step="1" value="3" />
-                  </div>
-                  <label class="toggle">
-                    <input type="checkbox" id="mapAutoScale" checked />
-                    <span>Auto-scale colors</span>
-                  </label>
-                </div>
-              </div>
             </div>
             <button class="ghost ui-button" id="aboutButton" type="button" title="Model notes, assumptions, and limitations.">
               About
             </button>
           </div>
         </header>
+
+        <!-- Layers popover (outside topbar to escape stacking context) -->
+        <div class="layers-popover" id="layersPopover" aria-hidden="true">
+          <div class="layers-section">
+            <div class="layers-title">Layers</div>
+            <label class="toggle">
+              <input type="checkbox" id="layerSources" checked />
+              <span>Sources</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="layerReceivers" checked />
+              <span>Receivers</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="layerPanels" checked />
+              <span>Measure Grids</span>
+            </label>
+            <!-- Heatmap layer produced by Generate Map. -->
+            <label class="toggle">
+              <input type="checkbox" id="layerNoiseMap" />
+              <span>Noise Map</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="layerGrid" />
+              <span>Grid Overlay</span>
+            </label>
+          </div>
+          <div class="layers-divider"></div>
+          <div class="layers-section">
+            <div class="layers-title">Display Settings</div>
+            <label class="property-row property-row-stack">
+              <span>Frequency Weighting</span>
+              <select class="ui-inset" id="displayWeighting">
+                <option value="A" selected>A-weighting (dBA)</option>
+                <option value="C">C-weighting (dBC)</option>
+                <option value="Z">Z-weighting (dBZ / Linear)</option>
+              </select>
+            </label>
+            <label class="property-row property-row-stack">
+              <span>Display Band</span>
+              <select class="ui-inset" id="displayBand">
+                <option value="overall" selected>Overall (Sum)</option>
+                <option value="0">63 Hz</option>
+                <option value="1">125 Hz</option>
+                <option value="2">250 Hz</option>
+                <option value="3">500 Hz</option>
+                <option value="4">1000 Hz</option>
+                <option value="5">2000 Hz</option>
+                <option value="6">4000 Hz</option>
+                <option value="7">8000 Hz</option>
+                <option value="8">16000 Hz</option>
+              </select>
+            </label>
+          </div>
+          <div class="layers-divider"></div>
+          <div class="layers-section">
+            <div class="layers-title">Map Settings</div>
+            <label class="toggle">
+              <input type="checkbox" id="mapRenderStyle" />
+              <span>Render mode: Smooth / Contours</span>
+            </label>
+            <div class="property-row map-band-step" id="mapBandStepRow">
+              <span>Band Step (dB)</span>
+              <input class="ui-inset" id="mapBandStep" type="number" min="1" max="20" step="1" value="3" />
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="mapAutoScale" checked />
+              <span>Auto-scale colors</span>
+            </label>
+          </div>
+        </div>
 
         <!-- Bottom dock for creation tools. -->
         <div class="dock">

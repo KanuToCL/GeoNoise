@@ -79,7 +79,7 @@ body {
   top: 12px;
   left: 24px;
   right: 24px;
-  z-index: 50;
+  z-index: 100;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
@@ -136,10 +136,10 @@ body {
 }
 
 .layers-popover {
-  position: absolute;
-  top: calc(100% + 12px);
-  right: 0;
-  display: none;
+  position: fixed;
+  top: 72px;
+  right: 24px;
+  display: flex;
   flex-direction: column;
   gap: 14px;
   width: 280px;
@@ -150,8 +150,14 @@ body {
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  z-index: 60;
-  pointer-events: auto;
+  z-index: 9999;
+  isolation: isolate;
+  pointer-events: none;
+  /* Hidden state */
+  opacity: 0;
+  transform: translateY(-8px);
+  visibility: hidden;
+  transition: opacity 0.18s ease-out, transform 0.18s ease-out, visibility 0s linear 0.18s;
 }
 
 .settings-popover {
@@ -173,8 +179,12 @@ body {
   pointer-events: auto;
 }
 
-.layers-toggle.is-open .layers-popover {
-  display: flex;
+.layers-popover.is-open {
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.18s ease-out, transform 0.18s ease-out, visibility 0s linear 0s;
 }
 
 .settings-toggle.is-open .settings-popover {
