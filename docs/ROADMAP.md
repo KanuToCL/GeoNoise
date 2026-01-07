@@ -95,28 +95,7 @@ This now matches the engine's implementation: `complexScale(gamma, r1/r2)`.
 
 ### 🟠 Medium (P1) - Fix Soon
 
-#### 3. Building Diffraction Phase Shift Is Incorrect
-
-**File:** `/apps/web/src/probeWorker.ts` (line 1291)
-**Status:** ⬜ Not Started
-
-**Problem:** Uses fixed `-π/4` phase shift per diffraction point, which is arbitrary. Should use path difference reference.
-
-**Current:**
-```typescript
-const phase = -k * diffPath.totalDistance + (-Math.PI / 4) * diffPath.diffractionPoints;
-```
-
-**Should be:**
-```typescript
-const phase = -k * (diffPath.totalDistance - directDistance);  // Path difference only
-```
-
-**Impact:** Incorrect interference patterns for building diffraction paths.
-
----
-
-#### 4. Barrier Side Diffraction Edge Height Is Wrong
+#### 3. Barrier Side Diffraction Edge Height Is Wrong
 
 **File:** `/apps/web/src/probeWorker.ts` (lines 807-811)
 **Status:** ⬜ Not Started
@@ -132,7 +111,7 @@ For horizontal diffraction around barrier ends, the edge should be at ground lev
 
 ---
 
-#### 5. Ground Reflection Phase Inconsistent with Delany-Bazley
+#### 4. Ground Reflection Phase Inconsistent with Delany-Bazley
 
 **File:** `/apps/web/src/probeWorker.ts` (lines 939-946)
 **Status:** ⬜ Not Started
@@ -156,7 +135,27 @@ For horizontal diffraction around barrier ends, the edge should be at ground lev
 
 ### 🟡 Low (P2) - Nice to Have
 
-#### 7. Missing Edge Case Guards in Fresnel Calculation
+#### 7. Building Diffraction Phase Shift Approximation
+
+**File:** `/apps/web/src/probeWorker.ts` (line 1291)
+**Status:** ⬜ Not Started (Downgraded from Medium)
+
+**Current implementation:**
+```typescript
+const phase = -k * diffPath.totalDistance + (-Math.PI / 4) * diffPath.diffractionPoints;
+```
+
+**Assessment:** The `-π/4` per diffraction edge is a **GTD-inspired approximation** that's reasonable for practical use:
+- Geometric Theory of Diffraction (GTD) predicts `-π/4` for "soft" boundaries
+- The main amplitude calculation via Maekawa/Fresnel number is correct
+- Since direct paths are blocked when diffraction occurs, there's minimal interference concern
+- Changing this would require significant validation effort
+
+**Impact:** Minimal practical impact. The approximation is physically motivated and widely used.
+
+---
+
+#### 8. Missing Edge Case Guards in Fresnel Calculation
 
 **File:** `/packages/engine/src/propagation/index.ts` (lines 198-209)
 **Status:** ⬜ Not Started
@@ -172,7 +171,7 @@ if (lambda <= 0) return 0;
 
 ---
 
-#### 8. Speed of Sound Hardcoded to 343 m/s
+#### 9. Speed of Sound Hardcoded to 343 m/s
 
 **File:** `/apps/web/src/probeWorker.ts` (line 96)
 **Status:** ⬜ Not Started
