@@ -4,6 +4,83 @@ This document contains the implementation history of completed features. For pla
 
 ---
 
+## 2026-01-08
+
+### Settings Popover Z-Index / Stacking Context Fix
+
+**Status:** ✅ Fixed (Critical Bug)
+
+**Issue:** The settings popover (gear button in bottom-right corner) was not appearing when clicked. The popup should spring animate in front of all other elements (sources, probes, inspector panels).
+
+#### Root Cause Analysis
+
+Three issues were identified:
+
+1. **Stacking Context Trap**: The settings popover was inside `.settings-toggle` which was inside `.canvas-corner`. CSS `backdrop-filter` or other properties on parent elements can create isolated stacking contexts that trap z-index.
+
+2. **CSS Selector Mismatch**: After moving the popover to `document.body`, the CSS relied on parent-based selectors (`.settings-toggle.is-open .settings-popover`) which no longer worked since the popover was no longer a child.
+
+3. **Stale dist/style.css**: The dev server (`apps/web/scripts/dev.mjs`) prioritizes `dist/style.css` over `src/style.css`. Edits to `src/style.css` were not being served because an old `dist/style.css` existed.
+
+#### Solution
+
+1. **Move popover to document.body** (`apps/web/src/main.ts`):
+   ```typescript
+   // Move popover to body to escape all stacking contexts
+   document.body.appendChild(settingsPopover);
+   ```
+
+2. **Direct class toggling** - Toggle `.is-open` directly on the popover element:
+   ```typescript
+   const open = () => {
+     settingsPopover.classList.add('is-open');
+     // ... update position
+   };
+   ```
+
+3. **CSS selector update** (`apps/web/src/style.css`):
+   ```css
+   /* Changed from parent-based selector */
+   /* OLD: .settings-toggle.is-open .settings-popover--corner */
+   /* NEW: .settings-popover--corner.is-open */
+
+   .settings-popover--corner.is-open {
+     opacity: 1 !important;
+     visibility: visible !important;
+     transform: scaleY(1) !important;
+     pointer-events: auto !important;
+   }
+   ```
+
+4. **Copy to dist**: Sync `src/style.css` → `dist/style.css` since dev server prioritizes dist:
+   ```bash
+   cp apps/web/src/style.css apps/web/dist/style.css
+   ```
+
+#### Dev Server CSS Resolution Order
+
+The dev server (`apps/web/scripts/dev.mjs`, lines 38-42) resolves CSS in this order:
+
+```javascript
+if (urlPath === '/style.css') {
+  const cssDist = resolve(dist, 'style.css');
+  if (existsSync(cssDist)) return cssDist;  // 1. Check dist/ first
+  return resolve(root, 'src', 'style.css'); // 2. Fallback to src/
+}
+```
+
+**Lesson learned:** When editing CSS, ensure changes are reflected in `dist/style.css` or delete the stale dist version.
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `apps/web/src/main.ts` | Move popover to `document.body`, toggle `.is-open` directly on popover |
+| `apps/web/src/style.css` | Change selector to `.settings-popover--corner.is-open`, add `!important` |
+| `apps/web/dist/style.css` | Sync from src (manual copy or build step) |
+
+---
+
 ## 2026-01-07
 
 ### Ground Reflection 2D Distance Fix

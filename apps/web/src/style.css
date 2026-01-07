@@ -238,7 +238,8 @@ body {
   transition: opacity 0.18s ease-out, transform 0.18s ease-out, visibility 0s linear 0s;
 }
 
-.settings-toggle.is-open .settings-popover {
+/* Legacy: .settings-toggle.is-open .settings-popover - now uses .settings-popover--corner.is-open directly */
+.settings-popover.is-open {
   display: flex;
 }
 
@@ -1838,10 +1839,7 @@ button.icon-button {
   gap: 14px;
 }
 
-/* Raise z-index when settings popover is open to appear above inspector panels */
-.canvas-corner:has(.settings-toggle.is-open) {
-  z-index: 100;
-}
+/* Settings popover z-index handled directly on .settings-popover--corner (z-index: 9999) */
 
 .canvas-corner-left {
   position: absolute;
@@ -3304,7 +3302,7 @@ textarea:focus-visible,
   box-shadow: 12px 12px 24px var(--shadow-dark), -12px -12px 24px var(--shadow-light) !important;
   backdrop-filter: none !important;
   z-index: 9999 !important;
-  /* Override base display:none - use visibility/opacity for animation */
+  /* Use visibility/opacity for animation */
   display: flex !important;
   flex-direction: column !important;
   opacity: 0;
@@ -3316,14 +3314,14 @@ textarea:focus-visible,
               visibility 0s linear 400ms;
 }
 
-.settings-toggle.is-open .settings-popover--corner {
-  opacity: 1;
-  visibility: visible;
-  transform: scaleY(1);
-  pointer-events: auto;
+.settings-popover--corner.is-open {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: scaleY(1) !important;
+  pointer-events: auto !important;
   transition: transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
               opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
-              visibility 0s linear 0s;
+              visibility 0s linear 0s !important;
 }
 
 .settings-popover--corner .settings-section {

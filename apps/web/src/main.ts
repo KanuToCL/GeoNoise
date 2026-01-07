@@ -4461,6 +4461,7 @@ function wireLayersPopover() {
 
 function wireSettingsPopover() {
   if (!settingsButton || !settingsPopover) return;
+
   const container = settingsButton.closest('.settings-toggle') as HTMLDivElement | null;
   if (!container) return;
 
@@ -4478,16 +4479,25 @@ function wireSettingsPopover() {
 
   const close = () => {
     container.classList.remove('is-open');
+    settingsPopover.classList.remove('is-open');
     settingsButton.setAttribute('aria-expanded', 'false');
     settingsPopover.setAttribute('aria-hidden', 'true');
   };
 
+  const open = () => {
+    container.classList.add('is-open');
+    settingsPopover.classList.add('is-open');
+    settingsButton.setAttribute('aria-expanded', 'true');
+    settingsPopover.setAttribute('aria-hidden', 'false');
+    updatePosition();
+  };
+
   const toggle = () => {
-    const isOpen = container.classList.toggle('is-open');
-    settingsButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-    settingsPopover.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    const isOpen = settingsPopover.classList.contains('is-open');
     if (isOpen) {
-      updatePosition();
+      close();
+    } else {
+      open();
     }
   };
 
@@ -4503,12 +4513,12 @@ function wireSettingsPopover() {
   });
 
   window.addEventListener('resize', () => {
-    if (container.classList.contains('is-open')) {
+    if (settingsPopover.classList.contains('is-open')) {
       updatePosition();
     }
   });
   window.addEventListener('scroll', () => {
-    if (container.classList.contains('is-open')) {
+    if (settingsPopover.classList.contains('is-open')) {
       updatePosition();
     }
   });
