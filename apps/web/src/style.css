@@ -1584,8 +1584,45 @@ button.icon-button {
 .canvas-help {
   display: flex;
   flex-direction: column-reverse;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 8px;
+  position: relative;
+}
+
+/* Help button in left corner - smaller size for info button */
+.canvas-corner-left .canvas-help-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 16px;
+  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
+  box-shadow: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
+}
+
+.canvas-corner-left .canvas-help-button:hover {
+  box-shadow: 8px 8px 16px var(--shadow-dark), -8px -8px 16px var(--shadow-light);
+}
+
+.canvas-corner-left .canvas-help-button:active {
+  box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
+}
+
+/* Settings gear button - bigger circular button */
+.canvas-corner .canvas-help-button#settingsButton {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  font-size: 26px;
+  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
+  box-shadow: 8px 8px 16px var(--shadow-dark), -8px -8px 16px var(--shadow-light);
+}
+
+.canvas-corner .canvas-help-button#settingsButton:hover {
+  box-shadow: 10px 10px 20px var(--shadow-dark), -10px -10px 20px var(--shadow-light);
+}
+
+.canvas-corner .canvas-help-button#settingsButton:active {
+  box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light);
 }
 
 .canvas-help-button {
@@ -1594,23 +1631,39 @@ button.icon-button {
   border-radius: var(--radius-md);
   padding: 0;
   font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .canvas-help-tooltip {
-  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 12px;
   flex-direction: column;
   gap: 10px;
-  padding: 12px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
-  border: 1px solid var(--border-soft);
-  box-shadow: var(--shadow-panel);
+  padding: 14px;
+  border-radius: 18px;
+  background: var(--brand-bg);
+  border: none;
+  box-shadow: 12px 12px 24px var(--shadow-dark), -12px -12px 24px var(--shadow-light);
   font-size: 12px;
-  max-width: 240px;
+  width: 260px;
+  /* Spring animation - hidden state */
+  opacity: 0;
+  transform: scaleY(0) translateY(20px);
+  transform-origin: bottom left;
+  pointer-events: none;
+  transition: transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 .canvas-help.is-open .canvas-help-tooltip {
   display: flex;
+  opacity: 1;
+  transform: scaleY(1) translateY(0);
+  pointer-events: auto;
 }
 
 .canvas-help-title {
@@ -1677,6 +1730,22 @@ button.icon-button {
   display: flex;
   align-items: center;
   gap: 14px;
+}
+
+.canvas-corner-left {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Help tooltip position for left corner */
+.canvas-corner-left .canvas-help-tooltip {
+  left: 0;
+  right: auto;
 }
 
 .db-legend {
@@ -3100,4 +3169,118 @@ textarea:focus-visible,
   max-height: 60vh !important;
   overflow-y: auto !important;
   margin-top: 0 !important;
+}
+
+/* Settings toggle in canvas corner - popover opens upward */
+.canvas-corner .settings-toggle {
+  position: relative;
+}
+
+.settings-popover--corner {
+  position: absolute !important;
+  bottom: calc(100% + 12px) !important;
+  right: 0 !important;
+  left: auto !important;
+  top: auto !important;
+  transform-origin: bottom right !important;
+  width: 300px !important;
+  max-height: min(65vh, calc(100vh - 180px)) !important;
+  overflow-y: auto !important;
+  padding: 18px !important;
+  border-radius: 18px !important;
+  background: var(--brand-bg) !important;
+  border: none !important;
+  box-shadow: 12px 12px 24px var(--shadow-dark), -12px -12px 24px var(--shadow-light) !important;
+  backdrop-filter: none !important;
+  /* Override base display:none - use visibility/opacity for animation */
+  display: flex !important;
+  flex-direction: column !important;
+  opacity: 0;
+  visibility: hidden;
+  transform: scaleY(0);
+  pointer-events: none;
+  transition: transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+              visibility 0s linear 400ms;
+}
+
+.settings-toggle.is-open .settings-popover--corner {
+  opacity: 1;
+  visibility: visible;
+  transform: scaleY(1);
+  pointer-events: auto;
+  transition: transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+              visibility 0s linear 0s;
+}
+
+.settings-popover--corner .settings-section {
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.settings-popover--corner .settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.settings-popover--corner .settings-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.settings-popover--corner .property-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-popover--corner .property-row span {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.settings-popover--corner .property-row select,
+.settings-popover--corner .property-row input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: none;
+  background: var(--brand-bg);
+  box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-popover--corner .toggle {
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
+  box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
+}
+
+.settings-popover--corner .toggle span {
+  color: var(--text-soft);
+}
+
+.settings-popover--corner .map-band-step {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-popover--corner .map-band-step span {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.settings-popover--corner .map-band-step input {
+  width: 70px;
 }

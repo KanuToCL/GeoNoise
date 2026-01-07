@@ -54,16 +54,8 @@
           </div>
         </div>
         <div class="snap-indicator" id="snapIndicator"></div>
-        <div class="canvas-corner">
-          <div class="db-legend" id="dbLegend" role="group" aria-label="Decibel legend">
-            <div class="db-legend-bar">
-              <div class="db-legend-gradient" id="dbLegendGradient" aria-hidden="true"></div>
-              <div class="db-legend-labels" id="dbLegendLabels">
-                <span>30 dB</span>
-                <span>85 dB</span>
-              </div>
-            </div>
-          </div>
+        <!-- Help button on left side -->
+        <div class="canvas-corner-left" id="canvasCornerLeft">
           <div class="canvas-help" id="canvasHelp">
             <button
               class="ghost ui-button canvas-help-button"
@@ -75,9 +67,124 @@
               ?
             </button>
             <div class="canvas-help-tooltip" id="canvasHelpTooltip" role="tooltip">
-              <div class="canvas-help-title">Canvas controls</div>
-              <div class="canvas-help-body">Drag: pan • Scroll: zoom • Click: select • Shift+Drag: duplicate</div>
+              <div class="canvas-help-title">Canvas Controls</div>
+              <div class="canvas-help-body">
+                <strong>Navigation</strong><br>
+                Drag: Pan the map<br>
+                Scroll: Zoom in/out<br><br>
+                <strong>Selection</strong><br>
+                Click: Select object<br>
+                Shift+Drag: Duplicate selected<br>
+                Delete/Backspace: Remove selected<br><br>
+                <strong>Tools</strong><br>
+                Use the dock (+) to add sources, buildings, barriers, and probes to the scene.
+              </div>
               <button class="ghost ui-button canvas-help-dismiss" id="canvasHelpDismiss" type="button">Got it</button>
+            </div>
+          </div>
+        </div>
+        <!-- Color bar and settings on right side -->
+        <div class="canvas-corner">
+          <div class="db-legend" id="dbLegend" role="group" aria-label="Decibel legend">
+            <div class="db-legend-bar">
+              <div class="db-legend-gradient" id="dbLegendGradient" aria-hidden="true"></div>
+              <div class="db-legend-labels" id="dbLegendLabels">
+                <span>30 dB</span>
+                <span>85 dB</span>
+              </div>
+            </div>
+          </div>
+          <!-- Settings gear button next to color bar -->
+          <div class="settings-toggle" id="settingsToggle">
+            <button
+              class="ghost ui-button canvas-help-button"
+              id="settingsButton"
+              type="button"
+              aria-expanded="false"
+              aria-controls="settingsPopover"
+              aria-label="Settings"
+              title="Display and simulation settings"
+            >
+              ⚙
+            </button>
+            <div class="settings-popover settings-popover--corner" id="settingsPopover" aria-hidden="true">
+              <div class="settings-section">
+                <div class="settings-title">Display Settings</div>
+                <label class="property-row property-row-stack">
+                  <span>Frequency Weighting</span>
+                  <select class="ui-inset" id="displayWeighting">
+                    <option value="A" selected>A-weighting (dBA)</option>
+                    <option value="C">C-weighting (dBC)</option>
+                    <option value="Z">Z-weighting (dBZ / Linear)</option>
+                  </select>
+                </label>
+                <label class="property-row property-row-stack">
+                  <span>Display Band</span>
+                  <select class="ui-inset" id="displayBand">
+                    <option value="overall" selected>Overall (Sum)</option>
+                    <option value="0">63 Hz</option>
+                    <option value="1">125 Hz</option>
+                    <option value="2">250 Hz</option>
+                    <option value="3">500 Hz</option>
+                    <option value="4">1000 Hz</option>
+                    <option value="5">2000 Hz</option>
+                    <option value="6">4000 Hz</option>
+                    <option value="7">8000 Hz</option>
+                    <option value="8">16000 Hz</option>
+                  </select>
+                </label>
+              </div>
+              <div class="settings-section">
+                <div class="settings-title">Map Settings</div>
+                <label class="toggle" for="mapRenderStyle">
+                  <input type="checkbox" id="mapRenderStyle" />
+                  <span>Contour Mode</span>
+                </label>
+                <div class="property-row map-band-step" id="mapBandStepRow">
+                  <span>Band Step (dB)</span>
+                  <input class="ui-inset" id="mapBandStep" type="number" min="1" max="20" step="1" value="3" />
+                </div>
+                <label class="toggle" for="mapAutoScale">
+                  <input type="checkbox" id="mapAutoScale" checked />
+                  <span>Auto-scale colors</span>
+                </label>
+              </div>
+              <div class="settings-section">
+                <div class="settings-title">Simulation Physics</div>
+                <label class="property-row property-row-stack">
+                  <span>Atmospheric Model</span>
+                  <select class="ui-inset" id="propagationAbsorption">
+                    <option value="iso9613">ISO 9613-1</option>
+                    <option value="simple">Simple</option>
+                  </select>
+                </label>
+                <label class="toggle" for="propagationGroundReflection">
+                  <input type="checkbox" id="propagationGroundReflection" />
+                  <span>Ground Reflection</span>
+                </label>
+                <label class="property-row property-row-stack">
+                  <span>Ground Type</span>
+                  <select class="ui-inset" id="propagationGroundType">
+                    <option value="hard">Hard (Asphalt, Concrete)</option>
+                    <option value="mixed" selected>Mixed</option>
+                    <option value="soft">Soft (Grass, Soil)</option>
+                  </select>
+                </label>
+                <label class="property-row property-row-stack">
+                  <span>Ground Algorithm</span>
+                  <select class="ui-inset" id="propagationGroundModel">
+                    <option value="twoRayPhasor">Two-Ray</option>
+                    <option value="legacy">ISO 9613-2</option>
+                  </select>
+                </label>
+                <label class="property-row property-row-stack">
+                  <span>Spreading Loss</span>
+                  <select class="ui-inset" id="propagationSpreading">
+                    <option value="spherical">Spherical</option>
+                    <option value="cylindrical">Cylindrical</option>
+                  </select>
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -281,348 +388,6 @@
           </div>
           <div class="dock-instruction-bottom">Click to select. Drag to move. Shift+drag to duplicate.</div>
         </div>
-        <!-- Settings shortcut uses inline styles to bypass cached/overridden CSS. -->
-        <div
-          class="settings-footer"
-          style="
-            position: absolute !important;
-            bottom: 160px !important;
-            left: 20px !important;
-            top: auto !important;
-            right: auto !important;
-            z-index: 9999 !important;
-            display: flex !important;
-            flex-direction: column !important;
-          "
-        >
-          <div class="settings-toggle settings-toggle--footer" style="position: relative;">
-            <!-- Floating gear button styled to match the light UI pills. -->
-            <button
-              class="ghost ui-button icon-button"
-              id="settingsButton"
-              type="button"
-              aria-expanded="false"
-              aria-controls="settingsPopover"
-              aria-label="Simulation physics"
-              title="Simulation physics settings"
-              style="
-                width: 54px !important;
-                height: 54px !important;
-                border-radius: 50% !important;
-                background: rgba(248, 250, 252, 0.95) !important;
-                border: 1px solid rgba(148, 163, 184, 0.45) !important;
-                color: #475569 !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                box-shadow: 0 10px 22px rgba(15, 23, 42, 0.18) !important;
-              "
-            >
-              <span aria-hidden="true" style="font-size: 30px;">⚙</span>
-            </button>
-
-            <!-- Popover uses a darker glass panel for contrast against the canvas. -->
-            <div
-              class="settings-popover"
-              id="settingsPopover"
-              aria-hidden="true"
-              style="
-                position: absolute !important;
-                bottom: 100% !important;
-                left: 0 !important;
-                top: auto !important;
-                margin-bottom: 12px !important;
-                background: linear-gradient(180deg, rgba(15, 24, 40, 0.98), rgba(10, 18, 31, 0.98)) !important;
-                border: 1px solid rgba(148, 163, 184, 0.25) !important;
-                border-radius: 18px !important;
-                padding: 18px !important;
-                width: 280px !important;
-                backdrop-filter: blur(16px);
-                box-shadow: 0 20px 40px rgba(15, 23, 42, 0.45) !important;
-              "
-            >
-              <div
-                class="settings-title"
-                style="
-                  color: #a5b4c7;
-                  font-size: 11px;
-                  font-weight: 700;
-                  text-transform: uppercase;
-                  letter-spacing: 0.18em;
-                  margin-bottom: 14px;
-                "
-              >
-                Display Settings
-              </div>
-              <div class="settings-section" style="margin-bottom: 18px;">
-                <label class="property-row property-row-stack" style="display: block; margin-bottom: 12px;">
-                  <span
-                    style="
-                      display: block;
-                      font-size: 12px;
-                      color: #e2e8f0;
-                      margin-bottom: 6px;
-                      letter-spacing: 0.02em;
-                    "
-                  >
-                    Frequency Weighting
-                  </span>
-                  <select
-                    class="ui-inset"
-                    id="displayWeighting"
-                    style="
-                      width: 100%;
-                      padding: 8px 10px;
-                      background: linear-gradient(180deg, #0b1423, #0a1220);
-                      color: #f8fafc;
-                      border: 1px solid rgba(148, 163, 184, 0.35);
-                      border-radius: 10px;
-                      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.7), 0 4px 10px rgba(15, 23, 42, 0.35);
-                      font-weight: 600;
-                    "
-                  >
-                    <option value="A" selected>A-weighting (dBA)</option>
-                    <option value="C">C-weighting (dBC)</option>
-                    <option value="Z">Z-weighting (dBZ / Linear)</option>
-                  </select>
-                </label>
-                <label class="property-row property-row-stack" style="display: block;">
-                  <span
-                    style="
-                      display: block;
-                      font-size: 12px;
-                      color: #e2e8f0;
-                      margin-bottom: 6px;
-                      letter-spacing: 0.02em;
-                    "
-                  >
-                    Display Band
-                  </span>
-                  <select
-                    class="ui-inset"
-                    id="displayBand"
-                    style="
-                      width: 100%;
-                      padding: 8px 10px;
-                      background: linear-gradient(180deg, #0b1423, #0a1220);
-                      color: #f8fafc;
-                      border: 1px solid rgba(148, 163, 184, 0.35);
-                      border-radius: 10px;
-                      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.7), 0 4px 10px rgba(15, 23, 42, 0.35);
-                      font-weight: 600;
-                    "
-                  >
-                    <option value="overall" selected>Overall (Sum)</option>
-                    <option value="0">63 Hz</option>
-                    <option value="1">125 Hz</option>
-                    <option value="2">250 Hz</option>
-                    <option value="3">500 Hz</option>
-                    <option value="4">1000 Hz</option>
-                    <option value="5">2000 Hz</option>
-                    <option value="6">4000 Hz</option>
-                    <option value="7">8000 Hz</option>
-                    <option value="8">16000 Hz</option>
-                  </select>
-                </label>
-              </div>
-
-              <div
-                class="settings-title"
-                style="
-                  color: #a5b4c7;
-                  font-size: 11px;
-                  font-weight: 700;
-                  text-transform: uppercase;
-                  letter-spacing: 0.18em;
-                  margin-bottom: 14px;
-                "
-              >
-                Map Settings
-              </div>
-              <div class="settings-section" style="margin-bottom: 18px;">
-                <label class="toggle" for="mapRenderStyle" style="color: #e2e8f0; font-size: 13px; margin-bottom: 10px;">
-                  <input type="checkbox" id="mapRenderStyle" />
-                  <span>Render mode: Smooth / Contours</span>
-                </label>
-                <div class="property-row map-band-step" id="mapBandStepRow" style="margin-bottom: 10px;">
-                  <span style="color: #e2e8f0; font-size: 12px;">Band Step (dB)</span>
-                  <input
-                    class="ui-inset"
-                    id="mapBandStep"
-                    type="number"
-                    min="1"
-                    max="20"
-                    step="1"
-                    value="3"
-                    style="
-                      width: 80px;
-                      padding: 6px 8px;
-                      background: linear-gradient(180deg, #0b1423, #0a1220);
-                      color: #f8fafc;
-                      border: 1px solid rgba(148, 163, 184, 0.35);
-                      border-radius: 8px;
-                      font-weight: 600;
-                    "
-                  />
-                </div>
-                <label class="toggle" for="mapAutoScale" style="color: #e2e8f0; font-size: 13px;">
-                  <input type="checkbox" id="mapAutoScale" checked />
-                  <span>Auto-scale colors</span>
-                </label>
-              </div>
-
-              <div
-                class="settings-title"
-                style="
-                  color: #a5b4c7;
-                  font-size: 11px;
-                  font-weight: 700;
-                  text-transform: uppercase;
-                  letter-spacing: 0.18em;
-                  margin-bottom: 14px;
-                "
-              >
-                Simulation Physics
-              </div>
-              <div class="settings-section">
-                <label class="property-row property-row-stack" style="display: block; margin-bottom: 12px;">
-                  <span
-                    style="
-                      display: block;
-                      font-size: 12px;
-                      color: #e2e8f0;
-                      margin-bottom: 6px;
-                      letter-spacing: 0.02em;
-                    "
-                  >
-                    Atmospheric Model
-                  </span>
-                  <select
-                    class="ui-inset"
-                    id="propagationAbsorption"
-                    style="
-                      width: 100%;
-                      padding: 8px 10px;
-                      background: linear-gradient(180deg, #0b1423, #0a1220);
-                      color: #f8fafc;
-                      border: 1px solid rgba(148, 163, 184, 0.35);
-                      border-radius: 10px;
-                      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.7), 0 4px 10px rgba(15, 23, 42, 0.35);
-                      font-weight: 600;
-                    "
-                  >
-                    <option value="iso9613">ISO 9613-1</option>
-                    <option value="simple">Simple</option>
-                  </select>
-                </label>
-
-                <label
-                  class="toggle"
-                  for="propagationGroundReflection"
-                  style="color: #e2e8f0; font-size: 13px;"
-                >
-                  <input type="checkbox" id="propagationGroundReflection" />
-                  <span>Ground Reflection</span>
-                </label>
-
-                <label class="property-row property-row-stack" style="display: block; margin-bottom: 12px;">
-                  <span
-                    style="
-                      display: block;
-                      font-size: 12px;
-                      color: #e2e8f0;
-                      margin-bottom: 6px;
-                      letter-spacing: 0.02em;
-                    "
-                  >
-                    Ground Type
-                  </span>
-                  <select
-                    class="ui-inset"
-                    id="propagationGroundType"
-                    style="
-                      width: 100%;
-                      padding: 8px 10px;
-                      background: linear-gradient(180deg, #0b1423, #0a1220);
-                      color: #f8fafc;
-                      border: 1px solid rgba(148, 163, 184, 0.35);
-                      border-radius: 10px;
-                      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.7), 0 4px 10px rgba(15, 23, 42, 0.35);
-                      font-weight: 600;
-                    "
-                  >
-                    <option value="hard">Hard (Asphalt, Concrete)</option>
-                    <option value="mixed" selected>Mixed</option>
-                    <option value="soft">Soft (Grass, Soil)</option>
-                  </select>
-                </label>
-
-                <label class="property-row property-row-stack" style="display: block; margin-bottom: 12px;">
-                  <span
-                    style="
-                      display: block;
-                      font-size: 12px;
-                      color: #e2e8f0;
-                      margin-bottom: 6px;
-                      letter-spacing: 0.02em;
-                    "
-                  >
-                    Ground Algorithm
-                  </span>
-                  <select
-                    class="ui-inset"
-                    id="propagationGroundModel"
-                    style="
-                      width: 100%;
-                      padding: 8px 10px;
-                      background: linear-gradient(180deg, #0b1423, #0a1220);
-                      color: #f8fafc;
-                      border: 1px solid rgba(148, 163, 184, 0.35);
-                      border-radius: 10px;
-                      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.7), 0 4px 10px rgba(15, 23, 42, 0.35);
-                      font-weight: 600;
-                    "
-                  >
-                    <option value="twoRayPhasor">Two-Ray</option>
-                    <option value="legacy">ISO 9613-2</option>
-                  </select>
-                </label>
-
-                <label class="property-row property-row-stack" style="display: block;">
-                  <span
-                    style="
-                      display: block;
-                      font-size: 12px;
-                      color: #e2e8f0;
-                      margin-bottom: 6px;
-                      letter-spacing: 0.02em;
-                    "
-                  >
-                    Spreading Loss
-                  </span>
-                  <select
-                    class="ui-inset"
-                    id="propagationSpreading"
-                    style="
-                      width: 100%;
-                      padding: 8px 10px;
-                      background: linear-gradient(180deg, #0b1423, #0a1220);
-                      color: #f8fafc;
-                      border: 1px solid rgba(148, 163, 184, 0.35);
-                      border-radius: 10px;
-                      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.7), 0 4px 10px rgba(15, 23, 42, 0.35);
-                      font-weight: 600;
-                    "
-                  >
-                    <option value="spherical">Spherical</option>
-                    <option value="cylindrical">Cylindrical</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- Contextual inspector shown only when a selection exists. -->
         <aside class="context-panel" id="contextPanel" aria-hidden="true">
           <div class="context-header" id="contextHeader">
