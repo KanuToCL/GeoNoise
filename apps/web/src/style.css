@@ -98,10 +98,6 @@ body {
   gap: 12px;
   min-width: 0;
   justify-self: start;
-  padding: 4px;
-  margin: -4px;
-  overflow: hidden;
-  border-radius: 14px;
 }
 
 .topbar-center {
@@ -110,10 +106,6 @@ body {
   align-items: center;
   gap: 8px;
   justify-self: center;
-  padding: 4px;
-  margin: -4px;
-  overflow: hidden;
-  border-radius: 14px;
 }
 
 .topbar-right {
@@ -123,10 +115,6 @@ body {
   gap: 16px;
   flex-wrap: wrap;
   justify-self: end;
-  padding: 4px;
-  margin: -4px;
-  overflow: hidden;
-  border-radius: 14px;
 }
 
 .topbar-actions {
