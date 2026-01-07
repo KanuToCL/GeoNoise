@@ -88,8 +88,18 @@
         <header class="topbar topbar-floating">
           <div class="topbar-left">
             <div class="topbar-actions">
-              <button class="ghost ui-button" id="undoButton" type="button" title="Undo the last change.">Undo</button>
-              <button class="ghost ui-button" id="redoButton" type="button" title="Redo the last change.">Redo</button>
+<button class="ghost ui-button undo-redo-btn" id="undoButton" type="button" title="Undo the last change." aria-label="Undo">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 4v6h6"/>
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                </svg>
+              </button>
+              <button class="ghost ui-button undo-redo-btn" id="redoButton" type="button" title="Redo the last change." aria-label="Redo">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M23 4v6h-6"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"/>
+                </svg>
+              </button>
             </div>
           </div>
           <div class="topbar-center">
@@ -214,12 +224,18 @@
         </div>
 
         <!-- Bottom dock for creation tools. -->
-        <div class="dock">
-          <div class="dock-stack">
-            <div class="dock-label-stage" id="dockLabelStage" aria-hidden="true">
-              <span id="dockLabelText"></span>
-            </div>
-            <div class="dock-tools" id="toolGrid">
+        <div class="dock" id="dock">
+          <!-- Collapsed FAB trigger -->
+          <button class="dock-fab" id="dockFab" type="button" aria-label="Open tools" aria-expanded="false">
+            <span class="dock-fab-icon">+</span>
+          </button>
+          <!-- Expandable tools container -->
+          <div class="dock-expandable" id="dockExpandable">
+            <div class="dock-stack">
+              <div class="dock-label-stage" id="dockLabelStage" aria-hidden="true">
+                <span id="dockLabelText"></span>
+              </div>
+              <div class="dock-tools" id="toolGrid">
               <button
                 class="dock-button ui-button is-active"
                 data-tool="select"
@@ -301,6 +317,7 @@
                 <span class="dock-label">G</span>
               </button>
             </div>
+          </div>
           </div>
           <div class="dock-instruction-bottom">Click to select. Drag to move. Shift+drag to duplicate.</div>
         </div>

@@ -137,7 +137,7 @@ body {
 
 .layers-popover {
   position: fixed;
-  top: 72px;
+  top: 92px;
   right: 24px;
   display: flex;
   flex-direction: column;
@@ -239,6 +239,106 @@ body {
   z-index: 50;
   pointer-events: auto;
 }
+
+/* Collapsed FAB button */
+.dock-fab {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface-glass-max);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.2), 0 4px 8px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              opacity 200ms ease;
+  z-index: 10;
+}
+
+.dock-fab:hover {
+  transform: scale(1.08);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.25), 0 6px 12px rgba(15, 23, 42, 0.15);
+}
+
+.dock-fab:active {
+  transform: scale(0.95);
+}
+
+.dock-fab-icon {
+  font-size: 28px;
+  font-weight: 300;
+  color: var(--text-muted);
+  transition: transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  line-height: 1;
+}
+
+/* Rotate + to × when expanded */
+.dock.is-expanded .dock-fab-icon {
+  transform: rotate(45deg);
+}
+
+/* Hide FAB when expanded */
+.dock.is-expanded .dock-fab {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.5);
+}
+
+/* Expandable container */
+.dock-expandable {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%) scaleX(0);
+  transform-origin: center center;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.dock.is-expanded .dock-expandable {
+  transform: translateX(-50%) scaleX(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Individual buttons animate in with stagger effect */
+.dock-expandable .dock-button {
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity 200ms ease,
+              transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dock.is-expanded .dock-expandable .dock-button {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Staggered animation delays for each button */
+.dock.is-expanded .dock-expandable .dock-button:nth-child(1) { transition-delay: 50ms; }
+.dock.is-expanded .dock-expandable .dock-button:nth-child(2) { transition-delay: 80ms; }
+.dock.is-expanded .dock-expandable .dock-button:nth-child(3) { transition-delay: 110ms; }
+.dock.is-expanded .dock-expandable .dock-button:nth-child(4) { transition-delay: 140ms; }
+.dock.is-expanded .dock-expandable .dock-button:nth-child(5) { transition-delay: 170ms; }
+.dock.is-expanded .dock-expandable .dock-button:nth-child(6) { transition-delay: 200ms; }
+.dock.is-expanded .dock-expandable .dock-button:nth-child(7) { transition-delay: 230ms; }
+
+/* When collapsing, reverse the stagger (last button hides first) */
+.dock:not(.is-expanded) .dock-expandable .dock-button:nth-child(7) { transition-delay: 0ms; }
+.dock:not(.is-expanded) .dock-expandable .dock-button:nth-child(6) { transition-delay: 20ms; }
+.dock:not(.is-expanded) .dock-expandable .dock-button:nth-child(5) { transition-delay: 40ms; }
+.dock:not(.is-expanded) .dock-expandable .dock-button:nth-child(4) { transition-delay: 60ms; }
+.dock:not(.is-expanded) .dock-expandable .dock-button:nth-child(3) { transition-delay: 80ms; }
+.dock:not(.is-expanded) .dock-expandable .dock-button:nth-child(2) { transition-delay: 100ms; }
+.dock:not(.is-expanded) .dock-expandable .dock-button:nth-child(1) { transition-delay: 120ms; }
 
 .dock-stack {
   position: relative;
@@ -1434,6 +1534,52 @@ button.icon-button {
   justify-content: center;
   font-size: 16px;
   text-transform: none;
+}
+
+/* Compact undo/redo icon buttons */
+.undo-redo-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  border: none;
+}
+
+.undo-redo-btn:hover {
+  background: rgba(15, 23, 42, 0.08);
+  box-shadow: none;
+  transform: none;
+}
+
+.undo-redo-btn:active {
+  background: rgba(15, 23, 42, 0.12);
+  box-shadow: none;
+  transform: none;
+}
+
+.undo-redo-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  stroke: var(--text-muted);
+}
+
+.undo-redo-btn:hover svg {
+  stroke: var(--text);
+}
+
+.undo-redo-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.undo-redo-btn:disabled svg {
+  stroke: var(--text-muted);
 }
 
 .canvas-help {

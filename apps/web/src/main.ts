@@ -382,6 +382,9 @@ const scaleLine = document.querySelector('#scaleLine') as HTMLDivElement | null;
 const preferenceSelect = document.querySelector('#computePreference') as HTMLSelectElement | null;
 const themeOptions = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-theme-option]'));
 const toolGrid = document.querySelector('#toolGrid') as HTMLDivElement | null;
+const dock = document.querySelector('#dock') as HTMLDivElement | null;
+const dockFab = document.querySelector('#dockFab') as HTMLButtonElement | null;
+const dockExpandable = document.querySelector('#dockExpandable') as HTMLDivElement | null;
 const dockLabelStage = document.querySelector('#dockLabelStage') as HTMLDivElement | null;
 const dockLabelText = document.querySelector('#dockLabelText') as HTMLSpanElement | null;
 const selectionLabel = document.querySelector('#selectionLabel') as HTMLSpanElement | null;
@@ -4135,6 +4138,151 @@ function wireDockLabels() {
   });
 }
 
+let dockCollapseTimeout: ReturnType<typeof setTimeout> | null = null;
+let dockInactivityTimeout: ReturnType<typeof setTimeout> | null = null;
+let dockHasToolEngaged = false; // True when user clicked a non-select tool
+
+function wireDockExpand() {
+  if (!dock || !dockFab || !dockExpandable || !toolGrid) return;
+
+  const HOVER_COLLAPSE_DELAY = 150; // Quick collapse on hover-out (no tool clicked)
+  const INACTIVITY_COLLAPSE_DELAY = 4000; // 4 seconds after tool engagement
+
+  const expandDock = () => {
+    if (dockCollapseTimeout) {
+      clearTimeout(dockCollapseTimeout);
+      dockCollapseTimeout = null;
+    }
+    if (dockInactivityTimeout) {
+      clearTimeout(dockInactivityTimeout);
+      dockInactivityTimeout = null;
+    }
+    dock.classList.add('is-expanded');
+    dockFab.setAttribute('aria-expanded', 'true');
+  };
+
+  const collapseDock = () => {
+    dock.classList.remove('is-expanded');
+    dockFab.setAttribute('aria-expanded', 'false');
+    dockHasToolEngaged = false;
+    // Reset to select tool when dock collapses
+    setActiveTool('select');
+  };
+
+  const scheduleHoverCollapse = () => {
+    // Only use quick collapse if no tool was engaged
+    if (dockHasToolEngaged) return;
+    if (dockCollapseTimeout) clearTimeout(dockCollapseTimeout);
+    dockCollapseTimeout = setTimeout(() => {
+      collapseDock();
+      dockCollapseTimeout = null;
+    }, HOVER_COLLAPSE_DELAY);
+  };
+
+  const resetInactivityTimer = () => {
+    if (dockInactivityTimeout) clearTimeout(dockInactivityTimeout);
+    dockInactivityTimeout = setTimeout(() => {
+      collapseDock();
+      dockInactivityTimeout = null;
+    }, INACTIVITY_COLLAPSE_DELAY);
+  };
+
+  // Click on FAB expands the dock
+  dockFab.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (dock.classList.contains('is-expanded')) {
+      collapseDock();
+    } else {
+      expandDock();
+    }
+  });
+
+  // Listen for tool button clicks to engage "tool mode"
+  toolGrid.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    const button = target.closest<HTMLButtonElement>('button[data-tool]');
+    if (!button) return;
+    const tool = button.dataset.tool;
+
+    // If clicking select tool, collapse immediately
+    if (tool === 'select') {
+      collapseDock();
+      return;
+    }
+
+    // Non-select tool clicked - engage tool mode
+    dockHasToolEngaged = true;
+    // Clear any pending hover collapse
+    if (dockCollapseTimeout) {
+      clearTimeout(dockCollapseTimeout);
+      dockCollapseTimeout = null;
+    }
+    // Start inactivity timer
+    resetInactivityTimer();
+  });
+
+  // Hover behavior
+  dock.addEventListener('mouseenter', () => {
+    expandDock();
+  });
+
+  dock.addEventListener('mouseleave', () => {
+    if (dockHasToolEngaged) {
+      // Tool is engaged, don't collapse on hover-out
+      // Just let the inactivity timer handle it
+      return;
+    }
+    scheduleHoverCollapse();
+  });
+
+  // Keep dock open while interacting with it (cancel hover collapse)
+  dockExpandable.addEventListener('mouseenter', () => {
+    if (dockCollapseTimeout) {
+      clearTimeout(dockCollapseTimeout);
+      dockCollapseTimeout = null;
+    }
+  });
+
+  // Keyboard accessibility
+  dockFab.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (dock.classList.contains('is-expanded')) {
+        collapseDock();
+      } else {
+        expandDock();
+      }
+    }
+  });
+
+  // Close when clicking outside (only if no tool engaged)
+  document.addEventListener('click', (e) => {
+    if (!dock.contains(e.target as Node) && dock.classList.contains('is-expanded')) {
+      if (!dockHasToolEngaged) {
+        collapseDock();
+      }
+    }
+  });
+}
+
+// Reset inactivity timer when user adds something (call this from add handlers)
+function resetDockInactivityTimer() {
+  if (!dockHasToolEngaged) return;
+  if (dockInactivityTimeout) clearTimeout(dockInactivityTimeout);
+  dockInactivityTimeout = setTimeout(() => {
+    const dockEl = document.querySelector('#dock');
+    if (dockEl) {
+      dockEl.classList.remove('is-expanded');
+      const fabEl = document.querySelector('#dockFab');
+      if (fabEl) fabEl.setAttribute('aria-expanded', 'false');
+    }
+    dockHasToolEngaged = false;
+    setActiveTool('select');
+    dockInactivityTimeout = null;
+  }, 4000);
+}
+
 function hitTestPanelHandle(point: Point) {
   const current = selection;
   if (current.type !== 'panel') return null;
@@ -4263,6 +4411,7 @@ function commitBarrierDraft() {
   updateCounts();
   pushHistory();
   computeScene();
+  resetDockInactivityTimer();
 }
 
 function addPanelAt(point: Point) {
@@ -4284,6 +4433,7 @@ function addPanelAt(point: Point) {
   updateCounts();
   pushHistory();
   computeScene();
+  resetDockInactivityTimer();
 }
 
 function addBuildingAt(point: Point) {
@@ -4301,6 +4451,7 @@ function addBuildingAt(point: Point) {
   updateCounts();
   pushHistory();
   computeScene();
+  resetDockInactivityTimer();
 }
 
 function addSourceAt(point: Point) {
@@ -4321,6 +4472,7 @@ function addSourceAt(point: Point) {
   updateCounts();
   pushHistory();
   computeScene();
+  resetDockInactivityTimer();
 }
 
 function addReceiverAt(point: Point) {
@@ -4335,6 +4487,7 @@ function addReceiverAt(point: Point) {
   updateCounts();
   pushHistory();
   computeScene();
+  resetDockInactivityTimer();
 }
 
 function addProbeAt(point: Point) {
@@ -4348,6 +4501,7 @@ function addProbeAt(point: Point) {
   setSelection({ type: 'probe', id: probe.id });
   pushHistory({ invalidateMap: false });
   requestRender();
+  resetDockInactivityTimer();
 }
 
 function drawGrid() {
@@ -5910,6 +6064,7 @@ function init() {
   wirePreference();
   wireTools();
   wireDockLabels();
+  wireDockExpand();
   wirePointer();
   wireWheel();
   wireKeyboard();
