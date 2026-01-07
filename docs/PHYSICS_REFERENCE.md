@@ -62,9 +62,22 @@ Where:
 - `p` = atmospheric pressure (kPa)
 - `r` = distance (m)
 
-### ISO 9613-1 Model
+### Available Models
 
-The absorption coefficient `α` follows ISO 9613-1 with temperature and humidity corrections. At 20°C, 70% RH, typical values are:
+GeoNoise offers two atmospheric absorption models selectable via Settings → Simulation Physics → Atmospheric Model:
+
+| Model | Method | Accuracy | Speed |
+|-------|--------|----------|-------|
+| **Simple** | Lookup table with T/RH corrections | Good for typical conditions | Fast |
+| **ISO 9613-1** | Full physical calculation with O₂/N₂ molecular relaxation | High accuracy across all conditions | Slightly slower |
+
+**Simple Model:** Uses pre-computed absorption coefficients for standard conditions (20°C, 50% RH) with linear corrections for temperature and humidity. Suitable for most practical applications.
+
+**ISO 9613-1 Model:** Calculates absorption from first principles using molecular relaxation frequencies of oxygen and nitrogen. More accurate for extreme temperatures, humidity levels, or long propagation distances.
+
+### ISO 9613-1 Coefficients
+
+At 20°C, 70% RH, typical values are:
 
 | Frequency (Hz) | α (dB/km) |
 |----------------|-----------|
