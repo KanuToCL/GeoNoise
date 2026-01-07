@@ -7,13 +7,14 @@ This document contains planned features and enhancements for GeoNoise. For compl
 ## Table of Contents
 
 1. [Status Summary](#status-summary)
-2. [High Priority - In Progress](#high-priority---in-progress)
-3. [Planned This Cycle](#planned-this-cycle)
-4. [Future Enhancements](#future-enhancements)
-5. [Barrier Side Diffraction Toggle](#barrier-side-diffraction-toggle)
-6. [Configurable Diffraction Models](#configurable-diffraction-models)
-7. [Wall Reflections for Diffracted Paths](#wall-reflections-for-diffracted-paths)
-8. [Phase 1 Remaining Tasks](#phase-1-remaining-tasks)
+2. [Physics Audit - Bug Fixes](#physics-audit---bug-fixes)
+3. [High Priority - In Progress](#high-priority---in-progress)
+4. [Planned This Cycle](#planned-this-cycle)
+5. [Future Enhancements](#future-enhancements)
+6. [Barrier Side Diffraction Toggle](#barrier-side-diffraction-toggle)
+7. [Configurable Diffraction Models](#configurable-diffraction-models)
+8. [Wall Reflections for Diffracted Paths](#wall-reflections-for-diffracted-paths)
+9. [Phase 1 Remaining Tasks](#phase-1-remaining-tasks)
 
 ---
 
@@ -22,10 +23,12 @@ This document contains planned features and enhancements for GeoNoise. For compl
 ### ✅ Recently Completed
 
 - **Barrier side diffraction toggle** (v0.4.2) - See [CHANGELOG.md](./CHANGELOG.md)
+- **Noise map resolution strategy** (v0.4.2) - Adaptive point caps for better UX
 
 ### 🔨 In Progress / High Priority
 
 - Visual indicator when probe is "calculating"
+- **Physics audit fixes** (see below)
 
 ### 📅 Planned (This Cycle)
 
@@ -44,6 +47,197 @@ This document contains planned features and enhancements for GeoNoise. For compl
 - Spatial caching for nearby positions
 - Terrain/topography effects
 - Expose `maxReflections` setting in UI (currently hardcoded to 0)
+
+---
+
+## Physics Audit - Bug Fixes
+
+> **Audit Date:** 2026-01-07
+> **Status:** 🔨 In Progress
+
+A comprehensive physics consistency audit identified several issues that need to be addressed. Items are prioritized by severity and physics impact.
+
+### 🔴 Critical (P0) - Fix Immediately
+
+#### 1. Two-Ray Ground Reflection Interference Is Broken
+
+**File:** `/apps/web/src/probeWorker.ts` (lines 1298-1330)
+**Status:** ⬜ Not Started
+
+**Problem:** The ground reflection code only uses `r2` (reflected path distance), completely ignoring `r1` (direct path) for the interference calculation. The two-ray model requires both paths to compute constructive/destructive interference.
+
+**Current (broken):**
+```typescript
+const { r2: groundPathDistance } = calculateGroundReflectionGeometry(d, hs, hr);
+const groundAtten = spreadingLoss(groundPathDistance);
+```
+
+**Should be:**
+```typescript
+const { r1, r2 } = calculateGroundReflectionGeometry(d, hs, hr);
+const pathDifference = r2 - r1;
+const groundPhase = -k * pathDifference + groundCoeff.phase;
+// Use r2 for spreading, but phase from path difference
+```
+
+**Impact:** Two-ray interference (comb filtering) is completely non-functional. No frequency-dependent ground effect.
+
+---
+
+#### 2. 2D Distance Extraction Method Is Indirect
+
+**File:** `/packages/engine/src/propagation/index.ts` (lines 273-274)
+**Status:** ✅ Fixed (2026-01-07)
+
+**Problem:** Code passed 3D distance then extracted 2D via Pythagorean theorem, risking numerical instability.
+
+**Fix applied:** Now extracts horizontal distance correctly. Consider refactoring to pass 2D coordinates directly in future.
+
+---
+
+### 🟠 Medium (P1) - Fix Soon
+
+#### 3. Building Diffraction Phase Shift Is Incorrect
+
+**File:** `/apps/web/src/probeWorker.ts` (line 1291)
+**Status:** ⬜ Not Started
+
+**Problem:** Uses fixed `-π/4` phase shift per diffraction point, which is arbitrary. Should use path difference reference.
+
+**Current:**
+```typescript
+const phase = -k * diffPath.totalDistance + (-Math.PI / 4) * diffPath.diffractionPoints;
+```
+
+**Should be:**
+```typescript
+const phase = -k * (diffPath.totalDistance - directDistance);  // Path difference only
+```
+
+**Impact:** Incorrect interference patterns for building diffraction paths.
+
+---
+
+#### 4. Barrier Side Diffraction Edge Height Is Wrong
+
+**File:** `/apps/web/src/probeWorker.ts` (lines 807-811)
+**Status:** ⬜ Not Started
+
+**Problem:** For horizontal side diffraction, edge height is clamped to source/receiver heights:
+```typescript
+z: Math.min(edgeHeight, Math.max(source.z, receiver.z))
+```
+
+For horizontal diffraction around barrier ends, the edge should be at ground level (`z=0`), not clamped.
+
+**Impact:** Side diffraction path lengths are incorrect, leading to wrong attenuation values.
+
+---
+
+#### 5. Ground Reflection Phase Inconsistent with Delany-Bazley
+
+**File:** `/apps/web/src/probeWorker.ts` (lines 939-946)
+**Status:** ⬜ Not Started
+
+**Problem:** Uses ad-hoc polynomial approximations for soft ground reflection phase (`0.8π to 0.95π`) instead of the Delany-Bazley model already implemented in `/packages/engine/src/propagation/ground.ts`.
+
+**Fix:** Import and use the existing Delany-Bazley implementation for consistency.
+
+---
+
+#### 6. Simplified Atmospheric Absorption in probeWorker
+
+**File:** `/apps/web/src/probeWorker.ts` (lines 700-723)
+**Status:** ⬜ Not Started
+
+**Problem:** Uses simplified lookup table instead of full ISO 9613-1 model. Values are approximately correct but less accurate than core package.
+
+**Fix:** Import `atmosphericAbsorptionISO9613()` from core package for consistency.
+
+---
+
+### 🟡 Low (P2) - Nice to Have
+
+#### 7. Missing Edge Case Guards in Fresnel Calculation
+
+**File:** `/packages/engine/src/propagation/index.ts` (lines 198-209)
+**Status:** ⬜ Not Started
+
+**Problem:** No protection for `frequency <= 0` or `wavelength <= 0` which could cause division issues.
+
+**Fix:**
+```typescript
+if (frequency <= 0) return 0;
+const lambda = wavelength ?? 343 / frequency;
+if (lambda <= 0) return 0;
+```
+
+---
+
+#### 8. Speed of Sound Hardcoded to 343 m/s
+
+**File:** `/apps/web/src/probeWorker.ts` (line 96)
+**Status:** ⬜ Not Started
+
+**Problem:** Uses constant `343 m/s` while engine uses temperature-dependent `speedOfSound(temp)`.
+
+| Temp | Speed |
+|------|-------|
+| 0°C  | 331 m/s |
+| 20°C | 343 m/s |
+| 30°C | 350 m/s |
+
+**Impact:** ~0.5-5 dB discrepancy depending on temperature setting.
+
+---
+
+#### 9. Corner Diffraction Height Assignment Ambiguous
+
+**File:** `/apps/web/src/probeWorker.ts` (line 610)
+**Status:** ⬜ Not Started
+
+**Problem:** Corner height uses `min(source.z, receiver.z, buildingTop)` which may place diffraction point lower than the receiver.
+
+---
+
+#### 10. Complex Division Edge Case Handling
+
+**File:** `/packages/engine/src/propagation/complex.ts` (lines 19-25)
+**Status:** ⬜ Not Started
+
+**Problem:** Returns `{0,0}` on exact divide-by-zero. Should use epsilon threshold.
+
+**Fix:**
+```typescript
+const EPSILON = 1e-10;
+if (Math.abs(denom) < EPSILON) return { re: 0, im: 0 };
+```
+
+---
+
+### ✅ Verified Correct
+
+The following implementations were verified as **physically accurate**:
+
+| Component | Location | Status |
+|-----------|----------|--------|
+| Spreading Loss | `propagation/index.ts:61-76` | ✅ `20·log₁₀(r) + 11` for point source |
+| Maekawa Diffraction | `propagation/index.ts:172-209` | ✅ `10·log₁₀(3 + 20·N)` |
+| Phasor Phase | `phasor/index.ts:173-174` | ✅ `phase = -k·distance` |
+| Double-Edge Diffraction | `probeWorker.ts:655` | ✅ Coefficient 40, cap 25 dB |
+| Two-Ray Geometry | `probeWorker.ts:971-988` | ✅ r1, r2 formulas correct |
+| Coherent Phasor Sum | `phasor/index.ts:213-227` | ✅ Proper complex summation |
+
+---
+
+### Testing Recommendations
+
+| Test | Description |
+|------|-------------|
+| **Two-Ray Validation** | Source/receiver at different heights over soft ground. Verify comb filtering at f where r2-r1 ≈ λ/2 |
+| **Building Diffraction** | Compare 5m, 50m, 500m buildings against Maekawa tables |
+| **Temperature Variation** | Verify phase consistency between 0°C and 30°C |
+| **Side Diffraction** | Compare 10m vs 100m barrier side loss (should differ significantly) |
 
 ---
 
