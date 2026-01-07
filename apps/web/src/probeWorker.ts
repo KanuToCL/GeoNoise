@@ -1380,8 +1380,12 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
   // eslint-disable-next-line no-console
   console.log('[ProbeWorker] totalSpectrum before floor:', totalSpectrum.map(v => v.toFixed(1)).join(','));
 
-  // Apply ambient floor
-  const magnitudes = totalSpectrum.map(level => Math.max(level, 35));
+  // Apply ambient floor (10 dB minimum for display)
+  // Note: Actual calculated levels can go lower, but we clamp for display
+  // to avoid unrealistic negative values. The engine uses MIN_LEVEL (-100 dB)
+  // internally for calculations.
+  const DISPLAY_FLOOR_DB = 10;
+  const magnitudes = totalSpectrum.map(level => Math.max(level, DISPLAY_FLOOR_DB));
 
   return {
     type: 'PROBE_UPDATE',
