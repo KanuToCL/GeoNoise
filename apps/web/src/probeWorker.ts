@@ -1300,8 +1300,8 @@ function computeSourceCoherent(
       const hs = srcPos.z;
       const hr = probePos.z;
 
-      // Calculate path geometry
-      const { r2: groundPathDistance } = calculateGroundReflectionGeometry(d, hs, hr);
+      // Calculate path geometry - get BOTH r1 and r2 for proper two-ray model
+      const { r1: directDistance, r2: groundPathDistance } = calculateGroundReflectionGeometry(d, hs, hr);
 
       // Get frequency-dependent ground reflection coefficient
       const groundCoeff = getGroundReflectionCoeff(
@@ -1316,15 +1316,21 @@ function computeSourceCoherent(
         ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity) * groundPathDistance
         : 0;
 
-      // Ground reflection reduces amplitude by reflection coefficient
-      const reflectionLoss = -20 * Math.log10(groundCoeff.magnitude);
+      // Ground reflection reduces amplitude by:
+      // 1. Reflection coefficient magnitude |Γ|
+      // 2. Geometric ratio r1/r2 (reflected path is longer, so amplitude is lower)
+      // This matches the textbook two-ray model: p_reflected = p_direct * |Γ| * (r1/r2)
+      const geometricRatio = directDistance / groundPathDistance;
+      const reflectionLoss = -20 * Math.log10(groundCoeff.magnitude * geometricRatio);
 
       // Level at receiver via ground-reflected path
       const groundLevel = sourceLevel - groundAtten - groundAtm - reflectionLoss;
 
-      // Phase includes:
-      // 1. Propagation phase: -k * distance
-      // 2. Ground reflection phase shift (0 for hard, ~π for soft)
+      // Phase for proper two-ray interference:
+      // The key insight is that the PHASE DIFFERENCE between direct and reflected
+      // paths determines interference. Since direct path has phase = -k * r1,
+      // the ground path should have phase = -k * r2 + reflection_phase_shift.
+      // When summed coherently, the effective phase difference is k * (r2 - r1).
       const groundPhase = -k * groundPathDistance + groundCoeff.phase;
 
       phasors.push({ pressure: dBToPressure(groundLevel), phase: groundPhase });

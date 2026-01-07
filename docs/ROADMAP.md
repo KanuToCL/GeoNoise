@@ -59,28 +59,26 @@ A comprehensive physics consistency audit identified several issues that need to
 
 ### 🔴 Critical (P0) - Fix Immediately
 
-#### 1. Two-Ray Ground Reflection Interference Is Broken
+#### 1. Two-Ray Ground Reflection Amplitude Ratio Missing
 
-**File:** `/apps/web/src/probeWorker.ts` (lines 1298-1330)
-**Status:** ⬜ Not Started
+**File:** `/apps/web/src/probeWorker.ts` (lines 1298-1340)
+**Status:** ✅ Fixed (2026-01-07)
 
-**Problem:** The ground reflection code only uses `r2` (reflected path distance), completely ignoring `r1` (direct path) for the interference calculation. The two-ray model requires both paths to compute constructive/destructive interference.
+**Problem:** The probe's ground reflection code was missing the geometric amplitude ratio `r1/r2` that the engine's `agrTwoRayDb()` correctly includes. The phase calculation was implicitly correct (direct path uses `-k*r1`, ground uses `-k*r2`), but amplitude scaling was incomplete.
 
-**Current (broken):**
+**Fix applied:** Added geometric ratio to match textbook two-ray model:
 ```typescript
-const { r2: groundPathDistance } = calculateGroundReflectionGeometry(d, hs, hr);
-const groundAtten = spreadingLoss(groundPathDistance);
+// Before (missing geometric ratio):
+const reflectionLoss = -20 * Math.log10(groundCoeff.magnitude);
+
+// After (correct textbook model):
+const geometricRatio = directDistance / groundPathDistance;  // r1/r2
+const reflectionLoss = -20 * Math.log10(groundCoeff.magnitude * geometricRatio);
 ```
 
-**Should be:**
-```typescript
-const { r1, r2 } = calculateGroundReflectionGeometry(d, hs, hr);
-const pathDifference = r2 - r1;
-const groundPhase = -k * pathDifference + groundCoeff.phase;
-// Use r2 for spreading, but phase from path difference
-```
+This now matches the engine's implementation: `complexScale(gamma, r1/r2)`.
 
-**Impact:** Two-ray interference (comb filtering) is completely non-functional. No frequency-dependent ground effect.
+**Note:** The noise map was already correct - it uses `agrTwoRayDb()` from the engine which properly implements the full two-ray model with both path lengths and amplitude scaling.
 
 ---
 
