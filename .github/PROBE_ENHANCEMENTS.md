@@ -21,13 +21,16 @@ This document outlines proposed enhancements to the probe system to upgrade it f
 - Atmospheric absorption (simplified ISO 9613-1)
 - Frequency weighting display (A/C/Z)
 - Multi-source support (energetic summation)
+- **Per-band noise map display** (on-demand recomputation, Jan 7 2026)
+- **Layers popover UI fixes** (z-index, slide-down animation, Jan 7 2026)
+- **Unified active state blue color** (#2D8CFF across all UI, Jan 7 2026)
+- **Discrete LED indicators** (tiny 4px dots on dock buttons, Jan 7 2026)
 
 ### 🔨 In Progress / High Priority
 - Remove debug logging for production
 - Visual indicator when probe is "calculating"
 
 ### 📅 Planned (This Cycle)
-- Per-band noise map display (on-demand recomputation)
 - Barrier side diffraction toggle (per-barrier checkbox)
 - Building diffraction models (double-edge Maekawa)
 
@@ -905,11 +908,11 @@ unless the path wraps around multiple corners (L-shaped buildings)
 
 ---
 
-## 📊 Per-Band Noise Map Display (On-Demand Recomputation)
+## ✅ Per-Band Noise Map Display (On-Demand Recomputation)
 
-> **Status:** Planned
+> **Status:** ✅ COMPLETED (Jan 7, 2026)
 > **Priority:** Medium
-> **Target:** Allow users to view noise maps for individual frequency bands
+> **Implemented:** Allow users to view noise maps for individual frequency bands
 
 ### Problem Statement
 
@@ -944,120 +947,66 @@ User selects "500 Hz"   → Recompute grid for 500 Hz only
 User selects "LCeq (C)" → Recompute grid with C-weighting
 ```
 
-### Implementation Plan
+### Implementation (Completed Jan 7, 2026)
 
-#### Phase 1: Extend GridConfig
+#### Schema Changes (`packages/core/src/schema/index.ts`)
 
-Add optional `targetBand` and `weighting` to grid request:
-
-```typescript
-interface GridConfig {
-  bounds: BoundingBox2D;
-  resolution: number;
-  elevation?: number;
-
-  // NEW: Optional band selection
-  targetBand?: number;      // e.g., 500, 1000, 4000 (Hz)
-  weighting?: 'A' | 'C' | 'Z';  // Only used if targetBand is undefined
-}
-```
-
-#### Phase 2: Modify computeGrid()
+Added `FrequencyWeightingSchema` and extended `GridConfigSchema`:
 
 ```typescript
-async computeGrid(request: ComputeGridRequest): Promise<ComputeGridResponse> {
-  const { targetBand, weighting = 'A' } = request.payload.gridConfig;
+/** Frequency weighting type for grid display */
+export const FrequencyWeightingSchema = z.enum(['A', 'C', 'Z']);
 
-  const values = points.map(pt => {
-    // ... existing per-source, per-band computation ...
+export const GridConfigSchema = z.object({
+  // ... existing fields ...
 
-    if (targetBand !== undefined) {
-      // Return single band level (unweighted)
-      const bandIndex = OCTAVE_BANDS.indexOf(targetBand);
-      return totalSpectrum[bandIndex];
-    } else {
-      // Return weighted overall level
-      return calculateOverallLevel(totalSpectrum, weighting);
-    }
-  });
-
-  return { /* ... */ };
-}
-```
-
-#### Phase 3: UI Integration
-
-When user changes band selection:
-
-```typescript
-displayBandSelect.addEventListener('change', () => {
-  const value = displayBandSelect.value;
-
-  if (value === 'overall') {
-    // Use cached LAeq map if available
-    if (cachedLAeqMap) {
-      renderNoiseMap(cachedLAeqMap);
-    } else {
-      computeNoiseMap({ weighting: 'A' });
-    }
-  } else {
-    // Recompute for specific band
-    const targetBand = parseInt(value, 10);
-    computeNoiseMap({ targetBand, requestId: `grid:band-${targetBand}` });
-  }
+  // Per-band noise map display options (on-demand recomputation)
+  targetBand: z.number().int().min(0).max(8).optional(), // Band index 0-8 (63Hz-16kHz)
+  weighting: FrequencyWeightingSchema.default('A'), // Used when targetBand is undefined
 });
 ```
 
-#### Phase 4: Caching Strategy
+#### Engine Changes (`packages/engine/src/compute/index.ts`)
+
+Modified `computeGrid()` to return single-band or weighted overall:
 
 ```typescript
-// Cache structure
-const noiseMapCache = new Map<string, GridResult>();
+// Per-band noise map display options
+const targetBand = gridConfig.targetBand;
+const weighting = gridConfig.weighting ?? 'A';
 
-// Cache key examples:
-// "LAeq" → A-weighted overall
-// "LCeq" → C-weighted overall
-// "500"  → 500 Hz band
-// "4000" → 4 kHz band
-
-function getCacheKey(config: GridConfig): string {
-  if (config.targetBand !== undefined) {
-    return String(config.targetBand);
-  }
-  return `L${config.weighting ?? 'A'}eq`;
+// Return single band level if targetBand is specified, otherwise weighted overall
+if (targetBand !== undefined) {
+  return totalSpectrum[targetBand]; // Unweighted single-band level
+} else {
+  return calculateOverallLevel(totalSpectrum, weighting); // Weighted overall
 }
 ```
+
+#### UI Wiring (`apps/web/src/main.ts`)
+
+- `buildNoiseMapGridConfig()` reads `displayBand` and `displayWeighting` state
+- `wireDisplaySettings()` triggers map recomputation on band/weighting change
+- No caching - maps recompute on-demand with each change
 
 ### UI Behavior
 
 | User Action | System Response |
-|-------------|-----------------|
-| Generate Map (first time) | Compute LAeq, cache as "LAeq" |
-| Select "500 Hz" | Check cache for "500" → miss → recompute → cache |
-| Select "LAeq" | Check cache for "LAeq" → hit → render from cache |
-| Select "500 Hz" again | Check cache for "500" → hit → render from cache |
-| Move a source | Invalidate ALL cache entries |
-| Select "4 kHz" | Check cache for "4000" → miss → recompute → cache |
+| Generate Map (first time) | Compute LAeq (A-weighted) |
+| Select "500 Hz" | Recompute grid for band index 3 (unweighted) |
+| Select "LAeq" | Recompute grid with A-weighting |
+| Move a source | Recompute with current band selection |
+| Change weighting to C | Recompute grid with C-weighting (if overall selected) |
 
-### Visual Indicator
-
-Show loading state when recomputing for a different band:
-
-```typescript
-// Show "Computing 500 Hz map..." in status bar
-setMapStatus(`Computing ${targetBand} Hz map...`);
-await computeNoiseMap({ targetBand });
-setMapStatus(null);
-```
-
-### Files to Modify
+### Files Modified
 
 | File | Changes |
 |------|---------|
-| `packages/core/src/schema/index.ts` | Add `targetBand`, `weighting` to `GridConfigSchema` |
-| `packages/engine/src/api/index.ts` | Update `GridConfig` type |
-| `packages/engine/src/compute/index.ts` | Modify `computeGrid()` to use targetBand |
-| `apps/web/src/main.ts` | Add cache, wire up band selector to recompute |
+| `packages/core/src/schema/index.ts` | Added `FrequencyWeightingSchema`, `targetBand`, `weighting` to `GridConfigSchema` |
+| `packages/engine/src/compute/index.ts` | Modified `computeGrid()` to use targetBand and weighting |
+| `apps/web/src/main.ts` | Updated `buildNoiseMapGridConfig()` and `wireDisplaySettings()` |
+| `apps/web/index.html` | Added Display Band dropdown in Layers popover |
+| `.github/PERBAND_NOISEMAP_AND_UI_FIXES.md` | Full documentation |
 
 ---
 
