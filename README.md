@@ -12,6 +12,8 @@ Acoustic planning often starts with fast feedback: "What happens if I move this 
 - Compute receiver levels and panel statistics (min/max/avg/percentiles).
 - Generate a full-scene noise map (heatmap overlay).
 - Drag geometry with live, throttled updates for preview-quality maps that snap to full quality on release.
+- **Rotate and resize barriers** with endpoint handles and rotation lollipop.
+- **Auto-regenerate noise map** when geometry is modified (barriers, buildings).
 - Toggle propagation options such as spreading, atmospheric absorption, ground reflections, and barriers.
 
 ## Physics Model (v1)

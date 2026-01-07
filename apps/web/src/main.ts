@@ -70,6 +70,7 @@ type Source = {
 
 type Receiver = {
   id: string;
+  name?: string;
   x: number;
   y: number;
   z: number;
@@ -77,6 +78,7 @@ type Receiver = {
 
 type Panel = {
   id: string;
+  name?: string;
   points: Point[];
   elevation: number;
   sampling: { resolution: number; pointCap: number };
@@ -84,6 +86,7 @@ type Panel = {
 
 type Probe = {
   id: string;
+  name?: string;
   x: number;
   y: number;
   z: number;
@@ -102,6 +105,7 @@ type Barrier = {
   // The CPU engine checks 2D intersection (SR crosses barrier segment) and then uses hb/hs/hr to compute
   // the 3D "over the top" path difference delta that drives the barrier insertion loss term.
   id: string;
+  name?: string;
   p1: Point;
   p2: Point;
   height: number;
@@ -165,6 +169,7 @@ function setBarrierFromMidpointAndRotation(
 
 type BuildingData = {
   id: string;
+  name?: string;
   x: number;
   y: number;
   width: number;
@@ -183,6 +188,7 @@ const BUILDING_ROTATION_HANDLE_RADIUS = 5;
 
 class Building {
   id: string;
+  name?: string;
   x: number;
   y: number;
   width: number;
@@ -194,6 +200,7 @@ class Building {
 
   constructor(data: Partial<BuildingData> & { id: string }) {
     this.id = data.id;
+    this.name = data.name;
     this.x = data.x ?? 0;
     this.y = data.y ?? 0;
     this.width = data.width ?? 10;
@@ -207,6 +214,7 @@ class Building {
   toData(): BuildingData {
     return {
       id: this.id,
+      name: this.name,
       x: this.x,
       y: this.y,
       width: this.width,
@@ -3696,7 +3704,7 @@ function renderProperties() {
   if (current.type === 'source') {
     const source = scene.sources.find((item) => item.id === current.id);
     if (!source) return;
-    propertiesBody.appendChild(createTextRow('Name', source.name, (value) => {
+    propertiesBody.appendChild(createInlineEditableRow('Name', source.name, `Source ${source.id.toUpperCase()}`, (value) => {
       source.name = value;
     }));
     propertiesBody.appendChild(createInputRow('Height (m)', source.z, (value) => {
@@ -3731,6 +3739,9 @@ function renderProperties() {
   if (current.type === 'receiver') {
     const receiver = scene.receivers.find((item) => item.id === current.id);
     if (!receiver) return;
+    propertiesBody.appendChild(createInlineEditableRow('Name', receiver.name || '', `Receiver ${receiver.id.toUpperCase()}`, (value) => {
+      receiver.name = value;
+    }));
     propertiesBody.appendChild(createInputRow('Height (m)', receiver.z, (value) => {
       receiver.z = value;
       pushHistory();
@@ -3741,6 +3752,9 @@ function renderProperties() {
   if (current.type === 'panel') {
     const panel = scene.panels.find((item) => item.id === current.id);
     if (!panel) return;
+    propertiesBody.appendChild(createInlineEditableRow('Name', panel.name || '', `Grid ${panel.id.toUpperCase()}`, (value) => {
+      panel.name = value;
+    }));
     propertiesBody.appendChild(createInputRow('Elevation (m)', panel.elevation, (value) => {
       panel.elevation = value;
       pushHistory();
@@ -3760,6 +3774,11 @@ function renderProperties() {
   if (current.type === 'barrier') {
     const barrier = scene.barriers.find((item) => item.id === current.id);
     if (!barrier) return;
+
+    // Name control
+    propertiesBody.appendChild(createInlineEditableRow('Name', barrier.name || '', `Barrier ${barrier.id.toUpperCase()}`, (value) => {
+      barrier.name = value;
+    }));
 
     // Length control
     const currentLength = getBarrierLength(barrier);
@@ -3799,6 +3818,9 @@ function renderProperties() {
   if (current.type === 'building') {
     const building = scene.buildings.find((item) => item.id === current.id);
     if (!building) return;
+    propertiesBody.appendChild(createInlineEditableRow('Name', building.name || '', `Building ${building.id.toUpperCase()}`, (value) => {
+      building.name = value;
+    }));
     propertiesBody.appendChild(createInputRow('Width (m)', building.width, (value) => {
       building.width = Math.max(BUILDING_MIN_SIZE, value);
       pushHistory();
@@ -3840,6 +3862,91 @@ function createInputRow(label: string, value: number, onChange: (value: number) 
   });
   row.appendChild(name);
   row.appendChild(input);
+  return row;
+}
+
+/**
+ * Creates an inline editable text row.
+ * Shows as plain text by default, becomes editable on double-click.
+ */
+function createInlineEditableRow(
+  label: string,
+  value: string,
+  placeholder: string,
+  onChange: (value: string) => void
+) {
+  const row = document.createElement('div');
+  row.className = 'property-row';
+
+  const nameLabel = document.createElement('span');
+  nameLabel.textContent = label;
+
+  const valueContainer = document.createElement('div');
+  valueContainer.className = 'inline-editable';
+  valueContainer.style.flex = '1';
+  valueContainer.style.position = 'relative';
+
+  const displayText = document.createElement('span');
+  displayText.className = 'inline-editable-text';
+  displayText.textContent = value || placeholder;
+  displayText.title = 'Double-click to edit';
+  displayText.style.cursor = 'text';
+  displayText.style.padding = '4px 8px';
+  displayText.style.borderRadius = '4px';
+  displayText.style.display = 'inline-block';
+  displayText.style.minWidth = '60px';
+  if (!value) {
+    displayText.style.opacity = '0.5';
+    displayText.style.fontStyle = 'italic';
+  }
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.classList.add('ui-inset');
+  input.value = value;
+  input.style.display = 'none';
+  input.style.width = '100%';
+
+  const startEditing = () => {
+    displayText.style.display = 'none';
+    input.style.display = 'block';
+    input.value = value;
+    input.focus();
+    input.select();
+  };
+
+  const finishEditing = () => {
+    input.style.display = 'none';
+    displayText.style.display = 'inline-block';
+    const newValue = input.value.trim();
+    if (newValue !== value) {
+      onChange(newValue);
+      displayText.textContent = newValue || placeholder;
+      displayText.style.opacity = newValue ? '1' : '0.5';
+      displayText.style.fontStyle = newValue ? 'normal' : 'italic';
+      markDirty();
+      pushHistory();
+      requestRender();
+    }
+  };
+
+  displayText.addEventListener('dblclick', startEditing);
+
+  input.addEventListener('blur', finishEditing);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      finishEditing();
+    } else if (e.key === 'Escape') {
+      input.value = value;
+      input.style.display = 'none';
+      displayText.style.display = 'inline-block';
+    }
+  });
+
+  valueContainer.appendChild(displayText);
+  valueContainer.appendChild(input);
+  row.appendChild(nameLabel);
+  row.appendChild(valueContainer);
   return row;
 }
 
@@ -4897,7 +5004,8 @@ function drawSources() {
 
     ctx.fillStyle = isDimmed ? mutedText : labelText;
     ctx.font = '12px "Work Sans", sans-serif';
-    ctx.fillText(source.id.toUpperCase(), p.x + 14, p.y - 6);
+    const displayName = source.name || source.id.toUpperCase();
+    ctx.fillText(displayName, p.x + 14, p.y - 6);
 
     const isHovered = hoverSelection?.type === 'source' && hoverSelection.id === source.id;
     if (isHovered && isMuted) {
@@ -4950,7 +5058,8 @@ function drawReceivers() {
 
     ctx.fillStyle = canvasTheme.receiverLabel;
     ctx.font = '12px "Work Sans", sans-serif';
-    ctx.fillText(receiver.id.toUpperCase(), p.x + 14, p.y + 4);
+    const displayName = receiver.name || receiver.id.toUpperCase();
+    ctx.fillText(displayName, p.x + 14, p.y + 4);
     ctx.fillStyle = canvasTheme.receiverFill;
   }
 }
