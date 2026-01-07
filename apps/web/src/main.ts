@@ -2206,23 +2206,14 @@ function getActiveProbe() {
 function initProbeWorker() {
   if (probeWorker) return;
   try {
-    // eslint-disable-next-line no-console
-    console.log('[Main] Initializing probe worker...');
     probeWorker = new Worker(new URL('./probeWorker.js', import.meta.url), { type: 'module' });
     probeWorker.addEventListener('message', (event: MessageEvent<ProbeResult>) => {
-      // eslint-disable-next-line no-console
-      console.log('[Main] Received probe result:', event.data?.type, event.data?.probeId);
       handleProbeResult(event.data);
     });
-    probeWorker.addEventListener('error', (error) => {
-      // eslint-disable-next-line no-console
-      console.error('[Main] Probe worker error', error);
+    probeWorker.addEventListener('error', () => {
+      // Worker error - will fall back to stub calculation
     });
-    // eslint-disable-next-line no-console
-    console.log('[Main] Probe worker initialized successfully');
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('[Main] Probe worker unavailable', error);
+  } catch {
     probeWorker = null;
   }
 }
@@ -2292,24 +2283,15 @@ function calculateProbeStub(req: ProbeRequest): ProbeResult {
 
 function sendProbeRequest(probe: Probe) {
   const request = buildProbeRequest(probe);
-  // eslint-disable-next-line no-console
-  console.log('[Main] sendProbeRequest called for probe:', probe.id,
-    'position:', { x: probe.x.toFixed(1), y: probe.y.toFixed(1) },
-    'sources:', request.sources.length,
-    'walls:', request.walls.length);
   probePending.add(probe.id);
   renderProbeInspector();
   renderPinnedProbePanel(probe.id);
   if (!probeWorker) {
-    // eslint-disable-next-line no-console
-    console.log('[Main] No worker available, using stub for probe:', probe.id);
     window.setTimeout(() => {
       handleProbeResult(calculateProbeStub(request));
     }, 0);
     return;
   }
-  // eslint-disable-next-line no-console
-  console.log('[Main] Posting probe request for:', probe.id, 'sources:', request.sources.length);
   probeWorker.postMessage(request);
 }
 
@@ -2360,17 +2342,12 @@ function getLiveProbeIds() {
 function requestLiveProbeUpdates(options?: { immediate?: boolean }) {
   // Keep pinned monitors and the active inspector in sync with the engine.
   const liveIds = getLiveProbeIds();
-  // eslint-disable-next-line no-console
-  console.log('[Main] requestLiveProbeUpdates called, liveIds:', liveIds, 'activeProbeId:', activeProbeId);
   // Force immediate updates to ensure probe responds to scene changes
   requestProbeUpdates(liveIds, { immediate: true, ...options });
 }
 
 function handleProbeResult(result: ProbeResult) {
   if (!result || result.type !== 'PROBE_UPDATE') return;
-  // eslint-disable-next-line no-console
-  console.log('[Main] handleProbeResult received:', result.probeId,
-    'magnitudes:', result.data.magnitudes.map(m => m.toFixed(1)).join(','));
   probeResults.set(result.probeId, result.data);
   probePending.delete(result.probeId);
   if (activeProbeId === result.probeId) {

@@ -438,11 +438,6 @@ function extractBuildingFootprints(walls: ProbeRequest['walls']): BuildingFootpr
 
   for (const wall of walls) {
     if (wall.type === 'building' && wall.vertices.length >= 3) {
-      // eslint-disable-next-line no-console
-      console.log('[ProbeWorker] Extracting building:', wall.id,
-        'vertices:', wall.vertices.length,
-        'height:', wall.height,
-        'first vertex:', wall.vertices[0]);
       buildings.push({
         id: wall.id,
         vertices: wall.vertices,
@@ -467,12 +462,6 @@ function findBlockingBuilding(
   to: Point3D,
   buildings: BuildingFootprint[]
 ): BuildingOcclusionResult {
-  // eslint-disable-next-line no-console
-  console.log('[ProbeWorker] findBlockingBuilding checking',
-    buildings.length, 'buildings for path',
-    'from:', { x: from.x.toFixed(1), y: from.y.toFixed(1), z: from.z },
-    'to:', { x: to.x.toFixed(1), y: to.y.toFixed(1), z: to.z });
-
   for (const building of buildings) {
     const result = segmentIntersectsPolygon(
       { x: from.x, y: from.y },
@@ -480,25 +469,12 @@ function findBlockingBuilding(
       building.vertices
     );
 
-    // eslint-disable-next-line no-console
-    console.log('[ProbeWorker] Building', building.id,
-      'intersects:', result.intersects,
-      'entryPoint:', result.entryPoint,
-      'exitPoint:', result.exitPoint);
-
     if (result.intersects && result.entryPoint && result.exitPoint) {
       const buildingTop = building.groundElevation + building.height;
 
       // Check height at entry and exit points
       const heightAtEntry = pathHeightAtPoint(from, to, result.entryPoint);
       const heightAtExit = pathHeightAtPoint(from, to, result.exitPoint);
-
-      // eslint-disable-next-line no-console
-      console.log('[ProbeWorker] Height check:',
-        'buildingTop:', buildingTop,
-        'heightAtEntry:', heightAtEntry.toFixed(2),
-        'heightAtExit:', heightAtExit.toFixed(2),
-        'blocked:', heightAtEntry < buildingTop || heightAtExit < buildingTop);
 
       // Path is blocked if it's below building top at any intersection point
       if (heightAtEntry < buildingTop || heightAtExit < buildingTop) {
@@ -1047,17 +1023,6 @@ function computeSourceCoherent(
 
   pathTypes.add('direct');
 
-  // eslint-disable-next-line no-console
-  console.log('[ProbeWorker] Path tracing:', {
-    directValid: directPath.valid,
-    directBlockedByBuilding,
-    directDist: directPath.totalDistance.toFixed(1),
-    barriersCount: barriers.length,
-    buildingsCount: buildings.length,
-    srcZ: srcPos.z,
-    probeZ: probePos.z,
-  });
-
   // Trace barrier diffraction paths if direct is blocked by barrier
   const barrierDiffractionPaths: RayPath[] = [];
   if (!directPath.valid && config.barrierDiffraction) {
@@ -1084,12 +1049,6 @@ function computeSourceCoherent(
     buildingDiffPaths.push(...diffPaths.filter(p => p.valid));
     if (buildingDiffPaths.length > 0) {
       pathTypes.add('building-diffraction');
-      // eslint-disable-next-line no-console
-      console.log('[ProbeWorker] Building diffraction paths:', {
-        count: buildingDiffPaths.length,
-        types: buildingDiffPaths.map(p => p.type),
-        pathDiffs: buildingDiffPaths.map(p => p.pathDifference.toFixed(2)),
-      });
     }
   }
 
@@ -1130,7 +1089,6 @@ function computeSourceCoherent(
 
   // Compute per-band levels with coherent summation
   const resultSpectrum: number[] = [];
-  let debuggedFirstBand = false;
 
   for (let bandIdx = 0; bandIdx < OCTAVE_BAND_COUNT; bandIdx++) {
     const freq = OCTAVE_BANDS[bandIdx];
@@ -1147,17 +1105,6 @@ function computeSourceCoherent(
       const level = sourceLevel - atten - atm;
       const phase = -k * directPath.totalDistance;
       phasors.push({ pressure: dBToPressure(level), phase });
-
-      if (!debuggedFirstBand) {
-        // eslint-disable-next-line no-console
-        console.log('[ProbeWorker] Direct path calc:', {
-          sourceLevel,
-          atten: atten.toFixed(1),
-          atm: atm.toFixed(3),
-          level: level.toFixed(1),
-          pressure: dBToPressure(level).toExponential(2),
-        });
-      }
     }
 
     // Building diffraction contributions (per-band frequency dependence)
@@ -1182,17 +1129,6 @@ function computeSourceCoherent(
       const phase = -k * diffPath.totalDistance + (-Math.PI / 4) * diffPath.diffractionPoints;
 
       phasors.push({ pressure: dBToPressure(level), phase });
-
-      if (!debuggedFirstBand && diffPath === buildingDiffPaths[0]) {
-        // eslint-disable-next-line no-console
-        console.log('[ProbeWorker] Building diffraction calc (first path, band 0):', {
-          type: diffPath.type,
-          pathDiff: diffPath.pathDifference.toFixed(2),
-          freq,
-          diffLoss: diffLoss.toFixed(1),
-          level: level.toFixed(1),
-        });
-      }
     }
 
     // Ground reflection using proper two-ray model with SEPARATE phasors
@@ -1231,27 +1167,6 @@ function computeSourceCoherent(
 
       phasors.push({ pressure: dBToPressure(groundLevel), phase: groundPhase });
       pathTypes.add('ground');
-
-      if (!debuggedFirstBand) {
-        // eslint-disable-next-line no-console
-        console.log('[ProbeWorker] Ground reflection calc:', {
-          d: d.toFixed(1),
-          groundPathDist: groundPathDistance.toFixed(1),
-          groundCoeffMag: groundCoeff.magnitude.toFixed(2),
-          groundCoeffPhase: (groundCoeff.phase / Math.PI).toFixed(2) + 'π',
-          reflectionLoss: reflectionLoss.toFixed(1),
-          groundLevel: groundLevel.toFixed(1),
-        });
-      }
-    }
-
-    if (!debuggedFirstBand) {
-      // eslint-disable-next-line no-console
-      console.log('[ProbeWorker] Phasors for band 0:', phasors.length,
-        'config.groundReflection:', config.groundReflection,
-        'groundBlockedByBuilding:', groundBlockedByBuilding,
-        'srcPos.z:', srcPos.z, 'probePos.z:', probePos.z);
-      debuggedFirstBand = true;
     }
 
     // Barrier diffraction contributions
@@ -1338,32 +1253,15 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
     z: req.position.z ?? 1.5,
   };
 
-  // eslint-disable-next-line no-console
-  console.log('[ProbeWorker] calculateProbe - probePos:', probePos,
-    'sources:', req.sources.length,
-    'first source pos:', req.sources[0]?.position);
-
   const segments = extractWallSegments(req.walls);
   const barriers = segments.filter(s => s.type === 'barrier');
   const buildings = extractBuildingFootprints(req.walls);
-
-  // eslint-disable-next-line no-console
-  console.log('[ProbeWorker] Extracted buildings:', buildings.length,
-    'barriers:', barriers.length);
 
   const sourceSpectra: number[][] = [];
   let totalGhostCount = 0;
 
   for (const source of req.sources) {
-    // eslint-disable-next-line no-console
-    console.log('[ProbeWorker] Computing source:', source.id,
-      'position:', source.position,
-      'spectrum[0]:', source.spectrum[0]);
-
     const result = computeSourceCoherent(source, probePos, segments, barriers, buildings, DEFAULT_CONFIG);
-
-    // eslint-disable-next-line no-console
-    console.log('[ProbeWorker] Source result spectrum:', result.spectrum.map(v => v.toFixed(1)).join(','));
 
     sourceSpectra.push(result.spectrum);
 
@@ -1376,9 +1274,6 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
 
   // Sum all source spectra energetically
   const totalSpectrum = sumMultipleSpectra(sourceSpectra);
-
-  // eslint-disable-next-line no-console
-  console.log('[ProbeWorker] totalSpectrum before floor:', totalSpectrum.map(v => v.toFixed(1)).join(','));
 
   // Apply ambient floor (10 dB minimum for display)
   // Note: Actual calculated levels can go lower, but we clamp for display
@@ -1411,24 +1306,14 @@ type ProbeWorkerScope = {
 
 const workerContext = self as unknown as ProbeWorkerScope;
 
-// eslint-disable-next-line no-console
-console.log('[ProbeWorker] Worker initialized and ready');
-
 workerContext.addEventListener('message', (event) => {
-  // eslint-disable-next-line no-console
-  console.log('[ProbeWorker] Received message:', event.data?.type, event.data?.probeId);
-
   const req = event.data;
   if (!req || req.type !== 'CALCULATE_PROBE') return;
 
   try {
     const result = calculateProbe(req);
-    // eslint-disable-next-line no-console
-    console.log('[ProbeWorker] Calculation complete, posting result for probe:', req.probeId);
     workerContext.postMessage(result);
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('[ProbeWorker] Error calculating probe:', error);
+  } catch {
     // Return a fallback result so the UI doesn't hang
     workerContext.postMessage({
       type: 'PROBE_UPDATE',
