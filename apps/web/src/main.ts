@@ -4464,6 +4464,18 @@ function wireSettingsPopover() {
   const container = settingsButton.closest('.settings-toggle') as HTMLDivElement | null;
   if (!container) return;
 
+  // Move popover to body to escape all stacking contexts
+  document.body.appendChild(settingsPopover);
+
+  const updatePosition = () => {
+    const buttonRect = settingsButton.getBoundingClientRect();
+    settingsPopover.style.position = 'fixed';
+    settingsPopover.style.bottom = `${window.innerHeight - buttonRect.top + 12}px`;
+    settingsPopover.style.right = `${window.innerWidth - buttonRect.right}px`;
+    settingsPopover.style.left = 'auto';
+    settingsPopover.style.top = 'auto';
+  };
+
   const close = () => {
     container.classList.remove('is-open');
     settingsButton.setAttribute('aria-expanded', 'false');
@@ -4474,6 +4486,9 @@ function wireSettingsPopover() {
     const isOpen = container.classList.toggle('is-open');
     settingsButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
     settingsPopover.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    if (isOpen) {
+      updatePosition();
+    }
   };
 
   settingsButton.addEventListener('click', (event) => {
@@ -4482,12 +4497,21 @@ function wireSettingsPopover() {
   });
 
   document.addEventListener('click', (event) => {
-    if (!container.contains(event.target as Node)) {
+    if (!container.contains(event.target as Node) && !settingsPopover.contains(event.target as Node)) {
       close();
     }
   });
 
-  window.addEventListener('resize', close);
+  window.addEventListener('resize', () => {
+    if (container.classList.contains('is-open')) {
+      updatePosition();
+    }
+  });
+  window.addEventListener('scroll', () => {
+    if (container.classList.contains('is-open')) {
+      updatePosition();
+    }
+  });
 }
 
 function wireThemeSwitcher() {
