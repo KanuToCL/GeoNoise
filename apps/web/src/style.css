@@ -500,6 +500,20 @@ body {
   pointer-events: auto;
 }
 
+/* Pinned context panels - created dynamically when pinning inspector */
+.context-panel--pinned {
+  /* Override the static positioning - these are freely positioned */
+  top: auto;
+  right: auto;
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.context-panel--pinned .probe-title-badge {
+  display: inline-flex;
+}
+
 .probe-panel {
   position: absolute;
   right: 24px;
