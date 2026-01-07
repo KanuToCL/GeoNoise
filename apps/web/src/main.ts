@@ -3153,8 +3153,8 @@ function renderPinnedProperties(sel: Selection, container: HTMLElement) {
     if (panel) {
       container.innerHTML = `
         <div class="inspector-row"><span>Type</span><strong>Measure Grid</strong></div>
-        <div class="inspector-row"><span>Height (m)</span><strong>${panel.z.toFixed(1)}</strong></div>
-        <div class="inspector-row"><span>Resolution</span><strong>${panel.sampling.cellSize}m</strong></div>
+        <div class="inspector-row"><span>Elevation (m)</span><strong>${panel.elevation.toFixed(1)}</strong></div>
+        <div class="inspector-row"><span>Resolution</span><strong>${panel.sampling.resolution}m</strong></div>
       `;
     }
   } else if (sel.type === 'barrier') {
@@ -3163,7 +3163,7 @@ function renderPinnedProperties(sel: Selection, container: HTMLElement) {
       container.innerHTML = `
         <div class="inspector-row"><span>Type</span><strong>Barrier</strong></div>
         <div class="inspector-row"><span>Height (m)</span><strong>${barrier.height.toFixed(1)}</strong></div>
-        <div class="inspector-row"><span>Absorption</span><strong>${(barrier.absorption * 100).toFixed(0)}%</strong></div>
+        <div class="inspector-row"><span>Transmission Loss</span><strong>${barrier.transmissionLoss?.toFixed(0) ?? 'N/A'} dB</strong></div>
       `;
     }
   } else if (sel.type === 'building') {
