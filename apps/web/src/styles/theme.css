@@ -139,6 +139,14 @@
   --probe-grid: rgba(123, 130, 140, 0.24);
   --probe-text: var(--text-muted);
   --probe-bg: rgba(255, 255, 255, 0.55);
+
+  /* Source spectrum chart (light orange to differentiate from probe) */
+  --source-chart-line: #e69a5a;
+  --source-chart-fill: rgba(230, 154, 90, 0.25);
+  --source-chart-grid: rgba(123, 130, 140, 0.24);
+  --source-chart-text: var(--text-muted);
+  --source-chart-bg: rgba(255, 255, 255, 0.55);
+  --source-chart-marker: #d47f3a;
 }
 
 [data-theme='neumorphic'] {
@@ -268,4 +276,12 @@
   --probe-grid: rgba(31, 39, 51, 0.18);
   --probe-text: var(--text-muted);
   --probe-bg: rgba(255, 255, 255, 0.45);
+
+  /* Source spectrum chart (light orange to differentiate from probe) */
+  --source-chart-line: #e87d3e;
+  --source-chart-fill: rgba(232, 125, 62, 0.22);
+  --source-chart-grid: rgba(31, 39, 51, 0.18);
+  --source-chart-text: var(--text-muted);
+  --source-chart-bg: rgba(255, 255, 255, 0.45);
+  --source-chart-marker: #cf6428;
 }

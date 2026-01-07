@@ -176,6 +176,7 @@ For each source-receiver pair, we trace:
 - [ ] **Add building occlusion** (see detailed plan below)
 - [ ] Remove debug logging (console.log statements) for production
 - [ ] Add visual indicator when probe is "calculating"
+- [ ] **Expose maxReflections setting in UI** - Currently hardcoded to 0 in PropagationConfigSchema (range: 0-3). This controls higher-order reflections and could significantly impact accuracy. Need to evaluate: (1) performance impact of 1st/2nd/3rd order reflections, (2) whether to expose as advanced setting or simple toggle, (3) interaction with existing wall reflection code in probeWorker.ts
 
 ### Future Enhancements
 

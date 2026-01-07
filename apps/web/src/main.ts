@@ -2911,7 +2911,171 @@ function createInlineField(label: string, value: number, onChange: (value: numbe
 }
 
 /**
- * Create a spectrum editor component for editing 9-band source levels
+ * Render a source spectrum chart on canvas showing dB SPL @ 1m with spherical spreading.
+ *
+ * This chart visualizes the source's frequency spectrum converted from sound power level (Lw)
+ * to sound pressure level (SPL) at 1 meter distance, assuming spherical spreading in free field.
+ * Uses a light orange color scheme to visually distinguish from the probe's blue/teal chart.
+ *
+ * Physics: SPL @ 1m = Lw - 11 dB (spherical spreading formula: Lp = Lw - 20*log10(r) - 11)
+ *
+ * Features:
+ * - Logarithmic frequency axis (63 Hz to 16 kHz octave bands)
+ * - Auto-scaling Y-axis based on spectrum range
+ * - Dashed horizontal grid lines for readability
+ * - Light orange area fill under the spectrum curve
+ * - Circle markers at each octave band frequency
+ * - Overall weighted level display (A/C/Z weighting)
+ *
+ * @param canvas - The canvas element to render on
+ * @param ctx - The 2D rendering context
+ * @param spectrum - 9-band octave spectrum in dB Lw (sound power level)
+ * @param gain - Master gain offset in dB to apply to spectrum
+ * @param weighting - Frequency weighting to apply ('A', 'C', or 'Z')
+ */
+function renderSourceChartOn(
+  canvas: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  spectrum: Spectrum9,
+  gain: number,
+  weighting: FrequencyWeighting = 'Z'
+) {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const width = rect.width;
+  const height = rect.height;
+
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  ctx.scale(dpr, dpr);
+
+  if (!width || !height) return;
+
+  const padding = { left: 36, right: 48, top: 12, bottom: 24 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = readCssVar('--source-chart-bg');
+  ctx.fillRect(0, 0, width, height);
+
+  // Apply gain and convert Lw to SPL @ 1m (spherical spreading: SPL = Lw - 11)
+  const gainedSpectrum = spectrum.map(lw => lw + gain);
+  const splAt1m = gainedSpectrum.map(lw => lw - 11); // Spherical spreading @ 1m
+  const weightedSpl = applyWeightingToSpectrum(splAt1m as Spectrum9, weighting);
+  const overallSpl = calculateOverallLevel(splAt1m as Spectrum9, weighting);
+  const weightingUnit = weighting === 'Z' ? 'dB' : `dB(${weighting})`;
+
+  // Calculate axis ranges
+  const minFreq = OCTAVE_BANDS[0];
+  const maxFreq = OCTAVE_BANDS[OCTAVE_BANDS.length - 1];
+  const logMin = Math.log10(minFreq);
+  const logMax = Math.log10(maxFreq);
+  const minMag = Math.min(...weightedSpl);
+  const maxMag = Math.max(...weightedSpl);
+  const magMin = Math.floor((minMag - 5) / 10) * 10;
+  const magMax = Math.ceil((maxMag + 5) / 10) * 10;
+
+  // Draw horizontal grid lines (dashed)
+  ctx.strokeStyle = readCssVar('--source-chart-grid');
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  for (let i = 0; i <= 4; i++) {
+    const y = padding.top + (chartHeight * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, y);
+    ctx.lineTo(width - padding.right, y);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Calculate points with logarithmic frequency axis
+  const points = OCTAVE_BANDS.map((freq, idx) => {
+    const x = padding.left + ((Math.log10(freq) - logMin) / (logMax - logMin)) * chartWidth;
+    const value = weightedSpl[idx];
+    const ratio = (value - magMin) / (magMax - magMin || 1);
+    const y = padding.top + (1 - ratio) * chartHeight;
+    return { x, y, value, freq };
+  });
+
+  // Draw line connecting points
+  ctx.beginPath();
+  points.forEach((pt, index) => {
+    if (index === 0) {
+      ctx.moveTo(pt.x, pt.y);
+    } else {
+      ctx.lineTo(pt.x, pt.y);
+    }
+  });
+  ctx.strokeStyle = readCssVar('--source-chart-line');
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Fill area under curve (light orange area)
+  ctx.fillStyle = readCssVar('--source-chart-fill');
+  ctx.lineTo(points[points.length - 1].x, height - padding.bottom);
+  ctx.lineTo(points[0].x, height - padding.bottom);
+  ctx.closePath();
+  ctx.fill();
+
+  // Draw circle markers at each point
+  ctx.fillStyle = readCssVar('--source-chart-marker');
+  for (const point of points) {
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Y-axis labels (dB)
+  ctx.fillStyle = readCssVar('--source-chart-text');
+  ctx.font = '10px "Work Sans", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(`${magMax}`, 4, padding.top + 4);
+  ctx.fillText(`${magMin}`, 4, height - padding.bottom + 4);
+
+  // Display overall level on the right side
+  ctx.font = 'bold 12px "Work Sans", sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(`${formatLevel(overallSpl)}`, width - 4, padding.top + 12);
+  ctx.font = '9px "Work Sans", sans-serif';
+  ctx.fillText(`${weightingUnit} Pa @1m`, width - 4, padding.top + 24);
+  ctx.textAlign = 'left';
+
+  // X-axis frequency labels (first, middle, last)
+  const labelIndices = [0, 4, 8]; // 63Hz, 1kHz, 16kHz
+  for (const idx of labelIndices) {
+    const point = points[idx];
+    const freq = OCTAVE_BANDS[idx];
+    const label = freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
+    ctx.fillText(label, point.x - 8, height - 6);
+  }
+}
+
+/**
+ * Create a spectrum editor component for editing 9-band source levels.
+ *
+ * This component provides an intuitive UI for adjusting the frequency spectrum of a sound source.
+ * It replaces the previous hard-to-use text input grid with interactive vertical sliders and
+ * a real-time visual frequency chart.
+ *
+ * UI Components:
+ * - Section title ("Frequency Spectrum (dB Lw)")
+ * - Overall level display showing both dBZ (linear) and dBA (A-weighted) totals
+ * - Gain control input for master level adjustment
+ * - Canvas-based frequency chart showing SPL @ 1m with orange area fill
+ * - 9 vertical sliders (one per octave band: 63Hz to 16kHz)
+ * - Quick preset buttons (Flat, Pink, Traffic, Music)
+ *
+ * Interaction:
+ * - Sliders update values live during drag (input event)
+ * - Changes are committed on slider release (change event)
+ * - Chart updates in real-time as spectrum changes
+ * - Presets normalize to maintain current overall power level
+ *
+ * @param source - The source object containing spectrum and gain data
+ * @param onChangeSpectrum - Callback fired when spectrum values change
+ * @param onChangeGain - Callback fired when gain value changes
+ * @returns The spectrum editor DOM element
  */
 function createSpectrumEditor(
   source: Source,
@@ -2921,10 +3085,15 @@ function createSpectrumEditor(
   const container = document.createElement('div');
   container.className = 'spectrum-editor';
 
-  // Header with overall level and gain
-  const header = document.createElement('div');
-  header.className = 'spectrum-header';
+  // Header with section title
+  const sectionTitle = document.createElement('div');
+  sectionTitle.className = 'spectrum-section-title';
+  sectionTitle.textContent = 'Frequency Spectrum (dB Lw)';
+  container.appendChild(sectionTitle);
 
+  // Overall level display
+  const overallRow = document.createElement('div');
+  overallRow.className = 'spectrum-overall-row';
   const overallLabel = document.createElement('span');
   overallLabel.className = 'spectrum-overall-label';
   const updateOverallLabel = () => {
@@ -2933,10 +3102,14 @@ function createSpectrumEditor(
     overallLabel.innerHTML = `Overall: <strong>${formatLevel(overallZ)}</strong> dBZ / <strong>${formatLevel(overallA)}</strong> dBA`;
   };
   updateOverallLabel();
+  overallRow.appendChild(overallLabel);
+  container.appendChild(overallRow);
 
+  // Gain control row
   const gainRow = document.createElement('div');
   gainRow.className = 'spectrum-gain-row';
   const gainLabel = document.createElement('span');
+  gainLabel.className = 'spectrum-gain-label';
   gainLabel.textContent = 'Gain:';
   const gainInput = document.createElement('input');
   gainInput.type = 'number';
@@ -2944,85 +3117,144 @@ function createSpectrumEditor(
   gainInput.step = '1';
   gainInput.value = source.gain.toString();
   gainInput.title = 'Master gain offset (dB)';
-  gainInput.addEventListener('change', () => {
-    const next = Number(gainInput.value);
-    if (Number.isFinite(next)) {
-      source.gain = next;
-      onChangeGain(next);
-    }
-  });
   const gainUnit = document.createElement('span');
+  gainUnit.className = 'spectrum-gain-unit';
   gainUnit.textContent = 'dB';
   gainRow.appendChild(gainLabel);
   gainRow.appendChild(gainInput);
   gainRow.appendChild(gainUnit);
+  container.appendChild(gainRow);
 
-  header.appendChild(overallLabel);
-  header.appendChild(gainRow);
-  container.appendChild(header);
+  // Source spectrum chart (dB SPL @ 1m with spherical spreading)
+  const chartContainer = document.createElement('div');
+  chartContainer.className = 'source-chart-container';
+  const chartLabel = document.createElement('div');
+  chartLabel.className = 'source-chart-label';
+  chartLabel.textContent = 'SPL @ 1m (spherical)';
+  chartContainer.appendChild(chartLabel);
 
-  // Band grid
-  const grid = document.createElement('div');
-  grid.className = 'spectrum-grid';
+  const chart = document.createElement('canvas');
+  chart.className = 'source-chart';
+  chartContainer.appendChild(chart);
+  container.appendChild(chartContainer);
 
-  // Frequency labels row
-  const freqRow = document.createElement('div');
-  freqRow.className = 'spectrum-freq-row';
-  for (let i = 0; i < OCTAVE_BANDS.length; i++) {
-    const freq = OCTAVE_BANDS[i];
-    const label = document.createElement('span');
-    label.className = 'spectrum-freq-label';
-    label.textContent = freq >= 1000 ? `${freq / 1000}k` : String(freq);
-    freqRow.appendChild(label);
-  }
-  grid.appendChild(freqRow);
+  const chartCtx = chart.getContext('2d');
 
-  // Band inputs row
-  const inputRow = document.createElement('div');
-  inputRow.className = 'spectrum-input-row';
-  const inputs: HTMLInputElement[] = [];
+  const renderChart = () => {
+    if (chartCtx) {
+      renderSourceChartOn(chart, chartCtx, source.spectrum, source.gain, displayWeighting);
+    }
+  };
+
+  // Render chart after DOM insertion (use setTimeout to ensure layout is calculated)
+  setTimeout(() => {
+    renderChart();
+  }, 0);
+
+  // Interactive band sliders with value display
+  const slidersContainer = document.createElement('div');
+  slidersContainer.className = 'spectrum-sliders-container';
+
+  const sliders: HTMLInputElement[] = [];
+  const valueDisplays: HTMLSpanElement[] = [];
 
   for (let i = 0; i < OCTAVE_BANDS.length; i++) {
     const bandIndex = i;
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.className = 'ui-inset spectrum-band-input';
-    input.step = '1';
-    input.value = Math.round(source.spectrum[i]).toString();
-    input.title = `${OCTAVE_BANDS[i]} Hz`;
-    input.addEventListener('change', () => {
-      const next = Number(input.value);
+    const freq = OCTAVE_BANDS[i];
+    const freqLabel = freq >= 1000 ? `${freq / 1000}k` : String(freq);
+
+    const sliderColumn = document.createElement('div');
+    sliderColumn.className = 'spectrum-slider-column';
+
+    // Value display above slider
+    const valueDisplay = document.createElement('span');
+    valueDisplay.className = 'spectrum-slider-value';
+    valueDisplay.textContent = Math.round(source.spectrum[i]).toString();
+    valueDisplays.push(valueDisplay);
+
+    // Vertical slider (range input rotated via CSS)
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.className = 'spectrum-slider';
+    slider.min = '40';
+    slider.max = '130';
+    slider.step = '1';
+    slider.value = source.spectrum[i].toString();
+    slider.title = `${freqLabel} Hz: ${Math.round(source.spectrum[i])} dB Lw`;
+    sliders.push(slider);
+
+    // Frequency label below slider
+    const freqLabelEl = document.createElement('span');
+    freqLabelEl.className = 'spectrum-slider-freq';
+    freqLabelEl.textContent = freqLabel;
+
+    // Handle slider input (live updates)
+    slider.addEventListener('input', () => {
+      const next = Number(slider.value);
+      valueDisplay.textContent = Math.round(next).toString();
+      slider.title = `${freqLabel} Hz: ${Math.round(next)} dB Lw`;
+    });
+
+    // Handle slider change (commit value)
+    slider.addEventListener('change', () => {
+      const next = Number(slider.value);
       if (Number.isFinite(next)) {
         source.spectrum[bandIndex] = next;
-        // Update overall power display
         source.power = calculateOverallLevel(source.spectrum, 'Z');
         updateOverallLabel();
+        renderChart();
         onChangeSpectrum([...source.spectrum] as Spectrum9);
       }
     });
-    inputs.push(input);
-    inputRow.appendChild(input);
-  }
-  grid.appendChild(inputRow);
 
-  // Weighting reference row (A-weighting values)
-  const weightRow = document.createElement('div');
-  weightRow.className = 'spectrum-weight-row';
-  for (let i = 0; i < A_WEIGHTING_ARRAY.length; i++) {
-    const weight = A_WEIGHTING_ARRAY[i];
-    const label = document.createElement('span');
-    label.className = 'spectrum-weight-label';
-    label.textContent = weight >= 0 ? `+${weight}` : String(weight);
-    label.title = `A-weighting: ${weight} dB`;
-    weightRow.appendChild(label);
+    sliderColumn.appendChild(valueDisplay);
+    sliderColumn.appendChild(slider);
+    sliderColumn.appendChild(freqLabelEl);
+    slidersContainer.appendChild(sliderColumn);
   }
-  grid.appendChild(weightRow);
 
-  container.appendChild(grid);
+  container.appendChild(slidersContainer);
+
+  // Helper to update all sliders from spectrum
+  const updateSliders = () => {
+    for (let i = 0; i < 9; i++) {
+      sliders[i].value = source.spectrum[i].toString();
+      valueDisplays[i].textContent = Math.round(source.spectrum[i]).toString();
+      const freq = OCTAVE_BANDS[i];
+      const freqLabel = freq >= 1000 ? `${freq / 1000}k` : String(freq);
+      sliders[i].title = `${freqLabel} Hz: ${Math.round(source.spectrum[i])} dB Lw`;
+    }
+    renderChart();
+  };
+
+  // Gain input handler
+  gainInput.addEventListener('change', () => {
+    const next = Number(gainInput.value);
+    if (Number.isFinite(next)) {
+      source.gain = next;
+      renderChart();
+      onChangeGain(next);
+    }
+  });
 
   // Quick presets
   const presets = document.createElement('div');
   presets.className = 'spectrum-presets';
+
+  const applyPreset = (shape: number[]) => {
+    const targetPower = source.power;
+    const tempSpectrum = shape.map(offset => 100 + offset);
+    const tempOverall = calculateOverallLevel(tempSpectrum as Spectrum9, 'Z');
+    const adjustment = targetPower - tempOverall;
+
+    for (let i = 0; i < 9; i++) {
+      source.spectrum[i] = Math.round(100 + shape[i] + adjustment);
+    }
+    source.power = calculateOverallLevel(source.spectrum, 'Z');
+    updateOverallLabel();
+    updateSliders();
+    onChangeSpectrum([...source.spectrum] as Spectrum9);
+  };
 
   const flatButton = document.createElement('button');
   flatButton.type = 'button';
@@ -3031,14 +3263,8 @@ function createSpectrumEditor(
   flatButton.title = 'Set all bands to same level';
   flatButton.addEventListener('click', () => {
     const level = Math.round(source.power);
-    const bandLevel = level - 10 * Math.log10(9); // Distribute energy across bands
-    for (let i = 0; i < 9; i++) {
-      source.spectrum[i] = Math.round(bandLevel);
-      inputs[i].value = Math.round(bandLevel).toString();
-    }
-    source.power = calculateOverallLevel(source.spectrum, 'Z');
-    updateOverallLabel();
-    onChangeSpectrum([...source.spectrum] as Spectrum9);
+    const bandLevel = level - 10 * Math.log10(9);
+    applyPreset([0, 0, 0, 0, 0, 0, 0, 0, 0].map(() => bandLevel - 100));
   });
 
   const pinkButton = document.createElement('button');
@@ -3047,28 +3273,9 @@ function createSpectrumEditor(
   pinkButton.textContent = 'Pink';
   pinkButton.title = 'Pink noise (-3 dB/octave)';
   pinkButton.addEventListener('click', () => {
-    // Pink noise: -3 dB per octave from 1kHz reference
-    // First, create the shape relative to 1kHz
-    const refIndex = 4; // 1000 Hz
-    const pinkShape: number[] = [];
-    for (let i = 0; i < 9; i++) {
-      const octavesFromRef = i - refIndex;
-      pinkShape[i] = -3 * octavesFromRef;
-    }
-
-    // Now normalize to target overall power
-    const targetPower = source.power;
-    const tempSpectrum = pinkShape.map(offset => 100 + offset); // Temp spectrum at 100 dB ref
-    const tempOverall = calculateOverallLevel(tempSpectrum as Spectrum9, 'Z');
-    const adjustment = targetPower - tempOverall;
-
-    for (let i = 0; i < 9; i++) {
-      source.spectrum[i] = Math.round(100 + pinkShape[i] + adjustment);
-      inputs[i].value = Math.round(source.spectrum[i]).toString();
-    }
-    source.power = calculateOverallLevel(source.spectrum, 'Z');
-    updateOverallLabel();
-    onChangeSpectrum([...source.spectrum] as Spectrum9);
+    const refIndex = 4;
+    const pinkShape = Array.from({ length: 9 }, (_, i) => -3 * (i - refIndex));
+    applyPreset(pinkShape);
   });
 
   const trafficButton = document.createElement('button');
@@ -3077,22 +3284,7 @@ function createSpectrumEditor(
   trafficButton.textContent = 'Traffic';
   trafficButton.title = 'Typical road traffic spectrum';
   trafficButton.addEventListener('click', () => {
-    // Typical road traffic spectrum (relative to 1kHz band)
-    const trafficShape = [8, 5, 2, 0, -2, -5, -8, -12, -18];
-
-    // Normalize to target overall power
-    const targetPower = source.power;
-    const tempSpectrum = trafficShape.map(offset => 100 + offset); // Temp spectrum at 100 dB ref
-    const tempOverall = calculateOverallLevel(tempSpectrum as Spectrum9, 'Z');
-    const adjustment = targetPower - tempOverall;
-
-    for (let i = 0; i < 9; i++) {
-      source.spectrum[i] = Math.round(100 + trafficShape[i] + adjustment);
-      inputs[i].value = Math.round(source.spectrum[i]).toString();
-    }
-    source.power = calculateOverallLevel(source.spectrum, 'Z');
-    updateOverallLabel();
-    onChangeSpectrum([...source.spectrum] as Spectrum9);
+    applyPreset([8, 5, 2, 0, -2, -5, -8, -12, -18]);
   });
 
   const musicButton = document.createElement('button');
@@ -3101,22 +3293,7 @@ function createSpectrumEditor(
   musicButton.textContent = 'Music';
   musicButton.title = 'Typical music/PA spectrum';
   musicButton.addEventListener('click', () => {
-    // Typical music/PA spectrum with strong bass
-    const musicShape = [6, 4, 2, 0, -1, -2, -4, -8, -14];
-
-    // Normalize to target overall power
-    const targetPower = source.power;
-    const tempSpectrum = musicShape.map(offset => 100 + offset); // Temp spectrum at 100 dB ref
-    const tempOverall = calculateOverallLevel(tempSpectrum as Spectrum9, 'Z');
-    const adjustment = targetPower - tempOverall;
-
-    for (let i = 0; i < 9; i++) {
-      source.spectrum[i] = Math.round(100 + musicShape[i] + adjustment);
-      inputs[i].value = Math.round(source.spectrum[i]).toString();
-    }
-    source.power = calculateOverallLevel(source.spectrum, 'Z');
-    updateOverallLabel();
-    onChangeSpectrum([...source.spectrum] as Spectrum9);
+    applyPreset([6, 4, 2, 0, -1, -2, -4, -8, -14]);
   });
 
   presets.appendChild(flatButton);
