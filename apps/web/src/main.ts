@@ -5096,7 +5096,18 @@ function setInteractionActive(active: boolean) {
 }
 
 function shouldLiveUpdateMap(activeDrag: DragState | null) {
-  return activeDrag?.type === 'source' || activeDrag?.type === 'barrier';
+  if (!activeDrag) return false;
+  // Any drag that modifies geometry should trigger map recalculation
+  const geometryDragTypes = [
+    'source',
+    'barrier',
+    'barrier-endpoint',
+    'barrier-rotate',
+    'building',
+    'building-resize',
+    'building-rotate',
+  ];
+  return geometryDragTypes.includes(activeDrag.type);
 }
 
 function startInteractionForDrag(activeDrag: DragState | null) {
