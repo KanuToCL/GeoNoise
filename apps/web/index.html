@@ -640,7 +640,7 @@
                 <div class="collapsible-header-left">
                   <div class="collapsible-title-group">
                     <span class="collapsible-title">barrier diffraction</span>
-                    <span class="collapsible-subtitle">Maekawa thin-screen model (1968)</span>
+                    <span class="collapsible-subtitle">Maekawa thin-screen model with side diffraction</span>
                   </div>
                 </div>
                 <span class="standards-badge standards-badge--empirical">Maekawa</span>
@@ -649,7 +649,9 @@
               <div class="collapsible-divider"></div>
               <div class="collapsible-body">
                 <div class="collapsible-content">
-                  <p class="spec-text">Sound diffracts over barriers. Attenuation depends on the path difference δ.</p>
+                  <p class="spec-text">Sound diffracts over and around barriers. Attenuation depends on the path difference δ.</p>
+
+                  <p class="spec-text"><strong>Over-Top Diffraction (vertical):</strong></p>
                   <pre class="physics-diagram">    S                    R
      \                  /
       \   δ = A+B-d   /
@@ -659,7 +661,27 @@
                   <div class="formula-highlight">δ = A + B - d &nbsp;&nbsp;|&nbsp;&nbsp; N = 2δf/c</div>
                   <p class="spec-text"><strong>Insertion loss:</strong></p>
                   <div class="formula-highlight">A<sub>bar</sub> = 10·log₁₀(3 + 20·N) &nbsp;&nbsp; capped at 20-25 dB</div>
-                  <p class="spec-text"><em>Low frequencies diffract easily → less attenuation. High frequencies are blocked effectively.</em></p>
+
+                  <p class="spec-text" style="margin-top: 16px;"><strong>Side Diffraction (horizontal):</strong></p>
+                  <p class="spec-text">Sound can also bend around the ends of finite-length barriers:</p>
+                  <pre class="physics-diagram">      ════════════════  Barrier (top view)
+     ●                  ●
+   Left               Right
+   Edge               Edge
+     ↑                  ↑
+  S ─┘                  └─ R
+(around left)      (around right)</pre>
+                  <p class="spec-text">Path difference for side: δ = |S→Edge| + |Edge→R| - |S→R|</p>
+                  <p class="spec-text">The path with <strong>minimum δ</strong> (over-top or around sides) determines the effective attenuation.</p>
+
+                  <p class="spec-text" style="margin-top: 16px;"><strong>Side Diffraction Toggle:</strong></p>
+                  <table class="physics-table">
+                    <tr><th>Mode</th><th>Behavior</th></tr>
+                    <tr><td><strong>Off</strong></td><td>ISO 9613-2 infinite barrier assumption. Only over-top diffraction.</td></tr>
+                    <tr><td><strong>Auto</strong></td><td>Enable side diffraction for barriers &lt; 50m (recommended default).</td></tr>
+                    <tr><td><strong>On</strong></td><td>Always compute side diffraction for all barriers.</td></tr>
+                  </table>
+                  <p class="spec-text" style="margin-top: 12px;"><em>Low frequencies diffract easily → less attenuation. High frequencies are blocked effectively.</em></p>
                 </div>
               </div>
             </div>
