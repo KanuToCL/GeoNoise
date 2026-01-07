@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { copyFileSync, cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,7 +19,9 @@ const projects = [
   'apps/web',
 ];
 
-execFileSync('tsc', ['-b', ...projects], {
+// Use npx to run tsc, which works in CI/Vercel environments where tsc isn't in PATH
+// The -b flag enables project references (build mode)
+execSync(`npx tsc -b ${projects.join(' ')}`, {
   cwd: repoRoot,
   stdio: 'inherit',
 });

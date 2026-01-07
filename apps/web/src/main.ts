@@ -29,7 +29,6 @@ import {
   calculateOverallLevel,
   applyWeightingToSpectrum,
   OCTAVE_BANDS,
-  A_WEIGHTING_ARRAY,
   type Spectrum9,
   type FrequencyWeighting,
 } from '@geonoise/shared';
