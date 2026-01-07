@@ -20,12 +20,18 @@
   margin: 8px;
   box-shadow: inset 3px 3px 6px rgba(163, 177, 198, 0.5),
               inset -3px -3px 6px rgba(255, 255, 255, 0.8);
+  /* Inset scrollbar by its own width (12px) from the container edge */
+  border-right: 12px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb {
   background: linear-gradient(145deg, #f0f4f8, #d8dfe8);
   border-radius: 10px;
-  border: 2px solid #e0e5ec;
+  /* Maintain visual thumb size while respecting inset */
+  border: 2px solid transparent;
+  border-right-width: 14px;
+  background-clip: padding-box;
   box-shadow: 3px 3px 6px rgba(163, 177, 198, 0.4),
               -3px -3px 6px rgba(255, 255, 255, 0.7);
 }
