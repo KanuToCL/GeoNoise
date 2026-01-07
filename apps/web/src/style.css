@@ -4,6 +4,48 @@
   padding: 0;
 }
 
+/* ============================================================================
+   Neumorphic Scrollbars
+   ============================================================================ */
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: linear-gradient(145deg, var(--surface-press-lo), var(--surface-press-hi));
+  border-radius: 5px;
+  box-shadow: inset 2px 2px 4px var(--shadow-dark), inset -1px -1px 3px var(--shadow-light);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
+  border-radius: 5px;
+  box-shadow: 2px 2px 4px var(--shadow-dark), -1px -1px 3px var(--shadow-light);
+  border: 1px solid var(--border-softer);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(145deg, var(--surface-lo), var(--surface-hi));
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: var(--surface-press-hi);
+  box-shadow: inset 1px 1px 2px var(--shadow-dark);
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--surface);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-lo) var(--surface-press-lo);
+}
+
 html {
   width: 100%;
   height: 100%;
@@ -1784,6 +1826,11 @@ button.icon-button {
   display: flex;
   align-items: center;
   gap: 14px;
+}
+
+/* Raise z-index when settings popover is open to appear above inspector panels */
+.canvas-corner:has(.settings-toggle.is-open) {
+  z-index: 100;
 }
 
 .canvas-corner-left {
