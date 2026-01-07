@@ -6,6 +6,38 @@ This document contains the implementation history of completed features. For pla
 
 ## 2026-01-07
 
+### Ground Reflection 2D Distance Fix
+
+**Status:** ✅ Fixed (Bug)
+
+**Issue:** The `agrTwoRayDb()` ground reflection function was receiving 3D distance instead of 2D horizontal distance.
+
+**Root Cause:** The two-ray phasor model computes path lengths internally using:
+```
+r1 = sqrt(d² + (hs + hr)²)  // reflected path
+r2 = sqrt(d² + (hs - hr)²)  // direct path
+```
+When 'd' is the 3D distance (which already includes height), the height differential gets double-counted, leading to incorrect ground reflection amplitudes.
+
+**Fix Location:** `packages/engine/src/propagation/index.ts`
+
+```typescript
+// Extract horizontal distance from 3D distance
+const heightDiff = sourceHeight - receiverHeight;
+const distance2D = Math.sqrt(Math.max(0, distance * distance - heightDiff * heightDiff));
+Agr = agrTwoRayDb(
+  frequency,
+  distance2D,  // Now correctly uses 2D horizontal distance
+  sourceHeight,
+  receiverHeight,
+  ...
+);
+```
+
+**Discovered:** During 3D physics audit of all ray-path calculations.
+
+---
+
 ### Noise Map Resolution Strategy
 
 **Status:** ✅ Completed
