@@ -90,10 +90,10 @@ type Probe = {
 };
 
 type Barrier = {
-  // UI barrier primitive (matches the feature ticket’s intent):
+  // UI barrier primitive (matches the feature ticket's intent):
   // - p1/p2 are endpoints in the 2D editor plane (x,y) in local meters (ENU).
   // - height is the vertical screen height (meters). In physics, this becomes the Z of the barrier top edge.
-  // - transmissionLoss is reserved for future “through-wall” modeling (currently unused by the engine).
+  // - transmissionLoss is reserved for future "through-wall" modeling (currently unused by the engine).
   //
   // Important: The UI is 2D, but the engine computes 3D acoustics:
   //   - source z = hs
@@ -107,6 +107,61 @@ type Barrier = {
   height: number;
   transmissionLoss?: number;
 };
+
+// Barrier manipulation constants
+const BARRIER_HANDLE_RADIUS = 5;
+const BARRIER_HANDLE_HIT_RADIUS = 12;
+const BARRIER_ROTATION_HANDLE_OFFSET_PX = 20;
+const BARRIER_ROTATION_HANDLE_RADIUS = 5;
+const BARRIER_MIN_LENGTH = 1;
+
+// Helper functions for barrier geometry
+function getBarrierMidpoint(barrier: Barrier): Point {
+  return {
+    x: (barrier.p1.x + barrier.p2.x) / 2,
+    y: (barrier.p1.y + barrier.p2.y) / 2,
+  };
+}
+
+function getBarrierLength(barrier: Barrier): number {
+  const dx = barrier.p2.x - barrier.p1.x;
+  const dy = barrier.p2.y - barrier.p1.y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function getBarrierRotation(barrier: Barrier): number {
+  return Math.atan2(barrier.p2.y - barrier.p1.y, barrier.p2.x - barrier.p1.x);
+}
+
+function getBarrierRotationHandlePosition(barrier: Barrier, handleOffset: number): Point {
+  const mid = getBarrierMidpoint(barrier);
+  const rotation = getBarrierRotation(barrier);
+  // Handle is perpendicular to the barrier, offset from midpoint
+  const perpAngle = rotation + Math.PI / 2;
+  return {
+    x: mid.x + Math.cos(perpAngle) * handleOffset,
+    y: mid.y + Math.sin(perpAngle) * handleOffset,
+  };
+}
+
+function setBarrierFromMidpointAndRotation(
+  barrier: Barrier,
+  midpoint: Point,
+  rotation: number,
+  length: number
+): void {
+  const halfLength = length / 2;
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  barrier.p1 = {
+    x: midpoint.x - cos * halfLength,
+    y: midpoint.y - sin * halfLength,
+  };
+  barrier.p2 = {
+    x: midpoint.x + cos * halfLength,
+    y: midpoint.y + sin * halfLength,
+  };
+}
 
 type BuildingData = {
   id: string;
@@ -315,6 +370,19 @@ type DragState =
       id: string;
       startAngle: number;
       startRotation: number;
+    }
+  | {
+      type: 'barrier-endpoint';
+      id: string;
+      endpoint: 'p1' | 'p2';
+    }
+  | {
+      type: 'barrier-rotate';
+      id: string;
+      startAngle: number;
+      startRotation: number;
+      startLength: number;
+      startMidpoint: Point;
     };
 
 type DragContribution = {
@@ -3692,11 +3760,40 @@ function renderProperties() {
   if (current.type === 'barrier') {
     const barrier = scene.barriers.find((item) => item.id === current.id);
     if (!barrier) return;
+
+    // Length control
+    const currentLength = getBarrierLength(barrier);
+    propertiesBody.appendChild(createInputRow('Length (m)', currentLength, (value) => {
+      const newLength = Math.max(BARRIER_MIN_LENGTH, value);
+      const midpoint = getBarrierMidpoint(barrier);
+      const rotation = getBarrierRotation(barrier);
+      setBarrierFromMidpointAndRotation(barrier, midpoint, rotation, newLength);
+      pushHistory();
+      computeScene();
+    }));
+
+    // Wall height control
     propertiesBody.appendChild(createInputRow('Wall height (m)', barrier.height, (value) => {
       barrier.height = Math.max(0.1, value);
       pushHistory();
       computeScene();
     }));
+
+    // Rotation control (in degrees)
+    const currentRotation = (getBarrierRotation(barrier) * 180) / Math.PI;
+    propertiesBody.appendChild(createInputRow('Rotation (deg)', currentRotation, (value) => {
+      const midpoint = getBarrierMidpoint(barrier);
+      const length = getBarrierLength(barrier);
+      const newRotation = (value * Math.PI) / 180;
+      setBarrierFromMidpointAndRotation(barrier, midpoint, newRotation, length);
+      pushHistory();
+      computeScene();
+    }));
+
+    const hint = document.createElement('div');
+    hint.className = 'property-hint';
+    hint.textContent = 'Drag endpoint handles to resize. Drag the lollipop to rotate.';
+    propertiesBody.appendChild(hint);
   }
 
   if (current.type === 'building') {
@@ -4301,6 +4398,33 @@ function hitTestPanelHandle(point: Point) {
   return null;
 }
 
+function hitTestBarrierHandle(point: Point): { type: 'p1' | 'p2' | 'rotate' } | null {
+  const current = selection;
+  if (current.type !== 'barrier') return null;
+  const barrier = scene.barriers.find((item) => item.id === current.id);
+  if (!barrier) return null;
+
+  // Test endpoint handles (p1 and p2)
+  const p1Screen = worldToCanvas(barrier.p1);
+  if (distance(p1Screen, point) <= BARRIER_HANDLE_HIT_RADIUS) {
+    return { type: 'p1' as const };
+  }
+  const p2Screen = worldToCanvas(barrier.p2);
+  if (distance(p2Screen, point) <= BARRIER_HANDLE_HIT_RADIUS) {
+    return { type: 'p2' as const };
+  }
+
+  // Test rotation handle (perpendicular from midpoint)
+  const handleOffset = BARRIER_ROTATION_HANDLE_OFFSET_PX / pixelsPerMeter;
+  const handleWorld = getBarrierRotationHandlePosition(barrier, handleOffset);
+  const handleCanvas = worldToCanvas(handleWorld);
+  if (distance(handleCanvas, point) <= BARRIER_HANDLE_HIT_RADIUS) {
+    return { type: 'rotate' as const };
+  }
+
+  return null;
+}
+
 function hitTestBuildingHandle(point: Point) {
   const current = selection;
   if (current.type !== 'building') return null;
@@ -4679,15 +4803,49 @@ function drawBarriers() {
     }
   };
 
+  const drawHandle = (point: Point, radius: number, fill: string, stroke: string) => {
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  };
+
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
   for (const barrier of scene.barriers) {
     const start = worldToCanvas(barrier.p1);
     const end = worldToCanvas(barrier.p2);
-    if (selection.type === 'barrier' && selection.id === barrier.id) {
+    const isSelected = selection.type === 'barrier' && selection.id === barrier.id;
+
+    if (isSelected) {
       drawLine(start, end, canvasTheme.selectionHalo, 12);
       drawLine(start, end, canvasTheme.barrierSelected, 6);
+
+      // Draw endpoint handles (p1 and p2)
+      drawHandle(start, BARRIER_HANDLE_RADIUS, '#ffffff', canvasTheme.barrierSelected);
+      drawHandle(end, BARRIER_HANDLE_RADIUS, '#ffffff', canvasTheme.barrierSelected);
+
+      // Draw rotation handle (perpendicular from midpoint)
+      const handleOffset = BARRIER_ROTATION_HANDLE_OFFSET_PX / pixelsPerMeter;
+      const midWorld = getBarrierMidpoint(barrier);
+      const midCanvas = worldToCanvas(midWorld);
+      const handleWorld = getBarrierRotationHandlePosition(barrier, handleOffset);
+      const handleCanvas = worldToCanvas(handleWorld);
+
+      // Draw line from midpoint to rotation handle
+      ctx.strokeStyle = canvasTheme.barrierSelected;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(midCanvas.x, midCanvas.y);
+      ctx.lineTo(handleCanvas.x, handleCanvas.y);
+      ctx.stroke();
+
+      // Draw rotation handle circle
+      drawHandle(handleCanvas, BARRIER_ROTATION_HANDLE_RADIUS, '#ffffff', canvasTheme.barrierSelected);
     } else {
       drawLine(start, end, canvasTheme.barrierStroke, 6);
     }
@@ -5023,6 +5181,35 @@ function applyDrag(worldPoint: Point) {
       building.rotation = activeDrag.startRotation + (angle - activeDrag.startAngle);
     }
   }
+  if (activeDrag.type === 'barrier-endpoint') {
+    const barrier = scene.barriers.find((item) => item.id === activeDrag.id);
+    if (barrier) {
+      // Move just the selected endpoint
+      if (activeDrag.endpoint === 'p1') {
+        barrier.p1 = { x: worldPoint.x, y: worldPoint.y };
+      } else {
+        barrier.p2 = { x: worldPoint.x, y: worldPoint.y };
+      }
+    }
+  }
+  if (activeDrag.type === 'barrier-rotate') {
+    const barrier = scene.barriers.find((item) => item.id === activeDrag.id);
+    if (barrier) {
+      // Calculate new angle from midpoint to mouse
+      const angle = Math.atan2(
+        worldPoint.y - activeDrag.startMidpoint.y,
+        worldPoint.x - activeDrag.startMidpoint.x
+      );
+      // Rotation handle is perpendicular (90 deg offset), so adjust
+      const newRotation = angle - Math.PI / 2;
+      setBarrierFromMidpointAndRotation(
+        barrier,
+        activeDrag.startMidpoint,
+        newRotation,
+        activeDrag.startLength
+      );
+    }
+  }
   if (activeDrag.type === 'panel-vertex') {
     const panel = scene.panels.find((item) => item.id === activeDrag.id);
     if (panel && panel.points[activeDrag.index]) {
@@ -5170,6 +5357,38 @@ function handlePointerDown(event: MouseEvent) {
   }
 
   if (activeTool === 'select') {
+    // Check for barrier handle hits (endpoints and rotation)
+    const barrierHandle = hitTestBarrierHandle(canvasPoint);
+    if (barrierHandle) {
+      const current = selection;
+      if (current.type === 'barrier') {
+        const barrier = scene.barriers.find((item) => item.id === current.id);
+        if (barrier) {
+          dragDirty = false;
+          if (barrierHandle.type === 'rotate') {
+            const midpoint = getBarrierMidpoint(barrier);
+            const startAngle = Math.atan2(worldPoint.y - midpoint.y, worldPoint.x - midpoint.x);
+            dragState = {
+              type: 'barrier-rotate',
+              id: barrier.id,
+              startAngle,
+              startRotation: getBarrierRotation(barrier),
+              startLength: getBarrierLength(barrier),
+              startMidpoint: midpoint,
+            };
+          } else {
+            // p1 or p2 endpoint
+            dragState = {
+              type: 'barrier-endpoint',
+              id: barrier.id,
+              endpoint: barrierHandle.type,
+            };
+          }
+          startInteractionForDrag(dragState);
+          return;
+        }
+      }
+    }
     const buildingHandle = hitTestBuildingHandle(canvasPoint);
     if (buildingHandle) {
       const current = selection;
