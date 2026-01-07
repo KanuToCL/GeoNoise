@@ -391,14 +391,12 @@
         <!-- Contextual inspector shown only when a selection exists. -->
         <aside class="context-panel" id="contextPanel" aria-hidden="true">
           <div class="context-header" id="contextHeader">
-            <div class="context-title">Inspector</div>
+            <div class="context-title-wrap">
+              <div class="context-title" id="contextTitle">Select an element</div>
+            </div>
             <button class="context-close ui-button" id="contextClose" type="button" aria-label="Close inspector">×</button>
           </div>
           <div class="inspector-body">
-            <div class="inspector-row">
-              <span>Selected</span>
-              <strong id="selectionLabel">None</strong>
-            </div>
             <div class="inspector-row">
               <span>Mode</span>
               <strong id="modeLabel">Select</strong>

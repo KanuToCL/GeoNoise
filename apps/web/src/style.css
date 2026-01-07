@@ -683,12 +683,42 @@ body {
   cursor: grabbing;
 }
 
+.context-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
 .context-title {
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: var(--ui-letter-spacing);
   color: var(--text-soft);
+  cursor: text;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 120ms ease;
+}
+
+.context-title:hover {
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.context-title-input {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--ui-letter-spacing);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  padding: 4px 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .context-close {

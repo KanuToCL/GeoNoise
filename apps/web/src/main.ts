@@ -463,7 +463,7 @@ const dockFab = document.querySelector('#dockFab') as HTMLButtonElement | null;
 const dockExpandable = document.querySelector('#dockExpandable') as HTMLDivElement | null;
 const dockLabelStage = document.querySelector('#dockLabelStage') as HTMLDivElement | null;
 const dockLabelText = document.querySelector('#dockLabelText') as HTMLSpanElement | null;
-const selectionLabel = document.querySelector('#selectionLabel') as HTMLSpanElement | null;
+const contextTitle = document.querySelector('#contextTitle') as HTMLDivElement | null;
 const selectionHint = document.querySelector('#selectionHint') as HTMLDivElement | null;
 const modeLabel = document.querySelector('#modeLabel') as HTMLSpanElement | null;
 const propertiesBody = document.querySelector('#propertiesBody') as HTMLDivElement | null;
@@ -2610,7 +2610,8 @@ function renderProbeInspector() {
     return;
   }
   if (probeTitle) {
-    probeTitle.textContent = `Probe ${probe.id.toUpperCase()}`;
+    const defaultName = `Probe ${probe.id.toUpperCase()}`;
+    probeTitle.textContent = probe.name || defaultName;
   }
   if (probeStatus) {
     probeStatus.textContent = getProbeStatusLabel(probe.id);
@@ -2721,6 +2722,11 @@ function createPinnedProbePanel(probeId: string) {
   panel.setAttribute('aria-hidden', 'false');
   panel.dataset.probeId = probeId;
 
+  // Get the probe to check for custom name
+  const probe = scene.probes.find(p => p.id === probeId);
+  const defaultName = `Probe ${probeId.toUpperCase()}`;
+  const displayName = probe?.name || defaultName;
+
   const header = document.createElement('div');
   header.className = 'probe-header';
 
@@ -2728,7 +2734,7 @@ function createPinnedProbePanel(probeId: string) {
   titleWrap.className = 'probe-title-wrap';
   const title = document.createElement('div');
   title.className = 'probe-title';
-  title.textContent = `Probe ${probeId.toUpperCase()}`;
+  title.textContent = displayName;
   const badge = document.createElement('span');
   badge.className = 'probe-title-badge';
   badge.textContent = 'Pinned';
@@ -3624,11 +3630,7 @@ function setSelection(next: Selection) {
   if (panelStatsSection) {
     panelStatsSection.classList.toggle('is-hidden', current.type !== 'panel');
   }
-  if (selectionLabel) {
-    selectionLabel.textContent = current.type === 'none'
-      ? 'None'
-      : `${selectionTypeLabel(current.type)} ${current.id.toUpperCase()}`;
-  }
+  updateContextTitle();
   if (selectionHint) {
     selectionHint.classList.toggle('is-hidden', current.type !== 'none');
   }
@@ -3637,6 +3639,78 @@ function setSelection(next: Selection) {
   renderPanelLegend();
   renderPanelStats();
   requestRender();
+}
+
+/** Get the display name for the currently selected element */
+function getSelectedElementName(): string {
+  const current = selection;
+  if (current.type === 'none') return 'Select an element';
+
+  const defaultName = `${selectionTypeLabel(current.type)} ${current.id.toUpperCase()}`;
+
+  if (current.type === 'source') {
+    const source = scene.sources.find(s => s.id === current.id);
+    return source?.name || defaultName;
+  }
+  if (current.type === 'receiver') {
+    const receiver = scene.receivers.find(r => r.id === current.id);
+    return receiver?.name || defaultName;
+  }
+  if (current.type === 'panel') {
+    const panel = scene.panels.find(p => p.id === current.id);
+    return panel?.name || `Grid ${current.id.toUpperCase()}`;
+  }
+  if (current.type === 'barrier') {
+    const barrier = scene.barriers.find(b => b.id === current.id);
+    return barrier?.name || defaultName;
+  }
+  if (current.type === 'building') {
+    const building = scene.buildings.find(b => b.id === current.id);
+    return building?.name || defaultName;
+  }
+  return defaultName;
+}
+
+/** Update the selected element's name */
+function setSelectedElementName(name: string): void {
+  const current = selection;
+  if (current.type === 'none') return;
+
+  if (current.type === 'source') {
+    const source = scene.sources.find(s => s.id === current.id);
+    if (source) source.name = name;
+  } else if (current.type === 'receiver') {
+    const receiver = scene.receivers.find(r => r.id === current.id);
+    if (receiver) receiver.name = name;
+  } else if (current.type === 'panel') {
+    const panel = scene.panels.find(p => p.id === current.id);
+    if (panel) panel.name = name;
+  } else if (current.type === 'barrier') {
+    const barrier = scene.barriers.find(b => b.id === current.id);
+    if (barrier) barrier.name = name;
+  } else if (current.type === 'building') {
+    const building = scene.buildings.find(b => b.id === current.id);
+    if (building) building.name = name;
+  }
+
+  markDirty();
+  pushHistory();
+  requestRender();
+}
+
+/** Update the context panel title with the selected element name */
+function updateContextTitle(): void {
+  if (!contextTitle) return;
+  const current = selection;
+  if (current.type === 'none') {
+    contextTitle.textContent = 'Select an element';
+    contextTitle.title = '';
+    return;
+  }
+
+  const displayName = getSelectedElementName();
+  contextTitle.textContent = displayName;
+  contextTitle.title = 'Double-click to edit name';
 }
 
 function renderProperties() {
@@ -3696,17 +3770,9 @@ function renderProperties() {
     return;
   }
 
-  const header = document.createElement('div');
-  header.className = 'property-header';
-  header.innerHTML = `<strong>${selectionTypeLabel(current.type)}</strong><span>${current.id.toUpperCase()}</span>`;
-  propertiesBody.appendChild(header);
-
   if (current.type === 'source') {
     const source = scene.sources.find((item) => item.id === current.id);
     if (!source) return;
-    propertiesBody.appendChild(createInlineEditableRow('Name', source.name, `Source ${source.id.toUpperCase()}`, (value) => {
-      source.name = value;
-    }));
     propertiesBody.appendChild(createInputRow('Height (m)', source.z, (value) => {
       source.z = value;
       pushHistory();
@@ -3739,9 +3805,6 @@ function renderProperties() {
   if (current.type === 'receiver') {
     const receiver = scene.receivers.find((item) => item.id === current.id);
     if (!receiver) return;
-    propertiesBody.appendChild(createInlineEditableRow('Name', receiver.name || '', `Receiver ${receiver.id.toUpperCase()}`, (value) => {
-      receiver.name = value;
-    }));
     propertiesBody.appendChild(createInputRow('Height (m)', receiver.z, (value) => {
       receiver.z = value;
       pushHistory();
@@ -3752,9 +3815,6 @@ function renderProperties() {
   if (current.type === 'panel') {
     const panel = scene.panels.find((item) => item.id === current.id);
     if (!panel) return;
-    propertiesBody.appendChild(createInlineEditableRow('Name', panel.name || '', `Grid ${panel.id.toUpperCase()}`, (value) => {
-      panel.name = value;
-    }));
     propertiesBody.appendChild(createInputRow('Elevation (m)', panel.elevation, (value) => {
       panel.elevation = value;
       pushHistory();
@@ -3774,11 +3834,6 @@ function renderProperties() {
   if (current.type === 'barrier') {
     const barrier = scene.barriers.find((item) => item.id === current.id);
     if (!barrier) return;
-
-    // Name control
-    propertiesBody.appendChild(createInlineEditableRow('Name', barrier.name || '', `Barrier ${barrier.id.toUpperCase()}`, (value) => {
-      barrier.name = value;
-    }));
 
     // Length control
     const currentLength = getBarrierLength(barrier);
@@ -3818,9 +3873,6 @@ function renderProperties() {
   if (current.type === 'building') {
     const building = scene.buildings.find((item) => item.id === current.id);
     if (!building) return;
-    propertiesBody.appendChild(createInlineEditableRow('Name', building.name || '', `Building ${building.id.toUpperCase()}`, (value) => {
-      building.name = value;
-    }));
     propertiesBody.appendChild(createInputRow('Width (m)', building.width, (value) => {
       building.width = Math.max(BUILDING_MIN_SIZE, value);
       pushHistory();
@@ -3862,91 +3914,6 @@ function createInputRow(label: string, value: number, onChange: (value: number) 
   });
   row.appendChild(name);
   row.appendChild(input);
-  return row;
-}
-
-/**
- * Creates an inline editable text row.
- * Shows as plain text by default, becomes editable on double-click.
- */
-function createInlineEditableRow(
-  label: string,
-  value: string,
-  placeholder: string,
-  onChange: (value: string) => void
-) {
-  const row = document.createElement('div');
-  row.className = 'property-row';
-
-  const nameLabel = document.createElement('span');
-  nameLabel.textContent = label;
-
-  const valueContainer = document.createElement('div');
-  valueContainer.className = 'inline-editable';
-  valueContainer.style.flex = '1';
-  valueContainer.style.position = 'relative';
-
-  const displayText = document.createElement('span');
-  displayText.className = 'inline-editable-text';
-  displayText.textContent = value || placeholder;
-  displayText.title = 'Double-click to edit';
-  displayText.style.cursor = 'text';
-  displayText.style.padding = '4px 8px';
-  displayText.style.borderRadius = '4px';
-  displayText.style.display = 'inline-block';
-  displayText.style.minWidth = '60px';
-  if (!value) {
-    displayText.style.opacity = '0.5';
-    displayText.style.fontStyle = 'italic';
-  }
-
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.classList.add('ui-inset');
-  input.value = value;
-  input.style.display = 'none';
-  input.style.width = '100%';
-
-  const startEditing = () => {
-    displayText.style.display = 'none';
-    input.style.display = 'block';
-    input.value = value;
-    input.focus();
-    input.select();
-  };
-
-  const finishEditing = () => {
-    input.style.display = 'none';
-    displayText.style.display = 'inline-block';
-    const newValue = input.value.trim();
-    if (newValue !== value) {
-      onChange(newValue);
-      displayText.textContent = newValue || placeholder;
-      displayText.style.opacity = newValue ? '1' : '0.5';
-      displayText.style.fontStyle = newValue ? 'normal' : 'italic';
-      markDirty();
-      pushHistory();
-      requestRender();
-    }
-  };
-
-  displayText.addEventListener('dblclick', startEditing);
-
-  input.addEventListener('blur', finishEditing);
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      finishEditing();
-    } else if (e.key === 'Escape') {
-      input.value = value;
-      input.style.display = 'none';
-      displayText.style.display = 'inline-block';
-    }
-  });
-
-  valueContainer.appendChild(displayText);
-  valueContainer.appendChild(input);
-  row.appendChild(nameLabel);
-  row.appendChild(valueContainer);
   return row;
 }
 
@@ -5879,6 +5846,52 @@ function wireContextPanel() {
     });
   }
 
+  // Double-click on context title to edit element name
+  if (contextTitle) {
+    contextTitle.addEventListener('dblclick', () => {
+      if (selection.type === 'none') return;
+
+      const currentName = getSelectedElementName();
+      const defaultName = `${selectionTypeLabel(selection.type)} ${selection.id.toUpperCase()}`;
+
+      // Create input for editing
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'context-title-input';
+      input.value = currentName === defaultName ? '' : currentName;
+      input.placeholder = defaultName;
+
+      // Replace title with input
+      contextTitle.style.display = 'none';
+      contextTitle.parentElement?.insertBefore(input, contextTitle);
+      input.focus();
+      input.select();
+
+      const finishEditing = () => {
+        const newValue = input.value.trim();
+        if (newValue && newValue !== currentName) {
+          setSelectedElementName(newValue);
+        } else if (!newValue && currentName !== defaultName) {
+          // Clear custom name - revert to default
+          setSelectedElementName('');
+        }
+        input.remove();
+        contextTitle.style.display = '';
+        updateContextTitle();
+      };
+
+      input.addEventListener('blur', finishEditing);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          finishEditing();
+        } else if (e.key === 'Escape') {
+          input.remove();
+          contextTitle.style.display = '';
+        }
+      });
+    });
+  }
+
   if (!contextPanel || !contextHeader) return;
 
   let isDragging = false;
@@ -5931,6 +5944,64 @@ function wireProbePanel() {
     if (header) {
       makePanelDraggable(probePanel, header, { parent: uiLayer ?? undefined, padding: 12, ignoreSelector: 'button' });
     }
+  }
+
+  // Double-click on probe title to edit probe name
+  if (probeTitle) {
+    probeTitle.addEventListener('dblclick', () => {
+      const probe = getActiveProbe();
+      if (!probe) return;
+
+      const defaultName = `Probe ${probe.id.toUpperCase()}`;
+      const currentName = probe.name || defaultName;
+
+      // Create input for editing
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'context-title-input';
+      input.value = currentName === defaultName ? '' : currentName;
+      input.placeholder = defaultName;
+
+      // Replace title with input
+      probeTitle.style.display = 'none';
+      probeTitle.parentElement?.insertBefore(input, probeTitle);
+      input.focus();
+      input.select();
+
+      const finishEditing = () => {
+        const newValue = input.value.trim();
+        if (newValue && newValue !== currentName) {
+          probe.name = newValue;
+          probeTitle.textContent = newValue;
+          markDirty();
+          pushHistory();
+          requestRender();
+        } else if (!newValue && currentName !== defaultName) {
+          // Clear custom name - revert to default
+          probe.name = undefined;
+          probeTitle.textContent = defaultName;
+          markDirty();
+          pushHistory();
+          requestRender();
+        }
+        input.remove();
+        probeTitle.style.display = '';
+      };
+
+      input.addEventListener('blur', finishEditing);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          finishEditing();
+        } else if (e.key === 'Escape') {
+          input.remove();
+          probeTitle.style.display = '';
+        }
+      });
+    });
+
+    // Add tooltip hint
+    probeTitle.title = 'Double-click to edit name';
+    probeTitle.style.cursor = 'text';
   }
 
   probeClose?.addEventListener('click', () => {
