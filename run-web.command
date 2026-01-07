@@ -29,6 +29,60 @@ PORT="${PORT:-5173}"
 # Kill any stale server on this port before starting
 lsof -ti:"$PORT" | xargs kill -9 2>/dev/null || true
 
+# ============================================================================
+# BUILD INTEGRITY CHECK
+# ============================================================================
+# Ensure critical compiled files exist before starting the dev server.
+# This prevents 404 errors when TypeScript build is stale or incomplete.
+
+CRITICAL_FILES=(
+  "apps/web/dist/main.js"
+  "apps/web/dist/probeWorker.js"
+  "packages/core/dist/index.js"
+  "packages/engine/dist/index.js"
+  "packages/shared/dist/index.js"
+)
+
+REBUILD_NEEDED=false
+
+for file in "${CRITICAL_FILES[@]}"; do
+  if [[ ! -f "$ROOT_DIR/$file" ]]; then
+    echo "⚠️  Missing: $file"
+    REBUILD_NEEDED=true
+  fi
+done
+
+# Also check if source is newer than dist (stale build detection)
+if [[ -f "$ROOT_DIR/apps/web/src/main.ts" && -f "$ROOT_DIR/apps/web/dist/main.js" ]]; then
+  if [[ "$ROOT_DIR/apps/web/src/main.ts" -nt "$ROOT_DIR/apps/web/dist/main.js" ]]; then
+    echo "⚠️  Source newer than build: apps/web/src/main.ts"
+    REBUILD_NEEDED=true
+  fi
+fi
+
+if [[ "$REBUILD_NEEDED" == true ]]; then
+  echo ""
+  echo "🔧 Build is stale or incomplete. Running force rebuild..."
+  echo ""
+
+  # Clear stale tsbuildinfo files
+  find "$ROOT_DIR" -name "*.tsbuildinfo" -delete 2>/dev/null || true
+
+  # Force rebuild all packages in order
+  npx tsc -b --force \
+    packages/shared \
+    packages/core \
+    packages/geo \
+    packages/engine \
+    packages/engine-backends \
+    packages/engine-webgpu \
+    apps/web
+
+  echo ""
+  echo "✅ Rebuild complete!"
+  echo ""
+fi
+
 npm -w @geonoise/web run dev &
 DEV_PID=$!
 

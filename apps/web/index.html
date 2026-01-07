@@ -182,6 +182,16 @@
                     <option value="cylindrical">Cylindrical</option>
                   </select>
                 </label>
+                <!-- Barrier Side Diffraction: horizontal diffraction around barrier ends -->
+                <!-- 'off': ISO 9613-2 infinite barrier, 'auto': enable for <50m, 'on': always -->
+                <label class="property-row property-row-stack">
+                  <span>Barrier Side Diffraction</span>
+                  <select class="ui-inset" id="propagationBarrierSideDiffraction">
+                    <option value="off">Off (Over-top only)</option>
+                    <option value="auto" selected>Auto (< 50m barriers)</option>
+                    <option value="on">On (All barriers)</option>
+                  </select>
+                </label>
               </div>
             </div>
           </div>

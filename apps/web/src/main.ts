@@ -526,6 +526,7 @@ const propagationMaxDistance = document.querySelector('#propagationMaxDistance')
 const propagationGroundDetails = document.querySelector('#propagationGroundDetails') as HTMLDivElement | null;
 const propagationGroundHelp = document.querySelector('#propagationGroundHelp') as HTMLDivElement | null;
 const propagationGroundModelHelp = document.querySelector('#propagationGroundModelHelp') as HTMLDivElement | null;
+const propagationBarrierSideDiffraction = document.querySelector('#propagationBarrierSideDiffraction') as HTMLSelectElement | null;
 
 const layerSources = document.querySelector('#layerSources') as HTMLInputElement | null;
 const layerReceivers = document.querySelector('#layerReceivers') as HTMLInputElement | null;
@@ -2351,6 +2352,11 @@ function buildProbeRequest(probe: Probe): ProbeRequest {
     position: { x: probe.x, y: probe.y, z: probe.z ?? PROBE_DEFAULT_Z },
     sources,
     walls,
+    config: {
+      barrierSideDiffraction: getPropagationConfig().barrierSideDiffraction ?? 'auto',
+      groundType: getPropagationConfig().groundType ?? 'mixed',
+      groundMixedFactor: getPropagationConfig().groundMixedFactor ?? 0.5,
+    },
   };
 }
 
@@ -6726,6 +6732,9 @@ function updatePropagationControls() {
     propagationGroundType.disabled = !groundEnabled;
   }
   if (propagationMaxDistance) propagationMaxDistance.value = current.maxDistance.toString();
+  if (propagationBarrierSideDiffraction) {
+    propagationBarrierSideDiffraction.value = current.barrierSideDiffraction ?? 'auto';
+  }
   if (propagationGroundDetails) {
     propagationGroundDetails.classList.toggle('is-hidden', !groundEnabled);
   }
@@ -6790,6 +6799,12 @@ function wirePropagationControls() {
     }
     updatePropagationConfig({ maxDistance: Math.max(1, Math.round(next)) });
     updatePropagationControls();
+    markDirty();
+    computeScene();
+  });
+
+  propagationBarrierSideDiffraction?.addEventListener('change', () => {
+    updatePropagationConfig({ barrierSideDiffraction: propagationBarrierSideDiffraction.value as PropagationConfig['barrierSideDiffraction'] });
     markDirty();
     computeScene();
   });

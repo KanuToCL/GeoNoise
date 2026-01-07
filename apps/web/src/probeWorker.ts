@@ -136,12 +136,15 @@ type Spectrum9 = [number, number, number, number, number, number, number, number
 // Configuration
 // ============================================================================
 
+type BarrierSideDiffractionMode = 'off' | 'auto' | 'on';
+
 interface ProbeConfig {
   groundReflection: boolean;
   groundType: 'hard' | 'soft' | 'mixed';
   groundMixedFactor: number;
   wallReflections: boolean;
   barrierDiffraction: boolean;
+  barrierSideDiffraction: BarrierSideDiffractionMode;
   coherentSummation: boolean;
   atmosphericAbsorption: boolean;
   temperature: number;
@@ -155,6 +158,7 @@ const DEFAULT_CONFIG: ProbeConfig = {
   groundMixedFactor: 0.5,
   wallReflections: true,
   barrierDiffraction: true,
+  barrierSideDiffraction: 'auto',
   coherentSummation: true,
   atmosphericAbsorption: true,
   temperature: 20,
@@ -728,6 +732,174 @@ function maekawaDiffraction(pathDiff: number, frequency: number, c: number): num
 }
 
 // ============================================================================
+// Barrier Side Diffraction
+// ============================================================================
+//
+// When barriers have finite length, sound can diffract around the ends
+// (horizontal diffraction) as well as over the top (vertical diffraction).
+//
+// Physics:
+// - ISO 9613-2 assumes barriers are effectively infinite in length
+// - In reality, short barriers provide less attenuation due to side paths
+// - The minimum-loss path (loudest) dominates the result
+//
+// The side diffraction uses the same Maekawa formula but with the
+// path difference computed in the horizontal plane.
+// ============================================================================
+
+/**
+ * Result of barrier diffraction calculation with all path options.
+ */
+interface BarrierDiffractionResult {
+  /** Over-top diffraction path */
+  topPath: RayPath | null;
+  /** Around-left-edge diffraction path */
+  leftPath: RayPath | null;
+  /** Around-right-edge diffraction path */
+  rightPath: RayPath | null;
+}
+
+/**
+ * Compute the total length of a barrier from its vertices.
+ */
+function computeBarrierLength(barrier: WallSegment): number {
+  return distance2D(barrier.p1, barrier.p2);
+}
+
+/**
+ * Determine if side diffraction should be computed for this barrier.
+ *
+ * @param barrier - The barrier segment
+ * @param mode - 'off' | 'auto' | 'on'
+ * @param lengthThreshold - Length threshold for 'auto' mode (default 50m)
+ */
+function shouldUseSideDiffraction(
+  barrier: WallSegment,
+  mode: BarrierSideDiffractionMode,
+  lengthThreshold = 50
+): boolean {
+  if (mode === 'off') return false;
+  if (mode === 'on') return true;
+
+  // 'auto' mode: enable for barriers shorter than threshold
+  const barrierLength = computeBarrierLength(barrier);
+  return barrierLength < lengthThreshold;
+}
+
+/**
+ * Compute the path difference for diffraction around a barrier edge (horizontal).
+ *
+ * The path goes: Source → Edge → Receiver
+ * Path difference: |S→Edge| + |Edge→R| - |S→R|
+ *
+ * @param source - Source position (3D, but we use 2D for horizontal diffraction)
+ * @param receiver - Receiver position (3D)
+ * @param edgePoint - The barrier edge point (2D, at ground level)
+ * @param edgeHeight - Height of the barrier edge
+ */
+function computeSidePathDifference(
+  source: Point3D,
+  receiver: Point3D,
+  edgePoint: Point2D,
+  edgeHeight: number
+): { pathDiff: number; totalDistance: number; edge3D: Point3D } {
+  // Edge point is at the barrier height
+  const edge3D: Point3D = {
+    x: edgePoint.x,
+    y: edgePoint.y,
+    z: Math.min(edgeHeight, Math.max(source.z, receiver.z)),
+  };
+
+  const pathA = distance3D(source, edge3D);
+  const pathB = distance3D(edge3D, receiver);
+  const totalDistance = pathA + pathB;
+  const directDistance = distance3D(source, receiver);
+
+  return {
+    pathDiff: totalDistance - directDistance,
+    totalDistance,
+    edge3D,
+  };
+}
+
+/**
+ * Trace all diffraction paths around/over a barrier.
+ *
+ * Returns paths for:
+ * 1. Over-top diffraction (standard Maekawa)
+ * 2. Around-left-edge diffraction (if side diffraction enabled)
+ * 3. Around-right-edge diffraction (if side diffraction enabled)
+ *
+ * The caller should sum these paths coherently and/or take the minimum loss.
+ */
+function traceBarrierDiffractionPaths(
+  source: Point3D,
+  receiver: Point3D,
+  barrier: WallSegment,
+  config: ProbeConfig
+): BarrierDiffractionResult {
+  const result: BarrierDiffractionResult = {
+    topPath: null,
+    leftPath: null,
+    rightPath: null,
+  };
+
+  const s2d = { x: source.x, y: source.y };
+  const r2d = { x: receiver.x, y: receiver.y };
+  const directDist = distance3D(source, receiver);
+
+  // 1. Over-top diffraction (always computed)
+  const intersection = segmentIntersection(s2d, r2d, barrier.p1, barrier.p2);
+  if (intersection) {
+    const diffPoint: Point3D = { x: intersection.x, y: intersection.y, z: barrier.height };
+    const pathA = distance3D(source, diffPoint);
+    const pathB = distance3D(diffPoint, receiver);
+    const totalDist = pathA + pathB;
+
+    result.topPath = {
+      type: 'diffracted',
+      totalDistance: totalDist,
+      directDistance: directDist,
+      pathDifference: totalDist - directDist,
+      reflectionPhaseChange: -Math.PI / 4,
+      absorptionFactor: 1,
+      valid: true,
+    };
+  }
+
+  // 2. Side diffraction (if enabled)
+  const useSideDiffraction = shouldUseSideDiffraction(barrier, config.barrierSideDiffraction);
+
+  if (useSideDiffraction) {
+    // Left edge (p1)
+    const leftResult = computeSidePathDifference(source, receiver, barrier.p1, barrier.height);
+    result.leftPath = {
+      type: 'diffracted',
+      totalDistance: leftResult.totalDistance,
+      directDistance: directDist,
+      pathDifference: leftResult.pathDiff,
+      reflectionPhaseChange: -Math.PI / 4,
+      absorptionFactor: 1,
+      valid: leftResult.pathDiff >= 0, // Valid if path is longer than direct
+    };
+
+    // Right edge (p2)
+    const rightResult = computeSidePathDifference(source, receiver, barrier.p2, barrier.height);
+    result.rightPath = {
+      type: 'diffracted',
+      totalDistance: rightResult.totalDistance,
+      directDistance: directDist,
+      pathDifference: rightResult.pathDiff,
+      reflectionPhaseChange: -Math.PI / 4,
+      absorptionFactor: 1,
+      valid: rightResult.pathDiff >= 0,
+    };
+  }
+
+  return result;
+}
+
+// ============================================================================
 // Ground Reflection Coefficients
 // ============================================================================
 
@@ -875,35 +1047,6 @@ function traceDirectPath(
   };
 }
 
-function traceDiffractionPath(
-  source: Point3D,
-  receiver: Point3D,
-  barrier: WallSegment
-): RayPath | null {
-  const s2d = { x: source.x, y: source.y };
-  const r2d = { x: receiver.x, y: receiver.y };
-
-  const intersection = segmentIntersection(s2d, r2d, barrier.p1, barrier.p2);
-  if (!intersection) return null;
-
-  const diffPoint: Point3D = { x: intersection.x, y: intersection.y, z: barrier.height };
-
-  const pathA = distance3D(source, diffPoint);
-  const pathB = distance3D(diffPoint, receiver);
-  const totalDist = pathA + pathB;
-  const directDist = distance3D(source, receiver);
-
-  return {
-    type: 'diffracted',
-    totalDistance: totalDist,
-    directDistance: directDist,
-    pathDifference: totalDist - directDist,
-    reflectionPhaseChange: -Math.PI / 4,
-    absorptionFactor: 1,
-    valid: true,
-  };
-}
-
 function traceWallReflectionPaths(
   source: Point3D,
   receiver: Point3D,
@@ -1024,13 +1167,32 @@ function computeSourceCoherent(
   pathTypes.add('direct');
 
   // Trace barrier diffraction paths if direct is blocked by barrier
+  // Now uses the new multi-path approach (top + sides if enabled)
   const barrierDiffractionPaths: RayPath[] = [];
   if (!directPath.valid && config.barrierDiffraction) {
     for (const barrier of barriers) {
-      const diffPath = traceDiffractionPath(srcPos, probePos, barrier);
-      if (diffPath && diffPath.valid) {
-        barrierDiffractionPaths.push(diffPath);
-        pathTypes.add('diffracted');
+      // Check if this barrier blocks the direct path
+      const s2d = { x: srcPos.x, y: srcPos.y };
+      const r2d = { x: probePos.x, y: probePos.y };
+      const intersection = segmentIntersection(s2d, r2d, barrier.p1, barrier.p2);
+
+      if (intersection) {
+        // Use the new multi-path diffraction function
+        const diffResult = traceBarrierDiffractionPaths(srcPos, probePos, barrier, config);
+
+        // Add all valid paths
+        if (diffResult.topPath && diffResult.topPath.valid) {
+          barrierDiffractionPaths.push(diffResult.topPath);
+          pathTypes.add('diffracted');
+        }
+        if (diffResult.leftPath && diffResult.leftPath.valid) {
+          barrierDiffractionPaths.push(diffResult.leftPath);
+          pathTypes.add('diffracted');
+        }
+        if (diffResult.rightPath && diffResult.rightPath.valid) {
+          barrierDiffractionPaths.push(diffResult.rightPath);
+          pathTypes.add('diffracted');
+        }
       }
     }
   }
@@ -1257,11 +1419,19 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
   const barriers = segments.filter(s => s.type === 'barrier');
   const buildings = extractBuildingFootprints(req.walls);
 
+  // Merge request config with defaults
+  const config: ProbeConfig = {
+    ...DEFAULT_CONFIG,
+    barrierSideDiffraction: req.config?.barrierSideDiffraction ?? DEFAULT_CONFIG.barrierSideDiffraction,
+    groundType: req.config?.groundType ?? DEFAULT_CONFIG.groundType,
+    groundMixedFactor: req.config?.groundMixedFactor ?? DEFAULT_CONFIG.groundMixedFactor,
+  };
+
   const sourceSpectra: number[][] = [];
   let totalGhostCount = 0;
 
   for (const source of req.sources) {
-    const result = computeSourceCoherent(source, probePos, segments, barriers, buildings, DEFAULT_CONFIG);
+    const result = computeSourceCoherent(source, probePos, segments, barriers, buildings, config);
 
     sourceSpectra.push(result.spectrum);
 

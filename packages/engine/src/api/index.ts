@@ -177,6 +177,13 @@ export interface ProbeWall {
   height: number;
 }
 
+/** Configuration for probe physics (subset of PropagationConfig for worker) */
+export interface ProbeConfig {
+  barrierSideDiffraction?: 'off' | 'auto' | 'on';
+  groundType?: 'hard' | 'soft' | 'mixed';
+  groundMixedFactor?: number;
+}
+
 /** Request sent to a probe worker */
 export interface ProbeRequest {
   type: 'CALCULATE_PROBE';
@@ -184,6 +191,7 @@ export interface ProbeRequest {
   position: { x: number; y: number; z: number };
   sources: ProbeSource[];
   walls: ProbeWall[];
+  config?: ProbeConfig;
 }
 
 /** Response received from a probe worker */

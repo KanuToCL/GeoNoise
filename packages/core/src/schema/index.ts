@@ -253,6 +253,16 @@ export const MeteoSchema = z.object({
 // Engine Configuration
 // ============================================================================
 
+/**
+ * Barrier side diffraction mode.
+ * Controls whether horizontal diffraction around barrier ends is computed.
+ *
+ * - 'off': Over-top diffraction only (ISO 9613 assumption of infinite barriers)
+ * - 'auto': Enable for barriers shorter than 50m (recommended default)
+ * - 'on': Enable for all barriers
+ */
+export const BarrierSideDiffractionSchema = z.enum(['off', 'auto', 'on']);
+
 /** Propagation model configuration */
 export const PropagationConfigSchema = z.object({
   spreading: z.enum(['spherical', 'cylindrical']).default('spherical'),
@@ -265,6 +275,14 @@ export const PropagationConfigSchema = z.object({
   maxReflections: z.number().int().min(0).max(3).default(0),
   maxDistance: z.number().positive().default(2000), // meters
   includeBarriers: z.boolean().default(true),
+
+  /**
+   * Enable horizontal diffraction around barrier ends.
+   * - 'off': Over-top only (ISO 9613-2 infinite barrier assumption)
+   * - 'auto': Enable for barriers < 50m (default, most realistic)
+   * - 'on': Enable for all barriers
+   */
+  barrierSideDiffraction: BarrierSideDiffractionSchema.default('auto'),
 });
 
 /** Engine configuration schema */
@@ -342,6 +360,7 @@ export type Obstacle = z.infer<typeof ObstacleSchema>;
 export type GridConfig = z.infer<typeof GridConfigSchema>;
 export type Meteo = z.infer<typeof MeteoSchema>;
 export type PropagationConfig = z.infer<typeof PropagationConfigSchema>;
+export type BarrierSideDiffraction = z.infer<typeof BarrierSideDiffractionSchema>;
 export type EngineConfig = z.infer<typeof EngineConfigSchema>;
 export type Origin = z.infer<typeof OriginSchema>;
 export type Scene = z.infer<typeof SceneSchema>;
