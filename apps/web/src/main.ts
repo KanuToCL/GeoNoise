@@ -639,6 +639,8 @@ type PinnedContextPanel = {
   selection: Selection;
   panel: HTMLElement;
   propertiesContainer: HTMLElement;
+  legendContainer?: HTMLElement; // For grid panels
+  statsContainer?: HTMLElement; // For grid panels
 };
 const pinnedContextPanels: PinnedContextPanel[] = [];
 let pinnedContextSeq = 1;
@@ -1372,10 +1374,14 @@ function renderPanelLegend() {
     panelLegend.innerHTML = '<span class="legend-empty">Select a measure grid to view the color range.</span>';
     return;
   }
+  renderPanelLegendFor(current.id, panelLegend);
+}
 
-  const result = results.panels.find((panel) => panel.panelId === current.id);
+/** Render panel legend for a given panel ID into a specific container */
+function renderPanelLegendFor(panelId: string, container: HTMLElement) {
+  const result = results.panels.find((panel) => panel.panelId === panelId);
   if (!result || !Number.isFinite(result.LAeq_min) || !Number.isFinite(result.LAeq_max)) {
-    panelLegend.innerHTML = '<span class="legend-empty">Measure grid results pending.</span>';
+    container.innerHTML = '<span class="legend-empty">Measure grid results pending.</span>';
     return;
   }
 
@@ -1383,7 +1389,7 @@ function renderPanelLegend() {
     .map((stop) => `${colorToCss(getSampleColor(stop))} ${Math.round(stop * 100)}%`)
     .join(', ');
 
-  panelLegend.innerHTML = `
+  container.innerHTML = `
     <div class="legend-bar" style="background: linear-gradient(90deg, ${gradientStops});"></div>
     <div class="legend-labels">
       <span>${formatLevel(result.LAeq_min)} dB</span>
@@ -1404,10 +1410,15 @@ function renderPanelStats() {
     panelStats.innerHTML = '<span class="legend-empty">Select a measure grid to view stats.</span>';
     return;
   }
+  renderPanelStatsFor(current.id, panelStats);
+}
 
-  const result = results.panels.find((panel) => panel.panelId === current.id);
+/** Render panel stats for a given panel ID into a specific container */
+function renderPanelStatsFor(panelId: string, container: HTMLElement) {
+  container.innerHTML = '';
+  const result = results.panels.find((panel) => panel.panelId === panelId);
   if (!result) {
-    panelStats.innerHTML = '<span class="legend-empty">Measure grid results pending.</span>';
+    container.innerHTML = '<span class="legend-empty">Measure grid results pending.</span>';
     return;
   }
 
@@ -1424,7 +1435,7 @@ function renderPanelStats() {
     const row = document.createElement('div');
     row.className = 'stat-row';
     row.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
-    panelStats.appendChild(row);
+    container.appendChild(row);
   }
 }
 
@@ -2276,6 +2287,7 @@ function renderResults() {
 
   renderPanelLegend();
   renderPanelStats();
+  refreshPinnedContextPanels();
 }
 
 function setActiveProbe(nextId: string | null) {
@@ -3061,12 +3073,49 @@ function createPinnedContextPanel(sel: Selection) {
 
   body.appendChild(propertiesSection);
 
+  // For panel/grid selections, add legend and stats sections
+  let legendContainer: HTMLElement | undefined;
+  let statsContainer: HTMLElement | undefined;
+  if (sel.type === 'panel') {
+    // Legend section
+    const legendSection = document.createElement('div');
+    legendSection.className = 'context-section';
+    const legendTitle = document.createElement('div');
+    legendTitle.className = 'context-section-title';
+    legendTitle.textContent = 'Color Range';
+    legendContainer = document.createElement('div');
+    legendContainer.className = 'panel-legend';
+    legendSection.appendChild(legendTitle);
+    legendSection.appendChild(legendContainer);
+    renderPanelLegendFor(sel.id, legendContainer);
+    body.appendChild(legendSection);
+
+    // Stats section
+    const statsSection = document.createElement('div');
+    statsSection.className = 'context-section';
+    const statsTitle = document.createElement('div');
+    statsTitle.className = 'context-section-title';
+    statsTitle.textContent = 'Statistics';
+    statsContainer = document.createElement('div');
+    statsContainer.className = 'panel-stats';
+    statsSection.appendChild(statsTitle);
+    statsSection.appendChild(statsContainer);
+    renderPanelStatsFor(sel.id, statsContainer);
+    body.appendChild(statsSection);
+  }
+
   panel.appendChild(header);
   panel.appendChild(body);
   uiLayer.appendChild(panel);
 
   // Store the pinned panel with properties container reference
-  const pinnedPanel: PinnedContextPanel = { selection: sel, panel, propertiesContainer: propBody };
+  const pinnedPanel: PinnedContextPanel = {
+    selection: sel,
+    panel,
+    propertiesContainer: propBody,
+    legendContainer,
+    statsContainer,
+  };
   pinnedContextPanels.push(pinnedPanel);
 
   // Position the panel with offset based on number of pinned panels
@@ -3133,6 +3182,15 @@ function createPinnedContextPanel(sel: Selection) {
 function refreshPinnedContextPanels() {
   for (const pinned of pinnedContextPanels) {
     renderPropertiesFor(pinned.selection, pinned.propertiesContainer);
+    // Also refresh legend and stats for panel type pins
+    if (pinned.selection.type === 'panel') {
+      if (pinned.legendContainer) {
+        renderPanelLegendFor(pinned.selection.id, pinned.legendContainer);
+      }
+      if (pinned.statsContainer) {
+        renderPanelStatsFor(pinned.selection.id, pinned.statsContainer);
+      }
+    }
   }
 }
 
@@ -6086,6 +6144,8 @@ function wireContextPanel() {
       // Create a pinned panel for the current selection
       if (selection.type !== 'none' && selection.type !== 'probe') {
         createPinnedContextPanel({ ...selection });
+        // Clear selection to close the main inspector (pinned panel now shows it)
+        setSelection({ type: 'none' });
       }
     });
   }
