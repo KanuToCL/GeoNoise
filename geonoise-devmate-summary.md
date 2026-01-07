@@ -865,13 +865,205 @@ A_gr = -20·log₁₀|1 + γ·(r₁/r₂)·e^(jφ)|
 where γ = (ζ·cosθ - 1)/(ζ·cosθ + 1)  (complex reflection coefficient)
 ```
 
-### Barrier Attenuation (Maekawa)
-```
-δ = A + B - d  (path difference)
-N = 2δ/λ  (Fresnel number)
+### Barrier Diffraction (Thin Screen - Maekawa)
 
-A_bar = 10·log₁₀(3 + 20·N)  for N ≥ -0.1
-A_bar capped at 20 dB (single-screen limit)
+Sound bends around obstacles via diffraction. For a **thin barrier** (wall, fence), we use the Maekawa formula based on the Fresnel number.
+
+**Geometry:**
+```
+        S                    R
+         \                  /
+          \    δ = A+B-d   /
+           \      ↓       /
+            A ──→ ● ←── B     (single diffraction point at barrier top)
+                  │
+            ══════╧══════     Thin barrier (negligible thickness)
+                  ↑
+            Barrier height h
+```
+
+**Equations:**
+```
+Path lengths:
+  A = distance from Source to barrier top
+  B = distance from barrier top to Receiver
+  d = direct distance Source → Receiver
+
+Path difference:
+  δ = A + B - d
+
+Fresnel number (frequency-dependent):
+  N = 2δ/λ = 2δf/c
+
+  where:
+    λ = wavelength (m)
+    f = frequency (Hz)
+    c = speed of sound ≈ 343 m/s
+
+Insertion loss (Maekawa approximation):
+  A_bar = 10·log₁₀(3 + 20·N)    for N ≥ -0.1
+  A_bar = 0                      for N < -0.1 (no shadow zone)
+  A_bar capped at 20-25 dB       (single-screen limit)
+```
+
+**Physical interpretation:**
+- Higher frequency → larger N → more attenuation (shadow zone deepens)
+- Larger path difference → larger N → more attenuation
+- Low frequencies diffract easily (small N) → less attenuation
+
+---
+
+### Building Diffraction (Thick Barrier - Double Edge)
+
+For a **thick obstacle** like a building, sound must diffract **twice** — once at the near edge (entry), once at the far edge (exit). This is called **double-edge diffraction**.
+
+**Geometry:**
+```
+        S                              R
+         \                            /
+          \  δ₁                  δ₂  /
+           \  ↓                  ↓  /
+            A₁ ──→ ●────────● ←── A₂
+                   │ ROOF   │
+            ═══════╧════════╧═══════   Building (thick obstacle)
+                   ↑        ↑
+              Edge 1    Edge 2
+              (near)    (far)
+
+    Path: S → Edge1 → Edge2 → R  (over the roof)
+```
+
+**Path segments:**
+```
+A₁ = distance from Source to Edge 1 (near roof edge)
+T  = distance across roof (Edge 1 → Edge 2)
+A₂ = distance from Edge 2 to Receiver
+d  = direct distance Source → Receiver
+
+Total detour path: A₁ + T + A₂
+Path difference: δ = (A₁ + T + A₂) - d
+```
+
+**Double-edge Fresnel approach:**
+
+Option 1: **Separate edge losses (Pierce approximation)**
+```
+D_total ≈ D₁ + D₂ + C
+
+where:
+  D₁ = Maekawa loss for first edge diffraction
+  D₂ = Maekawa loss for second edge diffraction
+  C  = coupling correction (typically 0 to +6 dB)
+```
+
+Option 2: **Modified Maekawa coefficient**
+```
+For double diffraction, use coefficient 40 instead of 20:
+
+N = 2δ/λ                              (Fresnel number for total path difference)
+A_bar = 10·log₁₀(3 + 40·N)            (double-edge formula)
+A_bar capped at 25-30 dB              (thick barrier limit)
+```
+
+**Example calculation:**
+```
+Building: 10m wide, 8m tall
+Source:   5m from building, z = 1.5m
+Receiver: 10m from building, z = 1.5m
+Frequency: 1000 Hz (λ = 0.343m)
+
+Heights above receiver plane:
+  Δh = 8m - 1.5m = 6.5m
+
+Path calculation:
+  A₁ = √(5² + 6.5²) = 8.2m    (source to roof edge 1)
+  T  = 10m                     (across roof)
+  A₂ = √(10² + 6.5²) = 11.9m   (roof edge 2 to receiver)
+
+  Total detour = 8.2 + 10 + 11.9 = 30.1m
+  Direct path d = √((5+10+10)² + 0²) = 25m
+
+  Path difference δ = 30.1 - 25 = 5.1m
+
+Fresnel number:
+  N = 2 × 5.1 / 0.343 = 29.7
+
+Insertion loss (double-edge):
+  A_bar = 10·log₁₀(3 + 40 × 29.7) = 30.8 dB
+  → Capped at ~25 dB
+```
+
+**Comparison: Thin vs Thick barriers**
+```
+┌─────────────────────┬─────────────────┬───────────────────┐
+│ Aspect              │ Thin Barrier    │ Thick Building    │
+├─────────────────────┼─────────────────┼───────────────────┤
+│ Diffraction points  │ 1 (top edge)    │ 2 (entry + exit)  │
+│ Path                │ S → Edge → R    │ S → E1 → E2 → R   │
+│ Maekawa coefficient │ 20              │ 40 (≈ 2× loss)    │
+│ Typical max loss    │ 20 dB           │ 25-30 dB          │
+│ Frequency effect    │ Higher f = more │ Same, but more    │
+│                     │ attenuation     │ pronounced        │
+└─────────────────────┴─────────────────┴───────────────────┘
+```
+
+---
+
+### Horizontal (Edge) Diffraction Around Buildings
+
+Sound can also diffract **around** buildings horizontally, not just over them. This requires finding the shortest path around building corners.
+
+**Geometry (top-down view):**
+```
+                    ┌───────────────┐
+                    │               │
+        S ─────────→│   BUILDING    │←───────── R
+                    │               │
+                    └───────────────┘
+
+        Path blocked by building footprint
+
+        Alternative: Diffract around corner(s)
+
+                    ┌───────────────┐
+                    │               │
+        S ─────────→●               │            R
+                   /│               │           /
+                  / └───────────────┘          /
+                 /                            /
+                └────────────────────────────┘
+                    Diffracted path around corner
+```
+
+**Path options:**
+```
+1. Over the roof (vertical diffraction)
+   - Uses building height
+   - Double-edge as described above
+
+2. Around left corner (horizontal diffraction)
+   - Uses building footprint geometry
+   - May be single or double edge depending on building shape
+
+3. Around right corner (horizontal diffraction)
+   - Same as left, different path
+
+4. Combined paths (multiple diffractions)
+   - L-shaped buildings may require corner + edge
+```
+
+**Selection logic:**
+```
+For each blocked path, find minimum-loss diffraction route:
+
+  loss_over  = double_edge_loss(roof_path)
+  loss_left  = edge_loss(left_corner_path)
+  loss_right = edge_loss(right_corner_path)
+
+  effective_loss = min(loss_over, loss_left, loss_right)
+
+  // In practice, energetic sum of all paths may be used
+  // for more accurate interference modeling
 ```
 
 ### Total Attenuation
