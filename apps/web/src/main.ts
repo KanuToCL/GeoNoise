@@ -2359,6 +2359,10 @@ function buildProbeRequest(probe: Probe): ProbeRequest {
       barrierSideDiffraction: getPropagationConfig().barrierSideDiffraction ?? 'auto',
       groundType: getPropagationConfig().groundType ?? 'mixed',
       groundMixedFactor: getPropagationConfig().groundMixedFactor ?? 0.5,
+      atmosphericAbsorption: getPropagationConfig().atmosphericAbsorption ?? 'simple',
+      temperature: getMeteo().temperature ?? 20,
+      humidity: getMeteo().relativeHumidity ?? 50,
+      pressure: getMeteo().pressure ?? 101.325,
     },
   };
 }

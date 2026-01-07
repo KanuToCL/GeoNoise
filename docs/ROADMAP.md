@@ -122,14 +122,22 @@ For horizontal diffraction around barrier ends, the edge should be at ground lev
 
 ---
 
-#### 6. Simplified Atmospheric Absorption in probeWorker
+#### 5. Simplified Atmospheric Absorption in probeWorker
 
-**File:** `/apps/web/src/probeWorker.ts` (lines 700-723)
-**Status:** ⬜ Not Started
+**File:** `/apps/web/src/probeWorker.ts`
+**Status:** ✅ Fixed (2026-01-07)
 
-**Problem:** Uses simplified lookup table instead of full ISO 9613-1 model. Values are approximately correct but less accurate than core package.
+**Problem:** The probe always used a simplified lookup table for atmospheric absorption, ignoring the user's UI selection between "ISO 9613-1" and "Simple" models.
 
-**Fix:** Import `atmosphericAbsorptionISO9613()` from core package for consistency.
+**Root cause:** The `buildProbeRequest()` function was not passing the `atmosphericAbsorption` model setting to the worker. The probe config only had a boolean on/off flag, not the model type.
+
+**Fix applied:**
+1. Updated `ProbeConfig` interface to use `AtmosphericAbsorptionModel` type (`'none' | 'simple' | 'iso9613'`)
+2. Updated `buildProbeRequest()` to pass the model from `getPropagationConfig()`, plus temperature, humidity, and pressure
+3. Implemented full ISO 9613-1 atmospheric absorption formula in probeWorker
+4. Updated `atmosphericAbsorptionCoeff()` to dispatch to the correct model based on user selection
+
+Now the probe respects the "Atmospheric Model" dropdown in Settings.
 
 ---
 

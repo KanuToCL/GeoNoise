@@ -137,6 +137,7 @@ type Spectrum9 = [number, number, number, number, number, number, number, number
 // ============================================================================
 
 type BarrierSideDiffractionMode = 'off' | 'auto' | 'on';
+type AtmosphericAbsorptionModel = 'none' | 'simple' | 'iso9613';
 
 interface ProbeConfig {
   groundReflection: boolean;
@@ -146,9 +147,10 @@ interface ProbeConfig {
   barrierDiffraction: boolean;
   barrierSideDiffraction: BarrierSideDiffractionMode;
   coherentSummation: boolean;
-  atmosphericAbsorption: boolean;
+  atmosphericAbsorption: AtmosphericAbsorptionModel;
   temperature: number;
   humidity: number;
+  pressure: number;
   speedOfSound: number;
 }
 
@@ -160,9 +162,10 @@ const DEFAULT_CONFIG: ProbeConfig = {
   barrierDiffraction: true,
   barrierSideDiffraction: 'auto',
   coherentSummation: true,
-  atmosphericAbsorption: true,
+  atmosphericAbsorption: 'simple',
   temperature: 20,
   humidity: 50,
+  pressure: 101.325,
   speedOfSound: SPEED_OF_SOUND,
 };
 
@@ -682,7 +685,21 @@ function spreadingLoss(distance: number): number {
   return 20 * Math.log10(d) + 11;
 }
 
-function atmosphericAbsorptionCoeff(frequency: number, temp: number, humidity: number): number {
+function atmosphericAbsorptionCoeff(
+  frequency: number,
+  temp: number,
+  humidity: number,
+  pressure: number,
+  model: AtmosphericAbsorptionModel
+): number {
+  if (model === 'none') return 0;
+
+  if (model === 'iso9613') {
+    // Full ISO 9613-1 implementation
+    return atmosphericAbsorptionISO9613(frequency, temp, humidity, pressure);
+  }
+
+  // 'simple' model: Lookup table with linear corrections
   // Simplified atmospheric absorption based on ISO 9613-1
   // Returns absorption coefficient in dB per meter
   //
@@ -721,6 +738,58 @@ function atmosphericAbsorptionCoeff(frequency: number, temp: number, humidity: n
   }
 
   return Math.max(baseAlpha * tempFactor * humidityFactor, 0);
+}
+
+/**
+ * ISO 9613-1 atmospheric absorption coefficient.
+ *
+ * Calculates the atmospheric absorption coefficient in dB/m based on:
+ * - Frequency (Hz)
+ * - Temperature (°C)
+ * - Relative humidity (%)
+ * - Atmospheric pressure (kPa)
+ *
+ * This is the full physical model accounting for:
+ * - Molecular relaxation of oxygen (O₂)
+ * - Molecular relaxation of nitrogen (N₂)
+ * - Classical absorption
+ */
+function atmosphericAbsorptionISO9613(
+  frequencyHz: number,
+  temperatureC: number,
+  relativeHumidity: number,
+  pressureKPa: number
+): number {
+  const T = temperatureC + 273.15; // Kelvin
+  const T0 = 293.15; // Reference temperature (20°C)
+  const T01 = 273.16; // Triple point of water
+  const ps0 = 101.325; // Reference pressure (kPa)
+
+  const ps = pressureKPa;
+  const f = frequencyHz;
+
+  // Molar concentration of water vapor
+  const C = -6.8346 * Math.pow(T01 / T, 1.261) + 4.6151;
+  const psat = ps0 * Math.pow(10, C);
+  const h = relativeHumidity * psat / ps;
+
+  // Oxygen relaxation frequency
+  const frO = (ps / ps0) * (24 + 4.04e4 * h * ((0.02 + h) / (0.391 + h)));
+
+  // Nitrogen relaxation frequency
+  const frN = (ps / ps0) * Math.pow(T / T0, -0.5) * (9 + 280 * h * Math.exp(-4.17 * (Math.pow(T / T0, -1 / 3) - 1)));
+
+  // Absorption coefficient (dB/m)
+  const alpha =
+    8.686 *
+    f *
+    f *
+    ((1.84e-11 * Math.pow(ps / ps0, -1) * Math.pow(T / T0, 0.5)) +
+      Math.pow(T / T0, -2.5) *
+        (0.01275 * Math.exp(-2239.1 / T) * (frO / (frO * frO + f * f)) +
+          0.1068 * Math.exp(-3352 / T) * (frN / (frN * frN + f * f))));
+
+  return alpha;
 }
 
 function maekawaDiffraction(pathDiff: number, frequency: number, c: number): number {
@@ -1261,8 +1330,8 @@ function computeSourceCoherent(
     // Direct path contribution (only if not blocked by barriers AND buildings)
     if (directPath.valid && !directBlockedByBuilding) {
       const atten = spreadingLoss(directPath.totalDistance);
-      const atm = config.atmosphericAbsorption
-        ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity) * directPath.totalDistance
+      const atm = config.atmosphericAbsorption !== 'none'
+        ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity, config.pressure, config.atmosphericAbsorption) * directPath.totalDistance
         : 0;
       const level = sourceLevel - atten - atm;
       const phase = -k * directPath.totalDistance;
@@ -1273,8 +1342,8 @@ function computeSourceCoherent(
     // This is where the frequency dependency is applied!
     for (const diffPath of buildingDiffPaths) {
       const atten = spreadingLoss(diffPath.totalDistance);
-      const atm = config.atmosphericAbsorption
-        ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity) * diffPath.totalDistance
+      const atm = config.atmosphericAbsorption !== 'none'
+        ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity, config.pressure, config.atmosphericAbsorption) * diffPath.totalDistance
         : 0;
 
       // Per-band diffraction loss based on path type
@@ -1312,8 +1381,8 @@ function computeSourceCoherent(
 
       // Calculate attenuation for ground-reflected path
       const groundAtten = spreadingLoss(groundPathDistance);
-      const groundAtm = config.atmosphericAbsorption
-        ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity) * groundPathDistance
+      const groundAtm = config.atmosphericAbsorption !== 'none'
+        ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity, config.pressure, config.atmosphericAbsorption) * groundPathDistance
         : 0;
 
       // Ground reflection reduces amplitude by:
@@ -1340,8 +1409,8 @@ function computeSourceCoherent(
     // Barrier diffraction contributions
     for (const path of barrierDiffractionPaths) {
       const atten = spreadingLoss(path.totalDistance);
-      const atm = config.atmosphericAbsorption
-        ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity) * path.totalDistance
+      const atm = config.atmosphericAbsorption !== 'none'
+        ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity, config.pressure, config.atmosphericAbsorption) * path.totalDistance
         : 0;
       const diffLoss = maekawaDiffraction(path.pathDifference, freq, c);
       const level = sourceLevel - atten - atm - diffLoss;
@@ -1352,8 +1421,8 @@ function computeSourceCoherent(
     // Wall reflection contributions
     for (const path of wallPaths) {
       const atten = spreadingLoss(path.totalDistance);
-      const atm = config.atmosphericAbsorption
-        ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity) * path.totalDistance
+      const atm = config.atmosphericAbsorption !== 'none'
+        ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity, config.pressure, config.atmosphericAbsorption) * path.totalDistance
         : 0;
       const absLoss = -20 * Math.log10(path.absorptionFactor);
       const level = sourceLevel - atten - atm - absLoss;
@@ -1431,6 +1500,10 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
     barrierSideDiffraction: req.config?.barrierSideDiffraction ?? DEFAULT_CONFIG.barrierSideDiffraction,
     groundType: req.config?.groundType ?? DEFAULT_CONFIG.groundType,
     groundMixedFactor: req.config?.groundMixedFactor ?? DEFAULT_CONFIG.groundMixedFactor,
+    atmosphericAbsorption: req.config?.atmosphericAbsorption ?? DEFAULT_CONFIG.atmosphericAbsorption,
+    temperature: req.config?.temperature ?? DEFAULT_CONFIG.temperature,
+    humidity: req.config?.humidity ?? DEFAULT_CONFIG.humidity,
+    pressure: req.config?.pressure ?? DEFAULT_CONFIG.pressure,
   };
 
   const sourceSpectra: number[][] = [];
