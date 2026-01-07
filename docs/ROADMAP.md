@@ -19,14 +19,18 @@ This document contains planned features and enhancements for GeoNoise. For compl
 
 ## Status Summary
 
+### ✅ Recently Completed
+
+- **Barrier side diffraction toggle** (v0.4.2) - See [CHANGELOG.md](./CHANGELOG.md)
+
 ### 🔨 In Progress / High Priority
 
 - Visual indicator when probe is "calculating"
 
 ### 📅 Planned (This Cycle)
 
-- Barrier side diffraction toggle (global setting in PropagationConfig)
 - Building diffraction models UI exposure
+- Expose `maxReflections` setting in UI (currently hardcoded to 0)
 
 ### 🔮 Future Enhancements
 
@@ -67,144 +71,12 @@ Add a loading/calculating indicator to show when probe computation is in progres
 
 ---
 
-## Barrier Side Diffraction Toggle
+## ~~Barrier Side Diffraction Toggle~~ ✅ COMPLETED
 
-> **Status:** Planned
-> **Priority:** Medium
-> **Difficulty:** Medium (3-4 hours estimated)
+> **Status:** ✅ Completed in v0.4.2
+> **Implemented:** 2026-01-07
 
-### Problem Statement
-
-ISO 9613-2 assumes barriers are **effectively infinite** in length. In reality, barriers have finite length, and sound can diffract **around the ends** as well as over the top.
-
-Currently:
-- Sound only diffracts **over the top** of barriers (vertical diffraction)
-- Sound does NOT diffract **around the sides** (horizontal diffraction)
-- Short barriers provide unrealistically high attenuation
-
-### Proposed Solution: Global Toggle with Smart Default
-
-Use a **global setting** in PropagationConfig with an `'auto'` mode that intelligently enables side diffraction based on barrier length.
-
-**Why global instead of per-barrier:**
-1. **Simpler UI** - One setting instead of N checkboxes
-2. **Consistent** - Matches how other physics settings work
-3. **Smart default** - `'auto'` mode gives correct behavior without user intervention
-4. **Less cognitive load** - Users don't need to decide per-barrier
-
-### UI Location: Settings/Propagation Panel
-
-```
-┌─────────────────────────────────────────┐
-│ Propagation Settings                     │
-├─────────────────────────────────────────┤
-│ Spreading: [Spherical ▼]                 │
-│ Atmospheric absorption: [ISO 9613 ▼]    │
-│ Ground reflection: [✓]                   │
-│   └─ Ground type: [Mixed ▼]             │
-│                                          │
-│ Barrier side diffraction: [Auto ▼]       │
-│   ├─ Off: Over-top only (ISO 9613)       │
-│   ├─ Auto: Enable for barriers < 50m     │
-│   └─ On: All barriers                    │
-└─────────────────────────────────────────┘
-```
-
-### Physics: Horizontal Diffraction Around Barrier Ends
-
-**Geometry (top-down view):**
-```
-                 BARRIER (finite length)
-                 ══════════════════
-                ╱                  ╲
-               ╱                    ╲
-        PATH A: around              PATH B: around
-         left end                    right end
-             ╲                      ╱
-              ╲                    ╱
-        S ─────●──────X───────────●───── R
-               ↑      ↑           ↑
-           Left    Direct     Right
-           edge   (blocked)    edge
-```
-
-**Combined attenuation:**
-
-When side diffraction is enabled, compute all three paths and take the **minimum loss** (loudest path dominates):
-
-```typescript
-function barrierAttenuationWithSides(
-  source: Point3D,
-  receiver: Point3D,
-  barrier: Barrier,
-  frequency: number,
-  config: PropagationConfig
-): number {
-  // 1. Over-top diffraction (existing)
-  const A_top = computeTopDiffraction(...);
-
-  // 2. Around-left diffraction
-  const A_left = computeSideDiffraction(leftEdge, ...);
-
-  // 3. Around-right diffraction
-  const A_right = computeSideDiffraction(rightEdge, ...);
-
-  // Take minimum (loudest path wins)
-  return Math.min(A_top, A_left, A_right);
-}
-```
-
-### Auto Mode Threshold Logic
-
-| Barrier Length | Side Diffraction | Rationale |
-|----------------|------------------|-----------|
-| < 20m | Always useful | Side paths often shorter than over-top |
-| 20-50m | Usually useful | Depends on geometry |
-| > 50m | Rarely useful | Side path so long that over-top dominates |
-| > 100m | Never useful | Effectively infinite barrier |
-
-### Data Model Changes
-
-```typescript
-// packages/core/src/schema/index.ts
-
-/** Barrier side diffraction mode */
-export const BarrierSideDiffractionSchema = z.enum(['off', 'auto', 'on']);
-
-export const PropagationConfigSchema = z.object({
-  // ... existing fields ...
-
-  /** Enable horizontal diffraction around barrier ends */
-  barrierSideDiffraction: BarrierSideDiffractionSchema.default('auto'),
-});
-```
-
-### Implementation Phases
-
-| Phase | Task | Effort | Priority |
-|-------|------|--------|----------|
-| 1 | Add `barrierSideDiffraction` to `PropagationConfigSchema` | 5 min | High |
-| 2 | Add dropdown to Settings/Propagation panel | 15 min | High |
-| 3 | Implement `computeBarrierLength()` utility | 10 min | High |
-| 4 | Implement `shouldUseSideDiffraction()` logic | 10 min | High |
-| 5 | Implement `computeSidePathDifference()` | 30 min | High |
-| 6 | Modify `barrierAttenuation()` to include side paths | 45 min | High |
-| 7 | Thread config through compute pipeline | 30 min | Medium |
-| 8 | Update probe worker to use new model | 1 hr | Medium |
-| 9 | Add unit tests for side diffraction | 30 min | Medium |
-
-**Total estimated effort: 3-4 hours**
-
-### Files to Modify
-
-| File | Changes |
-|------|---------|
-| `packages/core/src/schema/index.ts` | Add `BarrierSideDiffractionSchema` and field to `PropagationConfigSchema` |
-| `apps/web/src/main.ts` | Add dropdown to Settings/Propagation panel |
-| `packages/engine/src/propagation/index.ts` | Add `computeSidePathDifference()`, modify `barrierAttenuation()` |
-| `packages/engine/src/compute/index.ts` | Thread config through to attenuation calls |
-| `apps/web/src/probeWorker.ts` | Update diffraction path tracing to include side paths |
-| `packages/engine/tests/` | Add unit tests for new functionality |
+See [CHANGELOG.md](./CHANGELOG.md#barrier-side-diffraction-toggle) for full implementation details.
 
 ---
 

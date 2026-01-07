@@ -862,7 +862,8 @@ sequenceDiagram
   - `maxReflections: number` - Wall reflection order (0-3)
   - `maxDistance: number` - Computation cutoff distance (default: 2000m)
   - `includeBarriers: boolean` - Enable barrier calculations (default: true)
-- **Notes**: Controls physics fidelity vs. computation speed tradeoff
+  - `barrierSideDiffraction: 'off' | 'auto' | 'on'` - Horizontal diffraction around barrier ends (default: 'auto')
+- **Notes**: Controls physics fidelity vs. computation speed tradeoff. The `barrierSideDiffraction` setting controls whether sound can bend around barrier ends (horizontal) in addition to over the top (vertical).
 
 ---
 

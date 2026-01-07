@@ -111,7 +111,7 @@ See [Section 10: Two-Ray Ground Reflection](#10-two-ray-ground-reflection) for t
 
 Sound bends around obstacles via diffraction. For a **thin barrier** (wall, fence), we use the Maekawa formula based on the Fresnel number.
 
-### Geometry
+### Geometry (Over-Top Diffraction)
 
 ```
         S                    R
@@ -159,6 +159,80 @@ A_bar capped at 20-25 dB       (single-screen limit)
 - Higher frequency → larger N → more attenuation (shadow zone deepens)
 - Larger path difference → larger N → more attenuation
 - Low frequencies diffract easily (small N) → less attenuation
+
+---
+
+## 4.1 Barrier Side Diffraction (Horizontal)
+
+**Added in v0.4.2**
+
+For finite-length barriers, sound can also diffract **around the ends** (horizontal diffraction), not just over the top (vertical diffraction).
+
+### Geometry (Top-Down View)
+
+```
+              BARRIER (finite length)
+              ══════════════════════
+             ●                      ●
+         Left Edge              Right Edge
+            (p1)                   (p2)
+             ↑                      ↑
+            /                        \
+           /                          \
+    S ────┘                            └──── R
+   (source)   ← PATH A: around left    (receiver)
+              ← PATH B: around right →
+```
+
+### Side Path Difference
+
+For each barrier edge (left/right):
+
+```
+δ_side = |S→Edge| + |Edge→R| - |S→R|
+```
+
+Where:
+- `S→Edge` = 3D distance from source to barrier edge point
+- `Edge→R` = 3D distance from edge point to receiver
+- `S→R` = direct 3D distance (blocked by barrier)
+
+### Combined Path Selection
+
+When side diffraction is enabled, compute all three paths and select the **minimum δ** (least obstructed path):
+
+```typescript
+δ_top   = computeTopDiffraction(...)      // Over-top path
+δ_left  = computeSidePathDelta(leftEdge)  // Around left edge
+δ_right = computeSidePathDelta(rightEdge) // Around right edge
+
+δ_effective = min(δ_top, δ_left, δ_right)
+```
+
+The path with minimum δ produces minimum attenuation, representing the "loudest" diffraction path that sound can take.
+
+### Side Diffraction Toggle
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| `off` | Over-top only (ISO 9613-2 infinite barrier assumption) | Long barriers, noise walls |
+| `auto` | Enable for barriers < 50m (default) | General use, most realistic |
+| `on` | Enable for all barriers | Short barriers, fences |
+
+### Auto Mode Threshold
+
+| Barrier Length | Side Diffraction | Rationale |
+|----------------|------------------|-----------|
+| < 20m | Always useful | Side paths often shorter than over-top |
+| 20-50m | Usually useful | Depends on geometry |
+| > 50m | Rarely useful | Side path so long that over-top dominates |
+| > 100m | Never useful | Effectively infinite barrier |
+
+### Implementation Files
+
+- **Schema**: [packages/core/src/schema/index.ts](../packages/core/src/schema/index.ts) - `BarrierSideDiffractionSchema`
+- **Engine**: [packages/engine/src/compute/index.ts](../packages/engine/src/compute/index.ts) - `computeSidePathDelta()`, `shouldUseSideDiffraction()`
+- **Probe Worker**: [apps/web/src/probeWorker.ts](../apps/web/src/probeWorker.ts) - `traceBarrierDiffractionPaths()`
 
 **Implementation**: [packages/engine/src/propagation/index.ts](../packages/engine/src/propagation/index.ts) - `barrierAttenuation()`
 
