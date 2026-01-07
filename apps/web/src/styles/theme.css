@@ -2,7 +2,7 @@
   --radius-sm: 12px;
   --radius-md: 18px;
   --radius-lg: 24px;
-  --focus-ring: 0 0 0 3px rgba(122, 166, 161, 0.35);
+  --focus-ring: 0 0 0 3px rgba(45, 140, 255, 0.35);
   --font: "Work Sans", "IBM Plex Sans", "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
   --ui-letter-spacing: 0.14em;
@@ -10,6 +10,12 @@
   --brand-shadow-light: rgba(255, 255, 255, 0.7);
   --brand-shadow-dark: rgba(163, 177, 198, 0.6);
   --brand-accent: #00ff00;
+
+  /* Unified active state blue (Zoom-style blue) */
+  --active-blue: #2D8CFF;
+  --active-blue-strong: #1a7ae8;
+  --active-blue-soft: rgba(45, 140, 255, 0.18);
+  --active-blue-glow: 0 0 12px rgba(45, 140, 255, 0.5);
 }
 
 [data-theme='default'] {
@@ -71,9 +77,9 @@
   --status-led-ok: #74b79c;
   --status-led-busy: #c5b06b;
   --status-led-error: #c38a82;
-  --toggle-on: var(--brand-accent);
-  --toggle-on-dark: var(--brand-accent);
-  --toggle-on-glow: rgba(0, 255, 0, 0.45);
+  --toggle-on: var(--active-blue);
+  --toggle-on-dark: var(--active-blue-strong);
+  --toggle-on-glow: rgba(45, 140, 255, 0.5);
 
   --surface-glass: rgba(237, 242, 248, 0.88);
   --surface-glass-soft: rgba(237, 242, 248, 0.7);
@@ -208,9 +214,9 @@
   --status-led-ok: #3b9c90;
   --status-led-busy: #d7b464;
   --status-led-error: #e56e57;
-  --toggle-on: var(--brand-accent);
-  --toggle-on-dark: var(--brand-accent);
-  --toggle-on-glow: rgba(0, 255, 0, 0.45);
+  --toggle-on: var(--active-blue);
+  --toggle-on-dark: var(--active-blue-strong);
+  --toggle-on-glow: rgba(45, 140, 255, 0.5);
 
   --surface-glass: rgba(246, 249, 255, 0.78);
   --surface-glass-soft: rgba(246, 249, 255, 0.6);
