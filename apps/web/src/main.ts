@@ -5902,18 +5902,14 @@ function wireAbout() {
   wireAuthorModal();
 }
 
-let authorOpen = false;
-
 function openAuthor() {
   if (!authorModal) return;
-  authorOpen = true;
   authorModal.classList.add('is-open');
   authorModal.setAttribute('aria-hidden', 'false');
 }
 
 function closeAuthor() {
   if (!authorModal) return;
-  authorOpen = false;
   authorModal.classList.remove('is-open');
   authorModal.setAttribute('aria-hidden', 'true');
 }
