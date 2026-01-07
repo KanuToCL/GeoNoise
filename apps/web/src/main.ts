@@ -470,6 +470,7 @@ const propertiesBody = document.querySelector('#propertiesBody') as HTMLDivEleme
 const contextPanel = document.querySelector('#contextPanel') as HTMLDivElement | null;
 const contextHeader = document.querySelector('#contextHeader') as HTMLDivElement | null;
 const contextClose = document.querySelector('#contextClose') as HTMLButtonElement | null;
+const contextPin = document.querySelector('#contextPin') as HTMLButtonElement | null;
 const probePanel = document.querySelector('#probePanel') as HTMLDivElement | null;
 const probeTitle = document.querySelector('#probeTitle') as HTMLSpanElement | null;
 const probeClose = document.querySelector('#probeClose') as HTMLButtonElement | null;
@@ -633,6 +634,7 @@ let activeTool: Tool = 'select';
 let selection: Selection = { type: 'none' };
 let activeProbeId: string | null = null;
 let hoverSelection: Selection | null = null;
+let contextPinned = false; // Whether the inspector panel stays open when clicking elsewhere
 let dragState: DragState = null;
 let measureStart: Point | null = null;
 let measureEnd: Point | null = null;
@@ -2836,7 +2838,7 @@ function togglePinProbe(probeId: string) {
   pinProbe(probeId);
 }
 
-function createProbeSnapshot(data: ProbeResult['data']) {
+function createProbeSnapshot(data: ProbeResult['data'], sourceProbeName?: string, coordinates?: { x: number; y: number }) {
   if (!uiLayer) return;
   const snapshotIndex = probeSnapshotSeq++;
   const snapshotId = `snapshot-${snapshotIndex}`;
@@ -2847,9 +2849,21 @@ function createProbeSnapshot(data: ProbeResult['data']) {
 
   const header = document.createElement('div');
   header.className = 'probe-header';
+  const titleWrap = document.createElement('div');
+  titleWrap.className = 'probe-title-wrap';
   const title = document.createElement('div');
   title.className = 'probe-title';
-  title.textContent = `Snapshot ${snapshotIndex}`;
+  // Show source probe name if provided
+  const displayTitle = sourceProbeName ? `${sourceProbeName}` : `Snapshot ${snapshotIndex}`;
+  title.textContent = displayTitle;
+  title.title = 'Double-click to edit name';
+  title.style.cursor = 'text';
+  const badge = document.createElement('span');
+  badge.className = 'probe-title-badge';
+  badge.textContent = 'Frozen';
+  titleWrap.appendChild(title);
+  titleWrap.appendChild(badge);
+
   const actions = document.createElement('div');
   actions.className = 'probe-actions';
   const closeButton = document.createElement('button');
@@ -2858,7 +2872,7 @@ function createProbeSnapshot(data: ProbeResult['data']) {
   closeButton.setAttribute('aria-label', 'Close snapshot');
   closeButton.textContent = 'x';
   actions.appendChild(closeButton);
-  header.appendChild(title);
+  header.appendChild(titleWrap);
   header.appendChild(actions);
 
   const meta = document.createElement('div');
@@ -2869,6 +2883,14 @@ function createProbeSnapshot(data: ProbeResult['data']) {
   metaRight.textContent = 'Frozen';
   meta.appendChild(metaLeft);
   meta.appendChild(metaRight);
+
+  // Add coordinates info if provided
+  let coordsInfo: HTMLDivElement | null = null;
+  if (coordinates) {
+    coordsInfo = document.createElement('div');
+    coordsInfo.className = 'probe-coords';
+    coordsInfo.textContent = `Position: X: ${coordinates.x.toFixed(1)}m, Y: ${coordinates.y.toFixed(1)}m`;
+  }
 
   const chart = document.createElement('div');
   chart.className = 'probe-chart';
@@ -2886,6 +2908,7 @@ function createProbeSnapshot(data: ProbeResult['data']) {
 
   panel.appendChild(header);
   panel.appendChild(meta);
+  if (coordsInfo) panel.appendChild(coordsInfo);
   panel.appendChild(chart);
   panel.appendChild(footer);
   uiLayer.appendChild(panel);
@@ -2910,6 +2933,38 @@ function createProbeSnapshot(data: ProbeResult['data']) {
     const initialTop = (anchorRect ? anchorRect.top - parentRect.top + offset : parentRect.height - panelRect.height - offset);
     clampPanelToParent(panel, parent, initialLeft, initialTop, 12);
     renderProbeChartOn(canvas, ctx, data);
+  });
+
+  // Add double-click to edit title
+  title.addEventListener('dblclick', () => {
+    const currentName = title.textContent || '';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'context-title-input';
+    input.value = currentName;
+    input.placeholder = `Snapshot ${snapshotIndex}`;
+
+    title.style.display = 'none';
+    title.parentElement?.insertBefore(input, title);
+    input.focus();
+    input.select();
+
+    const finishEditing = () => {
+      const newValue = input.value.trim() || `Snapshot ${snapshotIndex}`;
+      title.textContent = newValue;
+      input.remove();
+      title.style.display = '';
+    };
+
+    input.addEventListener('blur', finishEditing);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        finishEditing();
+      } else if (e.key === 'Escape') {
+        input.remove();
+        title.style.display = '';
+      }
+    });
   });
 
   makePanelDraggable(panel, header, { parent, padding: 12, ignoreSelector: 'button' });
@@ -3622,8 +3677,10 @@ function setSelection(next: Selection) {
     setActiveProbe(current.id);
   }
   // Reveal the context inspector only when there's an active selection.
+  // If pinned, keep panel open even when selection becomes 'none'.
   if (contextPanel) {
-    const isOpen = current.type !== 'none' && current.type !== 'probe';
+    const hasNonProbeSelection = current.type !== 'none' && current.type !== 'probe';
+    const isOpen = hasNonProbeSelection || (contextPinned && contextPanel.classList.contains('is-open'));
     contextPanel.classList.toggle('is-open', isOpen);
     contextPanel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
   }
@@ -5842,7 +5899,21 @@ function wireContextPanel() {
   if (contextClose) {
     // Treat close as clearing selection (panel is tied to selection state).
     contextClose.addEventListener('click', () => {
+      contextPinned = false;
+      if (contextPin) {
+        contextPin.classList.remove('is-active');
+        contextPin.setAttribute('aria-pressed', 'false');
+      }
       setSelection({ type: 'none' });
+    });
+  }
+
+  // Pin button to keep panel open when clicking elsewhere
+  if (contextPin) {
+    contextPin.addEventListener('click', () => {
+      contextPinned = !contextPinned;
+      contextPin.classList.toggle('is-active', contextPinned);
+      contextPin.setAttribute('aria-pressed', contextPinned ? 'true' : 'false');
     });
   }
 
@@ -6022,7 +6093,8 @@ function wireProbePanel() {
     if (!probe) return;
     const data = probeResults.get(probe.id);
     if (!data) return;
-    createProbeSnapshot(cloneProbeData(data));
+    const probeName = probe.name || `Probe ${probe.id.toUpperCase()}`;
+    createProbeSnapshot(cloneProbeData(data), probeName, { x: probe.x, y: probe.y });
   });
 }
 

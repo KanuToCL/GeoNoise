@@ -73,13 +73,11 @@
                 Drag: Pan the map<br>
                 Scroll: Zoom in/out<br><br>
                 <strong>Selection</strong><br>
-                Click: Select object<br>
-                Shift+Drag: Duplicate selected<br>
-                Delete/Backspace: Remove selected<br><br>
+                Click: Select item<br>
+                Double-click: Quick edit<br><br>
                 <strong>Tools</strong><br>
-                Use the dock (+) to add sources, buildings, barriers, and probes to the scene.
+                Use dock buttons or keyboard shortcuts
               </div>
-              <button class="ghost ui-button canvas-help-dismiss" id="canvasHelpDismiss" type="button">Got it</button>
             </div>
           </div>
         </div>
@@ -394,7 +392,19 @@
             <div class="context-title-wrap">
               <div class="context-title" id="contextTitle">Select an element</div>
             </div>
-            <button class="context-close ui-button" id="contextClose" type="button" aria-label="Close inspector">×</button>
+            <div class="probe-actions">
+              <button
+                class="probe-pin ui-button"
+                id="contextPin"
+                type="button"
+                aria-label="Pin inspector window"
+                aria-pressed="false"
+                title="Pin inspector (keeps panel open when clicking elsewhere)"
+              >
+                📌
+              </button>
+              <button class="context-close ui-button" id="contextClose" type="button" aria-label="Close inspector">×</button>
+            </div>
           </div>
           <div class="inspector-body">
             <div class="inspector-row">
