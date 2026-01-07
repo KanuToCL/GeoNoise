@@ -1805,14 +1805,11 @@ async function computePanel(
 ) {
   try {
     const response = (await engineCompute(
-config: {
-        barrierSideDiffraction: getPropagationConfig().barrierSideDiffraction ?? 'auto',
-        groundType: getPropagationConfig().groundType ?? 'mixed',
-        groundMixedFactor: getPropagationConfig().groundMixedFactor ?? 0.5,
-        atmosphericAbsorption: getPropagationConfig().atmosphericAbsorption ?? 'simple',
-        temperature: 20,
-        humidity: 50,
-        pressure: 101.325,
+      {
+        kind: 'panel',
+        scene: engineScene,
+        engineConfig,
+        payload: { panelId: panelId(panel.id) },
       },
       preference,
       `panel:${panel.id}`
@@ -1846,6 +1843,7 @@ config: {
     finishCompute(token);
   }
 }
+
 
 function invalidateNoiseMap() {
   // Any scene edit, load, undo/redo, or compute invalidates the previously generated map.
@@ -2363,9 +2361,9 @@ function buildProbeRequest(probe: Probe): ProbeRequest {
       groundType: getPropagationConfig().groundType ?? 'mixed',
       groundMixedFactor: getPropagationConfig().groundMixedFactor ?? 0.5,
       atmosphericAbsorption: getPropagationConfig().atmosphericAbsorption ?? 'simple',
-      temperature: getMeteo().temperature ?? 20,
-      humidity: getMeteo().relativeHumidity ?? 50,
-      pressure: getMeteo().pressure ?? 101.325,
+      temperature: 20,
+      humidity: 50,
+      pressure: 101.325,
     },
   };
 }
