@@ -1805,11 +1805,14 @@ async function computePanel(
 ) {
   try {
     const response = (await engineCompute(
-      {
-        kind: 'panel',
-        scene: engineScene,
-        engineConfig,
-        payload: buildPanelPayload(panel),
+config: {
+        barrierSideDiffraction: getPropagationConfig().barrierSideDiffraction ?? 'auto',
+        groundType: getPropagationConfig().groundType ?? 'mixed',
+        groundMixedFactor: getPropagationConfig().groundMixedFactor ?? 0.5,
+        atmosphericAbsorption: getPropagationConfig().atmosphericAbsorption ?? 'simple',
+        temperature: 20,
+        humidity: 50,
+        pressure: 101.325,
       },
       preference,
       `panel:${panel.id}`

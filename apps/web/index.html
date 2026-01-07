@@ -578,16 +578,20 @@
               <div class="collapsible-body">
                 <div class="collapsible-content">
                   <p class="spec-text">Air absorbs sound energy through viscous, thermal, and molecular relaxation processes.</p>
-                  <div class="formula-highlight">A<sub>atm</sub> = α(f) · d / 1000 dB</div>
-                  <p class="spec-text">The coefficient α combines classical losses with N₂ and O₂ molecular relaxation:</p>
+                    <div class="formula-highlight">A<sub>atm</sub> = α(f) · d / 1000 dB</div>
+
+                    <p class="spec-text" style="margin-top: 12px;"><strong>ISO 9613-1:</strong> Calculates α from temperature, humidity, and pressure.</p>
                   <div class="equation-pill" style="font-size: 12px;">
                     α = α<sub>cl</sub> + (b<sub>N</sub>·f²)/(f<sub>r,N</sub> + f²/f<sub>r,N</sub>) + (b<sub>O</sub>·f²)/(f<sub>r,O</sub> + f²/f<sub>r,O</sub>)
                   </div>
-                  <p class="spec-text" style="margin-top: 10px;"><strong>Reference values at 20°C, 70% RH (dB/km):</strong></p>
+                  <p class="spec-text">The coefficient α combines classical losses with N₂ and O₂ molecular relaxation.</p>
+
+                  <p class="spec-text" style="margin-top: 12px;"><strong>Simple:</strong> Uses the lookup table below at standard conditions (20°C, 70% RH).</p>
                   <table class="physics-table">
                     <tr><th>63 Hz</th><th>125 Hz</th><th>250 Hz</th><th>500 Hz</th><th>1 kHz</th><th>2 kHz</th><th>4 kHz</th><th>8 kHz</th><th>16 kHz</th></tr>
                     <tr><td>0.1</td><td>0.4</td><td>1.0</td><td>1.9</td><td>3.7</td><td>9.7</td><td>33</td><td>117</td><td>392</td></tr>
                   </table>
+                  <p class="spec-text" style="margin-top: 6px; font-size: 11px; color: var(--text-muted);">Values in dB/km</p>
                 </div>
               </div>
             </div>
@@ -787,8 +791,8 @@
               <div class="collapsible-body">
                 <div class="collapsible-content">
                   <div class="accuracy-indicator">
-                    <div class="accuracy-dot"></div>
-                    <span class="accuracy-text"><strong>Engineering-grade:</strong> ± 3 dB typical for distances &lt; 500m</span>
+                    <div class="accuracy-dot" style="background: #f5a623;"></div>
+                    <span class="accuracy-text">Accuracy pending measurements and validation</span>
                   </div>
                   <p class="spec-text" style="margin-top: 12px;"><strong>Known Limitations:</strong></p>
                   <ul class="limitations-list">

@@ -182,6 +182,10 @@ export interface ProbeConfig {
   barrierSideDiffraction?: 'off' | 'auto' | 'on';
   groundType?: 'hard' | 'soft' | 'mixed';
   groundMixedFactor?: number;
+  atmosphericAbsorption?: 'none' | 'simple' | 'iso9613';
+  temperature?: number;
+  humidity?: number;
+  pressure?: number;
 }
 
 /** Request sent to a probe worker */
