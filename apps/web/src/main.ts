@@ -5146,7 +5146,8 @@ function drawProbes() {
 
     ctx.fillStyle = canvasTheme.probeLabel;
     ctx.font = '12px "Work Sans", sans-serif';
-    ctx.fillText(probe.id.toUpperCase(), p.x + 14, p.y + 6);
+    const probeLabel = probe.name || probe.id.toUpperCase();
+    ctx.fillText(probeLabel, p.x + 14, p.y + 6);
   }
 }
 
