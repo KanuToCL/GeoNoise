@@ -3181,6 +3181,11 @@ function createPinnedContextPanel(sel: Selection) {
 /** Refresh all pinned context panels (e.g., when element data changes via drag) */
 function refreshPinnedContextPanels() {
   for (const pinned of pinnedContextPanels) {
+    // Skip source panels - they have complex spectrum editors that shouldn't be recreated during drag
+    // The spectrum editor maintains its own state and doesn't need position-based updates
+    if (pinned.selection.type === 'source') {
+      continue;
+    }
     renderPropertiesFor(pinned.selection, pinned.propertiesContainer);
     // Also refresh legend and stats for panel type pins
     if (pinned.selection.type === 'panel') {
