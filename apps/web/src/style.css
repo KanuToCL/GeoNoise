@@ -85,12 +85,10 @@ body {
   align-items: center;
   gap: 18px;
   padding: 8px 16px;
-  background: var(--surface-glass-soft);
-  border: 1px solid var(--border-soft);
+  background: var(--brand-bg);
+  border: none;
   border-radius: 18px;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 12px 12px 24px var(--shadow-dark), -12px -12px 24px var(--shadow-light);
   pointer-events: auto;
 }
 
