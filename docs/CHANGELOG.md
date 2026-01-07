@@ -6,6 +6,41 @@ This document contains the implementation history of completed features. For pla
 
 ## 2026-01-07
 
+### Noise Map Resolution Strategy
+
+**Status:** ✅ Completed
+
+Implemented an adaptive resolution strategy for noise maps that balances visual quality with performance across different interaction states.
+
+#### Resolution Constants (`apps/web/src/main.ts`)
+
+```typescript
+const RES_HIGH = 2;       // Fine quality: 2px per grid cell
+const RES_LOW = 8;        // Coarse preview: 8px per grid cell
+const REFINE_POINTS = 75000;  // Maximum detail for refine button and initial load
+const STATIC_POINTS = 50000;  // Good quality for static after drag
+const DRAG_POINTS = 35000;    // Coarse preview during drag
+```
+
+#### Adaptive Point Cap Strategy
+
+| Scenario           | Point Cap | Pixel Step | Purpose               |
+|--------------------|-----------|------------|-----------------------|
+| Initial load       | 75,000    | RES_HIGH=2 | Good first impression |
+| During drag        | 35,000    | RES_LOW=8  | Smooth interaction    |
+| Static after drag  | 50,000    | RES_HIGH=2 | Good quality          |
+| Refine button      | 75,000    | RES_HIGH=2 | Maximum detail        |
+
+#### Key Functions Updated
+
+- **`buildNoiseMapGridConfig()`**: Default cap uses `STATIC_POINTS` for resolution-based calls
+- **`recalculateNoiseMap()`**: Now accepts optional `maxPoints` parameter
+- **Drag handler**: Passes `DRAG_POINTS` during drag operations
+- **Initial load**: Uses `REFINE_POINTS` for high-quality first impression
+- **Refine button**: Uses `REFINE_POINTS` for maximum detail
+
+---
+
 ### Barrier Side Diffraction Toggle
 
 **Status:** ✅ Completed
