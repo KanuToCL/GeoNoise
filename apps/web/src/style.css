@@ -20,18 +20,12 @@
   margin: 8px;
   box-shadow: inset 3px 3px 6px rgba(163, 177, 198, 0.5),
               inset -3px -3px 6px rgba(255, 255, 255, 0.8);
-  /* Inset scrollbar by its own width (12px) from the container edge */
-  border-right: 12px solid transparent;
-  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb {
   background: linear-gradient(145deg, #f0f4f8, #d8dfe8);
   border-radius: 10px;
-  /* Maintain visual thumb size while respecting inset */
-  border: 2px solid transparent;
-  border-right-width: 14px;
-  background-clip: padding-box;
+  border: 2px solid #e0e5ec;
   box-shadow: 3px 3px 6px rgba(163, 177, 198, 0.4),
               -3px -3px 6px rgba(255, 255, 255, 0.7);
 }
@@ -2654,11 +2648,32 @@ textarea:focus-visible,
   z-index: 1;
   width: min(760px, 92vw);
   max-height: 80vh;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 24px;
+  padding-right: 36px; /* Extra padding to bring content away from scrollbar */
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+/* Inset scrollbar for modal cards */
+.modal-card::-webkit-scrollbar {
+  width: 16px;
+}
+
+.modal-card::-webkit-scrollbar-track {
+  background: transparent;
+  border-left: 12px solid transparent;
+  background-clip: padding-box;
+}
+
+.modal-card::-webkit-scrollbar-thumb {
+  background: linear-gradient(145deg, #f0f4f8, #d8dfe8);
+  border-radius: 10px;
+  border: 4px solid transparent;
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 1px rgba(163, 177, 198, 0.3);
 }
 
 .modal-plate {
@@ -3329,6 +3344,25 @@ textarea:focus-visible,
   transition: transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
               opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
               visibility 0s linear 0s !important;
+}
+
+/* Inset scrollbar for settings popover */
+.settings-popover--corner::-webkit-scrollbar {
+  width: 16px;
+}
+
+.settings-popover--corner::-webkit-scrollbar-track {
+  background: transparent;
+  border-left: 12px solid transparent;
+  background-clip: padding-box;
+}
+
+.settings-popover--corner::-webkit-scrollbar-thumb {
+  background: linear-gradient(145deg, #f0f4f8, #d8dfe8);
+  border-radius: 10px;
+  border: 4px solid transparent;
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 1px rgba(163, 177, 198, 0.3);
 }
 
 .settings-popover--corner .settings-section {
