@@ -86,7 +86,7 @@
       <!-- Floating UI overlay (non-blocking except for interactive elements). -->
       <div class="ui-layer">
         <header class="topbar topbar-floating">
-          <div class="topbar-left">
+<div class="topbar-left">
             <div class="topbar-actions">
 <button class="ghost ui-button undo-redo-btn" id="undoButton" type="button" title="Undo the last change." aria-label="Undo">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -100,6 +100,11 @@
                   <path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"/>
                 </svg>
               </button>
+<div class="layers-toggle" id="layersToggle">
+              <button class="ghost ui-button" id="layersButton" type="button" aria-expanded="false">
+                Layers
+              </button>
+            </div>
             </div>
           </div>
           <div class="topbar-center">
@@ -138,15 +143,13 @@
                   </select>
                 </div>
               </div>
-              <!-- Lightweight feedback for heavy map computation (keeps UI responsive). -->
+<!-- Lightweight feedback for heavy map computation (keeps UI responsive). -->
               <div class="map-toast" id="mapToast" role="status" aria-live="polite"></div>
             </div>
-            <div class="layers-toggle" id="layersToggle">
-              <button class="ghost ui-button" id="layersButton" type="button" aria-expanded="false">
-                Layers
-              </button>
-            </div>
-            <button class="ghost ui-button" id="aboutButton" type="button" title="Model notes, assumptions, and limitations.">
+<button class="ghost ui-button" id="aboutButton" type="button" title="Model notes, assumptions, and limitations.">
+              Details
+            </button>
+            <button class="ghost ui-button" id="authorButton" type="button" title="About GeoNoise">
               About
             </button>
           </div>
@@ -176,49 +179,6 @@
             <label class="toggle">
               <input type="checkbox" id="layerGrid" />
               <span>Grid Overlay</span>
-            </label>
-          </div>
-          <div class="layers-divider"></div>
-          <div class="layers-section">
-            <div class="layers-title">Display Settings</div>
-            <label class="property-row property-row-stack">
-              <span>Frequency Weighting</span>
-              <select class="ui-inset" id="displayWeighting">
-                <option value="A" selected>A-weighting (dBA)</option>
-                <option value="C">C-weighting (dBC)</option>
-                <option value="Z">Z-weighting (dBZ / Linear)</option>
-              </select>
-            </label>
-            <label class="property-row property-row-stack">
-              <span>Display Band</span>
-              <select class="ui-inset" id="displayBand">
-                <option value="overall" selected>Overall (Sum)</option>
-                <option value="0">63 Hz</option>
-                <option value="1">125 Hz</option>
-                <option value="2">250 Hz</option>
-                <option value="3">500 Hz</option>
-                <option value="4">1000 Hz</option>
-                <option value="5">2000 Hz</option>
-                <option value="6">4000 Hz</option>
-                <option value="7">8000 Hz</option>
-                <option value="8">16000 Hz</option>
-              </select>
-            </label>
-          </div>
-          <div class="layers-divider"></div>
-          <div class="layers-section">
-            <div class="layers-title">Map Settings</div>
-            <label class="toggle">
-              <input type="checkbox" id="mapRenderStyle" />
-              <span>Render mode: Smooth / Contours</span>
-            </label>
-            <div class="property-row map-band-step" id="mapBandStepRow">
-              <span>Band Step (dB)</span>
-              <input class="ui-inset" id="mapBandStep" type="number" min="1" max="20" step="1" value="3" />
-            </div>
-            <label class="toggle">
-              <input type="checkbox" id="mapAutoScale" checked />
-              <span>Auto-scale colors</span>
             </label>
           </div>
         </div>
@@ -381,6 +341,136 @@
                 box-shadow: 0 20px 40px rgba(15, 23, 42, 0.45) !important;
               "
             >
+              <div
+                class="settings-title"
+                style="
+                  color: #a5b4c7;
+                  font-size: 11px;
+                  font-weight: 700;
+                  text-transform: uppercase;
+                  letter-spacing: 0.18em;
+                  margin-bottom: 14px;
+                "
+              >
+                Display Settings
+              </div>
+              <div class="settings-section" style="margin-bottom: 18px;">
+                <label class="property-row property-row-stack" style="display: block; margin-bottom: 12px;">
+                  <span
+                    style="
+                      display: block;
+                      font-size: 12px;
+                      color: #e2e8f0;
+                      margin-bottom: 6px;
+                      letter-spacing: 0.02em;
+                    "
+                  >
+                    Frequency Weighting
+                  </span>
+                  <select
+                    class="ui-inset"
+                    id="displayWeighting"
+                    style="
+                      width: 100%;
+                      padding: 8px 10px;
+                      background: linear-gradient(180deg, #0b1423, #0a1220);
+                      color: #f8fafc;
+                      border: 1px solid rgba(148, 163, 184, 0.35);
+                      border-radius: 10px;
+                      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.7), 0 4px 10px rgba(15, 23, 42, 0.35);
+                      font-weight: 600;
+                    "
+                  >
+                    <option value="A" selected>A-weighting (dBA)</option>
+                    <option value="C">C-weighting (dBC)</option>
+                    <option value="Z">Z-weighting (dBZ / Linear)</option>
+                  </select>
+                </label>
+                <label class="property-row property-row-stack" style="display: block;">
+                  <span
+                    style="
+                      display: block;
+                      font-size: 12px;
+                      color: #e2e8f0;
+                      margin-bottom: 6px;
+                      letter-spacing: 0.02em;
+                    "
+                  >
+                    Display Band
+                  </span>
+                  <select
+                    class="ui-inset"
+                    id="displayBand"
+                    style="
+                      width: 100%;
+                      padding: 8px 10px;
+                      background: linear-gradient(180deg, #0b1423, #0a1220);
+                      color: #f8fafc;
+                      border: 1px solid rgba(148, 163, 184, 0.35);
+                      border-radius: 10px;
+                      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.7), 0 4px 10px rgba(15, 23, 42, 0.35);
+                      font-weight: 600;
+                    "
+                  >
+                    <option value="overall" selected>Overall (Sum)</option>
+                    <option value="0">63 Hz</option>
+                    <option value="1">125 Hz</option>
+                    <option value="2">250 Hz</option>
+                    <option value="3">500 Hz</option>
+                    <option value="4">1000 Hz</option>
+                    <option value="5">2000 Hz</option>
+                    <option value="6">4000 Hz</option>
+                    <option value="7">8000 Hz</option>
+                    <option value="8">16000 Hz</option>
+                  </select>
+                </label>
+              </div>
+
+              <div
+                class="settings-title"
+                style="
+                  color: #a5b4c7;
+                  font-size: 11px;
+                  font-weight: 700;
+                  text-transform: uppercase;
+                  letter-spacing: 0.18em;
+                  margin-bottom: 14px;
+                "
+              >
+                Map Settings
+              </div>
+              <div class="settings-section" style="margin-bottom: 18px;">
+                <label class="toggle" for="mapRenderStyle" style="color: #e2e8f0; font-size: 13px; margin-bottom: 10px;">
+                  <input type="checkbox" id="mapRenderStyle" />
+                  <span>Render mode: Smooth / Contours</span>
+                </label>
+                <div class="property-row map-band-step" id="mapBandStepRow" style="margin-bottom: 10px;">
+                  <span style="color: #e2e8f0; font-size: 12px;">Band Step (dB)</span>
+                  <input
+                    class="ui-inset"
+                    id="mapBandStep"
+                    type="number"
+                    min="1"
+                    max="20"
+                    step="1"
+                    value="3"
+                    style="
+                      width: 80px;
+                      padding: 6px 8px;
+                      background: linear-gradient(180deg, #0b1423, #0a1220);
+                      color: #f8fafc;
+                      border: 1px solid rgba(148, 163, 184, 0.35);
+                      border-radius: 8px;
+                      font-weight: 600;
+                    "
+                  />
+                </div>
+                <label class="toggle" for="mapAutoScale" style="color: #e2e8f0; font-size: 13px;">
+                  <input type="checkbox" id="mapAutoScale" checked />
+                  <span>Auto-scale colors</span>
+                </label>
+              </div>
+
               <div
                 class="settings-title"
                 style="
@@ -1072,5 +1162,54 @@
     </div>
 
     <script type="module" src="./main.js"></script>
+
+    <!-- Author/About Modal -->
+    <div class="modal" id="authorModal" aria-hidden="true">
+      <div class="modal-backdrop" data-modal-close></div>
+      <div class="modal-card modal-plate" role="dialog" aria-modal="true" aria-labelledby="authorTitle" style="width: min(400px, 90vw);">
+        <div class="modal-header">
+          <div class="modal-title">
+            <h2 id="authorTitle">About GeoNoise</h2>
+          </div>
+          <button class="modal-close ui-button" id="authorClose" type="button" aria-label="Close">X</button>
+        </div>
+<div class="spec-tray" style="text-align: center;">
+          <div style="font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 4px;">GeoNoise</div>
+          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px;">Version 0.3.0</div>
+          <div style="height: 1px; background: var(--border-soft); margin: 12px 0;"></div>
+          <div style="font-size: 13px; color: var(--text-soft); margin-bottom: 8px;">Developed by</div>
+<div style="font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 12px;">Sergio Peña</div>
+          <a
+            href="https://www.linkedin.com/in/sergio-pena-a8108684/"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              gap: 8px;
+              padding: 10px 20px;
+              border-radius: 999px;
+              background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
+              box-shadow: var(--shadow-raised);
+              color: var(--text);
+              font-size: 13px;
+              font-weight: 600;
+              text-decoration: none;
+              transition: transform 120ms ease, box-shadow 120ms ease;
+            "
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+            </svg>
+            Connect on LinkedIn
+          </a>
+          <div style="height: 1px; background: var(--border-soft); margin: 16px 0 12px;"></div>
+          <div style="font-size: 11px; color: var(--text-muted);">
+            © 2025 Sergio Peña. All rights reserved.
+          </div>
+        </div>
+      </div>
+    </div>
   </body>
 </html>

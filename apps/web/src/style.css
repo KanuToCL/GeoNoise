@@ -138,7 +138,8 @@ body {
 .layers-popover {
   position: fixed;
   top: 92px;
-  right: 24px;
+  left: 24px;
+  right: auto;
   display: flex;
   flex-direction: column;
   gap: 14px;

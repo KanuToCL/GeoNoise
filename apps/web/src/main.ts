@@ -432,6 +432,9 @@ const redoButton = document.querySelector('#redoButton') as HTMLButtonElement | 
 const aboutButton = document.querySelector('#aboutButton') as HTMLButtonElement | null;
 const aboutModal = document.querySelector('#aboutModal') as HTMLDivElement | null;
 const aboutClose = document.querySelector('#aboutClose') as HTMLButtonElement | null;
+const authorButton = document.querySelector('#authorButton') as HTMLButtonElement | null;
+const authorModal = document.querySelector('#authorModal') as HTMLDivElement | null;
+const authorClose = document.querySelector('#authorClose') as HTMLButtonElement | null;
 const aboutTabs = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-about-tab]'));
 const aboutPanels = Array.from(document.querySelectorAll<HTMLDivElement>('[data-about-panel]'));
 const actionSecondary = document.querySelector('#actionSecondary') as HTMLDivElement | null;
@@ -5894,6 +5897,37 @@ function wireAbout() {
 
   // Wire collapsible physics sections
   wireCollapsibleSections();
+
+  // Wire author modal
+  wireAuthorModal();
+}
+
+let authorOpen = false;
+
+function openAuthor() {
+  if (!authorModal) return;
+  authorOpen = true;
+  authorModal.classList.add('is-open');
+  authorModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeAuthor() {
+  if (!authorModal) return;
+  authorOpen = false;
+  authorModal.classList.remove('is-open');
+  authorModal.setAttribute('aria-hidden', 'true');
+}
+
+function wireAuthorModal() {
+  if (!authorModal) return;
+  authorButton?.addEventListener('click', () => openAuthor());
+  authorClose?.addEventListener('click', () => closeAuthor());
+  authorModal.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('[data-modal-close]')) {
+      closeAuthor();
+    }
+  });
 }
 
 /**
