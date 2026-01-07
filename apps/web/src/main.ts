@@ -634,10 +634,11 @@ let activeTool: Tool = 'select';
 let selection: Selection = { type: 'none' };
 let activeProbeId: string | null = null;
 let hoverSelection: Selection | null = null;
-// Pinned context panels - static snapshots of inspector state for non-probe elements
+// Pinned context panels - interactive inspector panels for non-probe elements
 type PinnedContextPanel = {
   selection: Selection;
   panel: HTMLElement;
+  propertiesContainer: HTMLElement;
 };
 const pinnedContextPanels: PinnedContextPanel[] = [];
 let pinnedContextSeq = 1;
@@ -3055,8 +3056,8 @@ function createPinnedContextPanel(sel: Selection) {
   propertiesSection.appendChild(propTitle);
   propertiesSection.appendChild(propBody);
 
-  // Render read-only properties for the element
-  renderPinnedProperties(sel, propBody);
+  // Render full interactive properties for the element
+  renderPropertiesFor(sel, propBody);
 
   body.appendChild(propertiesSection);
 
@@ -3064,8 +3065,8 @@ function createPinnedContextPanel(sel: Selection) {
   panel.appendChild(body);
   uiLayer.appendChild(panel);
 
-  // Store the pinned panel
-  const pinnedPanel: PinnedContextPanel = { selection: sel, panel };
+  // Store the pinned panel with properties container reference
+  const pinnedPanel: PinnedContextPanel = { selection: sel, panel, propertiesContainer: propBody };
   pinnedContextPanels.push(pinnedPanel);
 
   // Position the panel with offset based on number of pinned panels
@@ -3086,7 +3087,7 @@ function createPinnedContextPanel(sel: Selection) {
   });
 
   // Make panel draggable
-  makePanelDraggable(panel, header, { parent, padding: 12, ignoreSelector: 'button' });
+  makePanelDraggable(panel, header, { parent, padding: 12, ignoreSelector: 'button, input' });
 
   // Close button handler
   closeButton.addEventListener('click', () => {
@@ -3128,55 +3129,10 @@ function createPinnedContextPanel(sel: Selection) {
   });
 }
 
-/** Render read-only properties for a pinned context panel */
-function renderPinnedProperties(sel: Selection, container: HTMLElement) {
-  if (sel.type === 'source') {
-    const source = scene.sources.find(s => s.id === sel.id);
-    if (source) {
-      container.innerHTML = `
-        <div class="inspector-row"><span>Type</span><strong>Source</strong></div>
-        <div class="inspector-row"><span>Height (m)</span><strong>${source.z.toFixed(1)}</strong></div>
-        <div class="inspector-row"><span>Position</span><strong>X: ${source.x.toFixed(1)}, Y: ${source.y.toFixed(1)}</strong></div>
-      `;
-    }
-  } else if (sel.type === 'receiver') {
-    const receiver = scene.receivers.find(r => r.id === sel.id);
-    if (receiver) {
-      container.innerHTML = `
-        <div class="inspector-row"><span>Type</span><strong>Receiver</strong></div>
-        <div class="inspector-row"><span>Height (m)</span><strong>${receiver.z.toFixed(1)}</strong></div>
-        <div class="inspector-row"><span>Position</span><strong>X: ${receiver.x.toFixed(1)}, Y: ${receiver.y.toFixed(1)}</strong></div>
-      `;
-    }
-  } else if (sel.type === 'panel') {
-    const panel = scene.panels.find(p => p.id === sel.id);
-    if (panel) {
-      container.innerHTML = `
-        <div class="inspector-row"><span>Type</span><strong>Measure Grid</strong></div>
-        <div class="inspector-row"><span>Elevation (m)</span><strong>${panel.elevation.toFixed(1)}</strong></div>
-        <div class="inspector-row"><span>Resolution</span><strong>${panel.sampling.resolution}m</strong></div>
-      `;
-    }
-  } else if (sel.type === 'barrier') {
-    const barrier = scene.barriers.find(b => b.id === sel.id);
-    if (barrier) {
-      container.innerHTML = `
-        <div class="inspector-row"><span>Type</span><strong>Barrier</strong></div>
-        <div class="inspector-row"><span>Height (m)</span><strong>${barrier.height.toFixed(1)}</strong></div>
-        <div class="inspector-row"><span>Transmission Loss</span><strong>${barrier.transmissionLoss?.toFixed(0) ?? 'N/A'} dB</strong></div>
-      `;
-    }
-  } else if (sel.type === 'building') {
-    const building = scene.buildings.find(b => b.id === sel.id);
-    if (building) {
-      container.innerHTML = `
-        <div class="inspector-row"><span>Type</span><strong>Building</strong></div>
-        <div class="inspector-row"><span>Height (m)</span><strong>${building.height.toFixed(1)}</strong></div>
-        <div class="inspector-row"><span>Position</span><strong>X: ${building.x.toFixed(1)}, Y: ${building.y.toFixed(1)}</strong></div>
-      `;
-    }
-  } else {
-    container.innerHTML = '<span class="legend-empty">No properties available.</span>';
+/** Refresh all pinned context panels (e.g., when element data changes via drag) */
+function refreshPinnedContextPanels() {
+  for (const pinned of pinnedContextPanels) {
+    renderPropertiesFor(pinned.selection, pinned.propertiesContainer);
   }
 }
 
@@ -3977,7 +3933,12 @@ function updateContextTitle(): void {
 function renderProperties() {
   if (!propertiesBody) return;
   propertiesBody.innerHTML = '';
-  const current = selection;
+  renderPropertiesFor(selection, propertiesBody);
+}
+
+/** Render interactive property controls for a selection into a container */
+function renderPropertiesFor(current: Selection, container: HTMLElement) {
+  container.innerHTML = '';
 
   if (current.type === 'none') {
     const empty = document.createElement('div');
@@ -4027,17 +3988,18 @@ function renderProperties() {
       empty.appendChild(tip);
     }
 
-    propertiesBody.appendChild(empty);
+    container.appendChild(empty);
     return;
   }
 
   if (current.type === 'source') {
     const source = scene.sources.find((item) => item.id === current.id);
     if (!source) return;
-    propertiesBody.appendChild(createInputRow('Height (m)', source.z, (value) => {
+    container.appendChild(createInputRow('Height (m)', source.z, (value) => {
       source.z = value;
       pushHistory();
       computeScene();
+      refreshPinnedContextPanels();
     }));
 
     // Spectrum editor section
@@ -4060,36 +4022,39 @@ function renderProperties() {
       }
     );
     spectrumSection.appendChild(spectrumEditor);
-    propertiesBody.appendChild(spectrumSection);
+    container.appendChild(spectrumSection);
   }
 
   if (current.type === 'receiver') {
     const receiver = scene.receivers.find((item) => item.id === current.id);
     if (!receiver) return;
-    propertiesBody.appendChild(createInputRow('Height (m)', receiver.z, (value) => {
+    container.appendChild(createInputRow('Height (m)', receiver.z, (value) => {
       receiver.z = value;
       pushHistory();
       computeScene();
+      refreshPinnedContextPanels();
     }));
   }
 
   if (current.type === 'panel') {
     const panel = scene.panels.find((item) => item.id === current.id);
     if (!panel) return;
-    propertiesBody.appendChild(createInputRow('Elevation (m)', panel.elevation, (value) => {
+    container.appendChild(createInputRow('Elevation (m)', panel.elevation, (value) => {
       panel.elevation = value;
       pushHistory();
       computeScene();
+      refreshPinnedContextPanels();
     }));
-    propertiesBody.appendChild(createInputRow('Spacing (m)', panel.sampling.resolution, (value) => {
+    container.appendChild(createInputRow('Spacing (m)', panel.sampling.resolution, (value) => {
       panel.sampling.resolution = Math.max(1, value);
       pushHistory();
       computeScene();
+      refreshPinnedContextPanels();
     }));
     const hint = document.createElement('div');
     hint.className = 'property-hint';
     hint.textContent = 'Drag corner handles on the measure grid to reshape.';
-    propertiesBody.appendChild(hint);
+    container.appendChild(hint);
   }
 
   if (current.type === 'barrier') {
@@ -4098,66 +4063,73 @@ function renderProperties() {
 
     // Length control
     const currentLength = getBarrierLength(barrier);
-    propertiesBody.appendChild(createInputRow('Length (m)', currentLength, (value) => {
+    container.appendChild(createInputRow('Length (m)', currentLength, (value) => {
       const newLength = Math.max(BARRIER_MIN_LENGTH, value);
       const midpoint = getBarrierMidpoint(barrier);
       const rotation = getBarrierRotation(barrier);
       setBarrierFromMidpointAndRotation(barrier, midpoint, rotation, newLength);
       pushHistory();
       computeScene();
+      refreshPinnedContextPanels();
     }));
 
     // Wall height control
-    propertiesBody.appendChild(createInputRow('Wall height (m)', barrier.height, (value) => {
+    container.appendChild(createInputRow('Wall height (m)', barrier.height, (value) => {
       barrier.height = Math.max(0.1, value);
       pushHistory();
       computeScene();
+      refreshPinnedContextPanels();
     }));
 
     // Rotation control (in degrees)
     const currentRotation = (getBarrierRotation(barrier) * 180) / Math.PI;
-    propertiesBody.appendChild(createInputRow('Rotation (deg)', currentRotation, (value) => {
+    container.appendChild(createInputRow('Rotation (deg)', currentRotation, (value) => {
       const midpoint = getBarrierMidpoint(barrier);
       const length = getBarrierLength(barrier);
       const newRotation = (value * Math.PI) / 180;
       setBarrierFromMidpointAndRotation(barrier, midpoint, newRotation, length);
       pushHistory();
       computeScene();
+      refreshPinnedContextPanels();
     }));
 
     const hint = document.createElement('div');
     hint.className = 'property-hint';
     hint.textContent = 'Drag endpoint handles to resize. Drag the lollipop to rotate.';
-    propertiesBody.appendChild(hint);
+    container.appendChild(hint);
   }
 
   if (current.type === 'building') {
     const building = scene.buildings.find((item) => item.id === current.id);
     if (!building) return;
-    propertiesBody.appendChild(createInputRow('Width (m)', building.width, (value) => {
+    container.appendChild(createInputRow('Width (m)', building.width, (value) => {
       building.width = Math.max(BUILDING_MIN_SIZE, value);
       pushHistory();
       computeScene();
+      refreshPinnedContextPanels();
     }));
-    propertiesBody.appendChild(createInputRow('Depth (m)', building.height, (value) => {
+    container.appendChild(createInputRow('Depth (m)', building.height, (value) => {
       building.height = Math.max(BUILDING_MIN_SIZE, value);
       pushHistory();
       computeScene();
+      refreshPinnedContextPanels();
     }));
-    propertiesBody.appendChild(createInputRow('Height (m)', building.z_height, (value) => {
+    container.appendChild(createInputRow('Height (m)', building.z_height, (value) => {
       building.z_height = Math.max(0.1, value);
       pushHistory();
       computeScene();
+      refreshPinnedContextPanels();
     }));
-    propertiesBody.appendChild(createInputRow('Rotation (deg)', (building.rotation * 180) / Math.PI, (value) => {
+    container.appendChild(createInputRow('Rotation (deg)', (building.rotation * 180) / Math.PI, (value) => {
       building.rotation = (value * Math.PI) / 180;
       pushHistory();
       computeScene();
+      refreshPinnedContextPanels();
     }));
     const hint = document.createElement('div');
     hint.className = 'property-hint';
     hint.textContent = 'Drag corner handles to resize. Drag the lollipop to rotate.';
-    propertiesBody.appendChild(hint);
+    container.appendChild(hint);
   }
 }
 
