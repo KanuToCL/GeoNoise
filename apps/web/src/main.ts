@@ -5737,6 +5737,82 @@ function wireAbout() {
       closeAbout();
     }
   });
+
+  // Wire collapsible physics sections
+  wireCollapsibleSections();
+}
+
+/**
+ * Sets up collapsible accordion sections in the About modal.
+ * Each section can be expanded/collapsed by clicking its header.
+ */
+function wireCollapsibleSections() {
+  const collapsibleSections = document.querySelectorAll<HTMLElement>('[data-collapsible]');
+  const expandAllBtn = document.getElementById('expandAllBtn') as HTMLButtonElement | null;
+
+  if (!collapsibleSections.length) return;
+
+  // Toggle individual section
+  collapsibleSections.forEach((section) => {
+    const header = section.querySelector('.collapsible-header');
+    if (!header) return;
+
+    header.addEventListener('click', () => {
+      toggleCollapsibleSection(section);
+    });
+
+    // Keyboard support
+    header.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Enter' || (e as KeyboardEvent).key === ' ') {
+        e.preventDefault();
+        toggleCollapsibleSection(section);
+      }
+    });
+  });
+
+  // Expand all / collapse all button
+  if (expandAllBtn) {
+    expandAllBtn.addEventListener('click', () => {
+      const allOpen = Array.from(collapsibleSections).every((s) => s.classList.contains('is-open'));
+
+      if (allOpen) {
+        // Collapse all
+        collapsibleSections.forEach((section) => {
+          section.classList.remove('is-open');
+          updateCollapsibleAria(section, false);
+        });
+        expandAllBtn.textContent = 'expand all';
+      } else {
+        // Expand all
+        collapsibleSections.forEach((section) => {
+          section.classList.add('is-open');
+          updateCollapsibleAria(section, true);
+        });
+        expandAllBtn.textContent = 'collapse all';
+      }
+    });
+  }
+}
+
+function toggleCollapsibleSection(section: HTMLElement) {
+  const isOpen = section.classList.contains('is-open');
+  section.classList.toggle('is-open', !isOpen);
+  updateCollapsibleAria(section, !isOpen);
+
+  // Update expand all button text if needed
+  const expandAllBtn = document.getElementById('expandAllBtn') as HTMLButtonElement | null;
+  if (expandAllBtn) {
+    const collapsibleSections = document.querySelectorAll<HTMLElement>('[data-collapsible]');
+    const allOpen = Array.from(collapsibleSections).every((s) => s.classList.contains('is-open'));
+    expandAllBtn.textContent = allOpen ? 'collapse all' : 'expand all';
+  }
+}
+
+function updateCollapsibleAria(section: HTMLElement, isOpen: boolean) {
+  const header = section.querySelector('.collapsible-header');
+  if (header) {
+    header.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  }
 }
 
 function updatePropagationControls() {

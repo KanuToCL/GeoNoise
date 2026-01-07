@@ -597,7 +597,7 @@
         <div class="modal-header">
           <div class="modal-title">
             <h2 id="aboutTitle">Details</h2>
-            <p class="modal-subtitle">Real-time outdoor acoustic simulation</p>
+            <p class="modal-subtitle">Real-time 2.5 dimension outdoor acoustic simulation</p>
           </div>
           <button class="modal-close ui-button" id="aboutClose" type="button" aria-label="Close">X</button>
         </div>
@@ -633,103 +633,295 @@
           aria-hidden="false"
           data-about-panel="current"
         >
-          <div class="spec-grid">
-            <div class="spec-section spec-section--full">
-              <div class="spec-heading">GOVERNING PHYSICS</div>
-              <div class="spec-tray">
-                <p class="spec-text">
-                  The sound pressure level (L<sub>p</sub>) is calculated by subtracting cumulative attenuation factors
-                  from the source sound power level (L<sub>W</sub>).
-                </p>
-                <div class="equation-pill">
-                  L<sub>p</sub> = L<sub>W</sub> - A<sub>div</sub> - A<sub>atm</sub> - A<sub>gr</sub> - A<sub>bar</sub>
+          <!-- Intro Section -->
+          <div class="spec-section spec-section--full">
+            <p class="section-intro">
+              GeoNoise implements ISO 9613-based outdoor sound propagation with coherent phasor summation
+              for multi-path interference modeling. All calculations are performed per octave band (63 Hz – 16 kHz).
+            </p>
+            <div class="formula-highlight">
+              L<sub>p</sub>(f) = L<sub>W</sub>(f) - A<sub>div</sub> - A<sub>atm</sub>(f) - A<sub>gr</sub>(f) - A<sub>bar</sub>(f)
+            </div>
+          </div>
+
+          <!-- Expand All Button -->
+          <button class="expand-all-btn" id="expandAllBtn" type="button">expand all</button>
+
+          <!-- Collapsible Physics Sections -->
+          <div class="spec-grid" style="gap: 12px;">
+
+            <!-- Geometric Divergence -->
+            <div class="collapsible-section spec-section--full" data-collapsible>
+              <div class="collapsible-header" tabindex="0" role="button" aria-expanded="false">
+                <div class="collapsible-header-left">
+                  <div class="collapsible-title-group">
+                    <span class="collapsible-title">geometric divergence (A<sub>div</sub>)</span>
+                    <span class="collapsible-subtitle">Spherical spreading: A = 20·log₁₀(d) + 11 dB</span>
+                  </div>
+                </div>
+                <div class="collapsible-chevron">▼</div>
+              </div>
+              <div class="collapsible-divider"></div>
+              <div class="collapsible-body">
+                <div class="collapsible-content">
+                  <p class="spec-text">Point source spherical spreading models how sound energy spreads over an expanding sphere.</p>
+                  <div class="formula-highlight">A<sub>div</sub> = 20·log₁₀(d) + 11 dB</div>
+                  <p class="spec-text">where d = 3D distance (m), 11 dB = 10·log₁₀(4π) for hemispherical radiation.</p>
+                  <p class="spec-text"><strong>Derivation:</strong> Power flux Φ = W/(4πr²), therefore L<sub>p</sub> = L<sub>W</sub> - 10·log₁₀(4πr²)</p>
                 </div>
               </div>
             </div>
-            <div class="spec-section">
-              <div class="spec-heading">ATTENUATION COMPONENTS</div>
-              <div class="spec-tray">
-                <div class="spec-subhead">Geometric divergence (A<sub>div</sub>)</div>
-                <div class="spec-text">Standard spherical spreading for point sources.</div>
-                <div class="equation-pill">A<sub>div</sub> = 20 log<sub>10</sub>(d) + 11</div>
-                <div class="spec-subhead">Atmospheric absorption (A<sub>atm</sub>)</div>
-                <div class="spec-text">
-                  A<sub>atm</sub> = &#945; d / 1000. The coefficient &#945; is computed analytically per ISO 9613-1,
-                  summing classical losses with molecular relaxation of nitrogen and oxygen.
+
+            <!-- Atmospheric Absorption -->
+            <div class="collapsible-section spec-section--full" data-collapsible>
+              <div class="collapsible-header" tabindex="0" role="button" aria-expanded="false">
+                <div class="collapsible-header-left">
+                  <div class="collapsible-title-group">
+                    <span class="collapsible-title">atmospheric absorption (A<sub>atm</sub>)</span>
+                    <span class="collapsible-subtitle">ISO 9613-1 frequency-dependent air absorption</span>
+                  </div>
                 </div>
-                <div class="equation-pill">
-                  &#945; = &#945;<sub>cl</sub> + (b<sub>N</sub> &#183; f<sup>2</sup>) / (f<sub>r,N</sub> + f<sup>2</sup> /
-                  f<sub>r,N</sub>) + (b<sub>O</sub> &#183; f<sup>2</sup>) / (f<sub>r,O</sub> + f<sup>2</sup> / f<sub>r,O</sub>)
+                <span class="standards-badge standards-badge--iso">ISO 9613-1</span>
+                <div class="collapsible-chevron">▼</div>
+              </div>
+              <div class="collapsible-divider"></div>
+              <div class="collapsible-body">
+                <div class="collapsible-content">
+                  <p class="spec-text">Air absorbs sound energy through viscous, thermal, and molecular relaxation processes.</p>
+                  <div class="formula-highlight">A<sub>atm</sub> = α(f) · d / 1000 dB</div>
+                  <p class="spec-text">The coefficient α combines classical losses with N₂ and O₂ molecular relaxation:</p>
+                  <div class="equation-pill" style="font-size: 12px;">
+                    α = α<sub>cl</sub> + (b<sub>N</sub>·f²)/(f<sub>r,N</sub> + f²/f<sub>r,N</sub>) + (b<sub>O</sub>·f²)/(f<sub>r,O</sub> + f²/f<sub>r,O</sub>)
+                  </div>
+                  <p class="spec-text" style="margin-top: 10px;"><strong>Reference values at 20°C, 70% RH (dB/km):</strong></p>
+                  <table class="physics-table">
+                    <tr><th>63 Hz</th><th>125 Hz</th><th>250 Hz</th><th>500 Hz</th><th>1 kHz</th><th>2 kHz</th><th>4 kHz</th><th>8 kHz</th><th>16 kHz</th></tr>
+                    <tr><td>0.1</td><td>0.4</td><td>1.0</td><td>1.9</td><td>3.7</td><td>9.7</td><td>33</td><td>117</td><td>392</td></tr>
+                  </table>
                 </div>
-                <div class="spec-text">&#945;<sub>cl</sub>: Classical viscothermal losses.</div>
-                <div class="spec-text">
-                  f<sub>r,N</sub>, f<sub>r,O</sub>: Relaxation frequencies for N<sub>2</sub> and O<sub>2</sub>,
-                  derived dynamically from molar water vapor concentration (h), temperature, and pressure.
-                </div>
-                <div class="spec-subhead">Ground effects (A<sub>gr</sub>)</div>
-                <div class="spec-text">
-                  The engine supports two interaction modes:
-                </div>
-                <div class="spec-text">
-                  Precision (Two-Ray Phasor): sums direct and reflected paths as complex phasors using Delany-Bazley
-                  impedance to capture interference (comb filtering).
-                </div>
-                <div class="equation-pill">
-                  p<sub>tot</sub> = e<sup>-jkr<sub>1</sub></sup> / r<sub>1</sub> + Q e<sup>-jkr<sub>2</sub></sup> / r<sub>2</sub>
-                </div>
-                <div class="spec-text">
-                  Where Q is the spherical reflection coefficient and k is the wavenumber.
-                </div>
-                <div class="spec-text">
-                  Legacy (ISO 9613-2): implements the Alternative Method (Eq. 10) for porous ground. Attenuation is
-                  calculated using mean path height h<sub>m</sub>.
-                </div>
-                <div class="equation-pill">
-                  A<sub>gr</sub> = 4.8 - (2h<sub>m</sub> / d) (17 + 300 / d) &ge; 0 dB
-                </div>
-                <div class="spec-subhead">Barrier diffraction (A<sub>bar</sub>)</div>
-                <div class="spec-text">
-                  The engine implements a 2.5D convex-hull path method to handle both thin walls and
-                  finite-thickness buildings.
-                </div>
-                <div class="spec-text">
-                  Path logic: attenuation is determined by the path difference (&delta;) between the direct
-                  line-of-sight and the shortest diffracted path over the obstacle.
-                </div>
-                <div class="spec-text">Thin barriers: single-edge diffraction (S &rarr; Edge &rarr; R).</div>
-                <div class="spec-text">
-                  Thick barriers (buildings): double-edge diffraction accounting for roof width.
-                </div>
-                <div class="equation-pill">
-                  &delta; = (d<sub>up</sub> + d<sub>roof</sub> + d<sub>down</sub>) - d<sub>direct</sub>
-                </div>
-                <div class="spec-text">
-                  Calculation: Maekawa-style logarithmic approximation based on the Fresnel number
-                  (N = 2&delta; / &lambda;).
-                </div>
-                <div class="equation-pill">A<sub>bar</sub> &#8776; 10 log<sub>10</sub>(3 + 20N)</div>
               </div>
             </div>
-            <div class="spec-section">
-              <div class="spec-heading">NUMERICAL STABILITY &amp; CONSTRAINTS</div>
-              <div class="spec-tray">
-                <div class="spec-subhead">Algorithmic guards (QA)</div>
-                <ul class="spec-list">
-                  <li>Two-ray asymptotes: for |w| &ge; 4, F(w) uses a plane-wave approximation.</li>
-                  <li>Angle limits: cos &#952; is clamped to prevent grazing-incidence singularities.</li>
-                  <li>Impedance cap: |Z| is capped to avoid runaway reflection coefficients.</li>
-                </ul>
-                <div class="spec-subhead">Assumptions</div>
-                <ul class="spec-list">
-                  <li>Broadband: representative center frequency of 1000 Hz.</li>
-                  <li>Field: free-field propagation with first-order ground and simple barrier screening.</li>
-                  <li>
-                    Geometry: 2.5D vertical profile approximation. Terrain is treated as flat (Z=0),
-                    while obstacles utilize full height (Z<sub>obs</sub>) and roof geometry for vertical diffraction.
-                  </li>
-                </ul>
+
+            <!-- Ground Effect -->
+            <div class="collapsible-section spec-section--full" data-collapsible>
+              <div class="collapsible-header" tabindex="0" role="button" aria-expanded="false">
+                <div class="collapsible-header-left">
+                  <div class="collapsible-title-group">
+                    <span class="collapsible-title">ground effect (A<sub>gr</sub>)</span>
+                    <span class="collapsible-subtitle">Two-ray coherent model with phasor interference</span>
+                  </div>
+                </div>
+                <div class="collapsible-chevron">▼</div>
+              </div>
+              <div class="collapsible-divider"></div>
+              <div class="collapsible-body">
+                <div class="collapsible-content">
+                  <p class="spec-text">Sound reaches the receiver via direct and ground-reflected paths, creating frequency-dependent interference.</p>
+                  <pre class="physics-diagram">      S (source)
+     /|\
+    / | \  r₁ = direct path
+   /  |  \
+  /   |hs \ ─────────────────── R (receiver)
+ /    |    \                  /
+/     |     \      r₂       / hr
+──────┴──────●─────────────/──────  Ground (z=0)
+             reflection point</pre>
+                  <p class="spec-text"><strong>Path lengths:</strong></p>
+                  <div class="formula-highlight" style="font-size: 13px;">
+                    r₁ = √(d² + (h<sub>s</sub> - h<sub>r</sub>)²) &nbsp;&nbsp;|&nbsp;&nbsp; r₂ = √(d² + (h<sub>s</sub> + h<sub>r</sub>)²)
+                  </div>
+                  <p class="spec-text"><strong>Delany-Bazley normalized impedance:</strong></p>
+                  <div class="equation-pill" style="font-size: 12px;">
+                    Z<sub>n</sub> = 1 + 9.08(f/σ)<sup>-0.75</sup> + j·11.9(f/σ)<sup>-0.73</sup>
+                  </div>
+                  <p class="spec-text">where σ = flow resistivity (hard: 200,000, soft: 20,000 Pa·s/m²)</p>
+                  <p class="spec-text"><strong>Coherent ground effect:</strong></p>
+                  <div class="formula-highlight">
+                    A<sub>gr</sub> = -20·log₁₀|1 + γ·(r₁/r₂)·e<sup>jk(r₂-r₁)</sup>|
+                  </div>
+                  <p class="spec-text">This captures constructive/destructive interference (ground dip phenomenon).</p>
+                </div>
               </div>
             </div>
+
+            <!-- Barrier Diffraction -->
+            <div class="collapsible-section" data-collapsible>
+              <div class="collapsible-header" tabindex="0" role="button" aria-expanded="false">
+                <div class="collapsible-header-left">
+                  <div class="collapsible-title-group">
+                    <span class="collapsible-title">barrier diffraction</span>
+                    <span class="collapsible-subtitle">Maekawa thin-screen model (1968)</span>
+                  </div>
+                </div>
+                <span class="standards-badge standards-badge--empirical">Maekawa</span>
+                <div class="collapsible-chevron">▼</div>
+              </div>
+              <div class="collapsible-divider"></div>
+              <div class="collapsible-body">
+                <div class="collapsible-content">
+                  <p class="spec-text">Sound diffracts over barriers. Attenuation depends on the path difference δ.</p>
+                  <pre class="physics-diagram">    S                    R
+     \                  /
+      \   δ = A+B-d   /
+       A ──→ ● ←── B
+             │
+      ═══════╧══════   Barrier</pre>
+                  <div class="formula-highlight">δ = A + B - d &nbsp;&nbsp;|&nbsp;&nbsp; N = 2δf/c</div>
+                  <p class="spec-text"><strong>Insertion loss:</strong></p>
+                  <div class="formula-highlight">A<sub>bar</sub> = 10·log₁₀(3 + 20·N) &nbsp;&nbsp; capped at 20-25 dB</div>
+                  <p class="spec-text"><em>Low frequencies diffract easily → less attenuation. High frequencies are blocked effectively.</em></p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Building Diffraction -->
+            <div class="collapsible-section" data-collapsible>
+              <div class="collapsible-header" tabindex="0" role="button" aria-expanded="false">
+                <div class="collapsible-header-left">
+                  <div class="collapsible-title-group">
+                    <span class="collapsible-title">building diffraction</span>
+                    <span class="collapsible-subtitle">Double-edge over roof + around corners</span>
+                  </div>
+                </div>
+                <div class="collapsible-chevron">▼</div>
+              </div>
+              <div class="collapsible-divider"></div>
+              <div class="collapsible-body">
+                <div class="collapsible-content">
+                  <p class="spec-text">For thick obstacles, sound diffracts twice (entry + exit edges):</p>
+                  <pre class="physics-diagram">    S                              R
+     \                            /
+      A₁ ──→ ●────────● ←── A₂
+             │  ROOF  │
+      ═══════╧════════╧═══════   Building</pre>
+                  <p class="spec-text"><strong>Path:</strong> Total = A₁ + T (roof width) + A₂</p>
+                  <div class="formula-highlight">A<sub>bar</sub> = 10·log₁₀(3 + 40·N) &nbsp;&nbsp; capped at 25 dB</div>
+                  <p class="spec-text">Note: coefficient is <strong>40</strong> (not 20) for double-edge diffraction.</p>
+                  <p class="spec-text"><strong>Horizontal diffraction:</strong> Also computed around building corners using single-edge Maekawa. The minimum-loss path is selected.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Wall Reflections -->
+            <div class="collapsible-section" data-collapsible>
+              <div class="collapsible-header" tabindex="0" role="button" aria-expanded="false">
+                <div class="collapsible-header-left">
+                  <div class="collapsible-title-group">
+                    <span class="collapsible-title">wall reflections</span>
+                    <span class="collapsible-subtitle">Image source method, 1st-order</span>
+                  </div>
+                </div>
+                <div class="collapsible-chevron">▼</div>
+              </div>
+              <div class="collapsible-divider"></div>
+              <div class="collapsible-body">
+                <div class="collapsible-content">
+                  <p class="spec-text">Reflections from building walls computed using virtual image sources:</p>
+                  <pre class="physics-diagram">         Wall
+           │
+   S ──────●────── R
+    \      │      /
+     \     │     /
+      S'   │   (S' = mirror of S across wall)</pre>
+                  <div class="formula-highlight">|Γ| ≈ 0.9 per reflection (10% absorption)</div>
+                  <p class="spec-text">Reflections are validated for line-of-sight and checked against other buildings.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Coherent Summation -->
+            <div class="collapsible-section spec-section--full" data-collapsible>
+              <div class="collapsible-header" tabindex="0" role="button" aria-expanded="false">
+                <div class="collapsible-header-left">
+                  <div class="collapsible-title-group">
+                    <span class="collapsible-title">coherent phasor summation</span>
+                    <span class="collapsible-subtitle">Phase-accurate multi-path interference</span>
+                  </div>
+                </div>
+                <div class="collapsible-chevron">▼</div>
+              </div>
+              <div class="collapsible-divider"></div>
+              <div class="collapsible-body">
+                <div class="collapsible-content">
+                  <p class="spec-text">Multiple paths from the <strong>same source</strong> are summed with phase (capturing interference):</p>
+                  <div class="formula-highlight">
+                    p<sub>total</sub> = Σᵢ pᵢ·e<sup>jφᵢ</sup> &nbsp;&nbsp; where φᵢ = -k·dᵢ + φ<sub>reflection</sub>
+                  </div>
+                  <p class="spec-text">This captures:</p>
+                  <ul class="spec-list">
+                    <li>Constructive interference (paths in-phase → +6 dB)</li>
+                    <li>Destructive interference (paths out-of-phase → deep nulls)</li>
+                    <li>Ground dip phenomenon at specific frequencies</li>
+                    <li>Comb filtering from wall reflections</li>
+                  </ul>
+                  <p class="spec-text" style="margin-top: 10px;">Multiple <strong>sources</strong> are summed energetically (incoherent):</p>
+                  <div class="formula-highlight">L<sub>p,total</sub> = 10·log₁₀[ Σⱼ 10<sup>(Lp,j/10)</sup> ]</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Accuracy & Limitations -->
+            <div class="collapsible-section spec-section--full" data-collapsible>
+              <div class="collapsible-header" tabindex="0" role="button" aria-expanded="false">
+                <div class="collapsible-header-left">
+                  <div class="collapsible-title-group">
+                    <span class="collapsible-title">accuracy & limitations</span>
+                    <span class="collapsible-subtitle">Expected precision and model assumptions</span>
+                  </div>
+                </div>
+                <div class="collapsible-chevron">▼</div>
+              </div>
+              <div class="collapsible-divider"></div>
+              <div class="collapsible-body">
+                <div class="collapsible-content">
+                  <div class="accuracy-indicator">
+                    <div class="accuracy-dot"></div>
+                    <span class="accuracy-text"><strong>Engineering-grade:</strong> ± 3 dB typical for distances &lt; 500m</span>
+                  </div>
+                  <p class="spec-text" style="margin-top: 12px;"><strong>Known Limitations:</strong></p>
+                  <ul class="limitations-list">
+                    <li>Flat terrain assumed (no topography effects)</li>
+                    <li>Neutral atmosphere (no temperature/wind refraction)</li>
+                    <li>First-order wall reflections only</li>
+                    <li>2.5D geometry (vertical plane diffraction)</li>
+                    <li>Homogeneous ground (single type per scene)</li>
+                  </ul>
+                  <p class="spec-text" style="margin-top: 12px;"><strong>Numerical Guards:</strong></p>
+                  <ul class="limitations-list">
+                    <li>Distance floor: d<sub>min</sub> = 0.1m to prevent division by zero</li>
+                    <li>Angle limits: cos θ clamped for grazing incidence</li>
+                    <li>Impedance cap: |Z| bounded to avoid runaway coefficients</li>
+                    <li>Level floor: -100 dB (acoustic silence threshold)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <!-- References -->
+            <div class="collapsible-section spec-section--full" data-collapsible>
+              <div class="collapsible-header" tabindex="0" role="button" aria-expanded="false">
+                <div class="collapsible-header-left">
+                  <div class="collapsible-title-group">
+                    <span class="collapsible-title">references</span>
+                    <span class="collapsible-subtitle">Standards and academic sources</span>
+                  </div>
+                </div>
+                <div class="collapsible-chevron">▼</div>
+              </div>
+              <div class="collapsible-divider"></div>
+              <div class="collapsible-body">
+                <div class="collapsible-content">
+                  <ul class="references-list">
+                    <li data-ref="[1]">ISO 9613-1:1993 — Acoustics — Attenuation of sound during propagation outdoors — Part 1: Calculation of absorption by atmosphere</li>
+                    <li data-ref="[2]">ISO 9613-2:1996 — Acoustics — Attenuation of sound during propagation outdoors — Part 2: General method of calculation</li>
+                    <li data-ref="[3]">Maekawa, Z. (1968). "Noise reduction by screens." Applied Acoustics, 1(3), 157-173</li>
+                    <li data-ref="[4]">Delany, M.E. & Bazley, E.N. (1970). "Acoustical properties of fibrous absorbent materials." Applied Acoustics, 3(2), 105-116</li>
+                    <li data-ref="[5]">Pierce, A.D. (1981). "Acoustics: An Introduction to Its Physical Principles and Applications." McGraw-Hill</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
         <div
