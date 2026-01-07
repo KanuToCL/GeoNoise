@@ -90,6 +90,7 @@ body {
   border-radius: 18px;
   box-shadow: 12px 12px 24px var(--shadow-dark), -12px -12px 24px var(--shadow-light);
   pointer-events: auto;
+  overflow: hidden;
 }
 
 .topbar-left {
