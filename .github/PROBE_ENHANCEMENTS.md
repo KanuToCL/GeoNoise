@@ -1014,7 +1014,8 @@ if (targetBand !== undefined) {
 
 > **Status:** Planned
 > **Priority:** Medium
-> **Target:** Per-barrier checkbox to enable horizontal (around-edge) diffraction
+> **Difficulty:** Medium (3-4 hours estimated)
+> **Target:** Global setting to enable horizontal (around-edge) diffraction for barriers
 
 ### Problem Statement
 
@@ -1025,21 +1026,31 @@ Currently:
 - Sound does NOT diffract **around the sides** (horizontal diffraction)
 - Short barriers provide unrealistically high attenuation
 
-### Proposed Solution: Per-Barrier Toggle
+### Proposed Solution: Global Toggle with Smart Default
 
-Add a checkbox in the barrier detail inspector:
+Rather than per-barrier checkboxes (which add UI clutter and cognitive load), use a **global setting** in PropagationConfig with an `'auto'` mode that intelligently enables side diffraction based on barrier length.
+
+**Why global instead of per-barrier:**
+1. **Simpler UI** - One setting instead of N checkboxes
+2. **Consistent** - Matches how other physics settings work (ground reflection, spreading, etc.)
+3. **Smart default** - `'auto'` mode gives correct behavior without user intervention
+4. **Less cognitive load** - Users don't need to decide per-barrier
+
+### UI Location: Settings/Propagation Panel
 
 ```
 ┌─────────────────────────────────────────┐
-│ Barrier Properties                      │
+│ Propagation Settings                     │
 ├─────────────────────────────────────────┤
-│ Height: [3.0] m                         │
-│ Length: 15.2 m (computed)               │
-│                                         │
-│ ☑ Enable side diffraction               │
-│   (Sound can diffract around ends)      │
-│                                         │
-│ Max attenuation: [25] dB                │
+│ Spreading: [Spherical ▼]                 │
+│ Atmospheric absorption: [ISO 9613 ▼]    │
+│ Ground reflection: [✓]                   │
+│   └─ Ground type: [Mixed ▼]             │
+│                                          │
+│ Barrier side diffraction: [Auto ▼]       │
+│   ├─ Off: Over-top only (ISO 9613)       │
+│   ├─ Auto: Enable for barriers < 50m     │
+│   └─ On: All barriers                    │
 └─────────────────────────────────────────┘
 ```
 
@@ -1090,7 +1101,8 @@ function barrierAttenuationWithSides(
   source: Point3D,
   receiver: Point3D,
   barrier: Barrier,
-  frequency: number
+  frequency: number,
+  config: PropagationConfig
 ): number {
   const lambda = 343 / frequency;
 
@@ -1099,7 +1111,10 @@ function barrierAttenuationWithSides(
   const N_top = 2 * deltaTop / lambda;
   const A_top = 10 * Math.log10(3 + 20 * Math.max(N_top, 0));
 
-  if (!barrier.enableSideDiffraction) {
+  // Check if side diffraction is enabled for this barrier
+  const useSideDiffraction = shouldUseSideDiffraction(barrier, config.barrierSideDiffraction);
+
+  if (!useSideDiffraction) {
     return Math.min(A_top, barrier.maxAttenuation ?? 25);
   }
 
@@ -1119,6 +1134,31 @@ function barrierAttenuationWithSides(
   const minLoss = Math.min(A_top, A_left, A_right);
 
   return Math.min(minLoss, barrier.maxAttenuation ?? 25);
+}
+
+/** Determine if side diffraction should be used based on config mode and barrier length */
+function shouldUseSideDiffraction(
+  barrier: Barrier,
+  mode: 'off' | 'auto' | 'on'
+): boolean {
+  if (mode === 'off') return false;
+  if (mode === 'on') return true;
+
+  // 'auto' mode: Enable for barriers shorter than 50m
+  // (For longer barriers, side paths are so long that over-top dominates)
+  const barrierLength = computeBarrierLength(barrier.vertices);
+  return barrierLength < 50;
+}
+
+/** Compute total barrier length from vertices */
+function computeBarrierLength(vertices: Point2D[]): number {
+  let length = 0;
+  for (let i = 1; i < vertices.length; i++) {
+    const dx = vertices[i].x - vertices[i - 1].x;
+    const dy = vertices[i].y - vertices[i - 1].y;
+    length += Math.sqrt(dx * dx + dy * dy);
+  }
+  return length;
 }
 ```
 
@@ -1148,43 +1188,28 @@ With side diffraction: 19.8 dB (more realistic for short barrier)
 
 ```typescript
 // packages/core/src/schema/index.ts
-export const BarrierSchema = z.object({
-  id: z.string(),
-  type: z.literal('barrier'),
-  vertices: z.array(Point2DSchema).min(2),
-  height: z.number().positive().default(3),
-  groundElevation: z.number().default(0),
-  attenuationDb: z.number().default(20),
-  enabled: z.boolean().default(true),
 
-  // NEW: Side diffraction toggle
-  enableSideDiffraction: z.boolean().default(false),
+/** Barrier side diffraction mode */
+export const BarrierSideDiffractionSchema = z.enum(['off', 'auto', 'on']);
+
+export const PropagationConfigSchema = z.object({
+  // ... existing fields ...
+
+  /** Enable horizontal diffraction around barrier ends */
+  barrierSideDiffraction: BarrierSideDiffractionSchema.default('auto'),
 });
 ```
 
-### UI Implementation
+### Auto Mode Threshold Logic
 
-Add checkbox to barrier inspector in `main.ts`:
+The `'auto'` mode uses a 50m threshold based on physical reasoning:
 
-```typescript
-function renderBarrierInspector(barrier: Barrier) {
-  return `
-    <div class="inspector-section">
-      <label>Height (m)</label>
-      <input type="number" value="${barrier.height}" ... />
-    </div>
-    <div class="inspector-section">
-      <label>
-        <input type="checkbox"
-               ${barrier.enableSideDiffraction ? 'checked' : ''}
-               onchange="toggleBarrierSideDiffraction('${barrier.id}')" />
-        Enable side diffraction
-      </label>
-      <span class="hint">Sound can diffract around barrier ends</span>
-    </div>
-  `;
-}
-```
+| Barrier Length | Side Diffraction | Rationale |
+|----------------|------------------|-----------|
+| < 20m | Always useful | Side paths often shorter than over-top |
+| 20-50m | Usually useful | Depends on geometry |
+| > 50m | Rarely useful | Side path so long that over-top dominates |
+| > 100m | Never useful | Effectively infinite barrier |
 
 ### Frequency Dependence Visualization
 
@@ -1201,24 +1226,41 @@ Low frequencies diffract more easily around corners → less attenuation.
 
 ### Implementation Phases
 
-| Phase | Task | Priority |
-|-------|------|----------|
-| 1 | Add `enableSideDiffraction` to BarrierSchema | High |
-| 2 | Add UI checkbox in barrier inspector | High |
-| 3 | Implement `computeSidePathDifference()` | High |
-| 4 | Modify barrier attenuation to include side paths | High |
-| 5 | Update probe worker to use new model | Medium |
-| 6 | Add unit tests for side diffraction | Medium |
+| Phase | Task | Effort | Priority |
+|-------|------|--------|----------|
+| 1 | Add `barrierSideDiffraction` to `PropagationConfigSchema` | 5 min | High |
+| 2 | Add dropdown to Settings/Propagation panel | 15 min | High |
+| 3 | Implement `computeBarrierLength()` utility | 10 min | High |
+| 4 | Implement `shouldUseSideDiffraction()` logic | 10 min | High |
+| 5 | Implement `computeSidePathDifference()` | 30 min | High |
+| 6 | Modify `barrierAttenuation()` to include side paths | 45 min | High |
+| 7 | Thread config through compute pipeline | 30 min | Medium |
+| 8 | Update probe worker to use new model | 1 hr | Medium |
+| 9 | Add unit tests for side diffraction | 30 min | Medium |
+
+**Total estimated effort: 3-4 hours**
 
 ### Files to Modify
 
 | File | Changes |
 |------|---------|
-| `packages/core/src/schema/index.ts` | Add `enableSideDiffraction` to `BarrierSchema` |
-| `apps/web/src/main.ts` | Add checkbox to barrier inspector |
-| `packages/engine/src/propagation/index.ts` | Modify `barrierAttenuation()` |
-| `packages/engine/src/compute/index.ts` | Pass barrier config to attenuation |
-| `apps/web/src/probeWorker.ts` | Update diffraction path tracing |
+| `packages/core/src/schema/index.ts` | Add `BarrierSideDiffractionSchema` and field to `PropagationConfigSchema` |
+| `apps/web/src/main.ts` | Add dropdown to Settings/Propagation panel |
+| `packages/engine/src/propagation/index.ts` | Add `computeSidePathDifference()`, modify `barrierAttenuation()` |
+| `packages/engine/src/compute/index.ts` | Thread config through to attenuation calls |
+| `apps/web/src/probeWorker.ts` | Update diffraction path tracing to include side paths |
+| `packages/engine/tests/` | Add unit tests for new functionality |
+
+### Why This Approach is Better Than Per-Barrier
+
+| Aspect | Per-Barrier Checkbox | Global Toggle (Chosen) |
+|--------|---------------------|------------------------|
+| UI Complexity | N checkboxes | 1 dropdown |
+| Cognitive Load | "Should I enable for this barrier?" | "What accuracy level do I want?" |
+| Consistency | Inconsistent per barrier | Consistent behavior |
+| Auto Mode | Not possible | Smart length-based default |
+| Implementation | Thread per-barrier flag | Thread single config |
+| Testing | Test N combinations | Test 3 modes |
 
 ---
 
