@@ -96,6 +96,7 @@ type BarrierSegment = {
   p1: Point2D;
   p2: Point2D;
   height: number;
+  length: number; // Total barrier length for side diffraction auto-mode
 };
 
 type BuildingObstacle = {
@@ -176,27 +177,35 @@ function buildBarrierGeometry(scene: Scene): BarrierGeometry {
   const buildings: BuildingObstacle[] = [];
   for (const obstacle of scene.obstacles ?? []) {
     if (obstacle.enabled === false) continue;
-    // `height` here is the screen’s top Z (hb) in meters, in the same coordinate system as source/receiver z.
+    // `height` here is the screen's top Z (hb) in meters, in the same coordinate system as source/receiver z.
     // We intentionally ignore obstacle.groundElevation for now (flat ground assumption).
     const height = obstacle.height;
     if (obstacle.type === 'barrier') {
       if (!obstacle.vertices || obstacle.vertices.length < 2) continue;
+
+      // Calculate total barrier length for side diffraction auto-mode decision
+      let totalLength = 0;
+      for (let i = 0; i < obstacle.vertices.length - 1; i += 1) {
+        totalLength += distance2D(obstacle.vertices[i], obstacle.vertices[i + 1]);
+      }
+
       for (let i = 0; i < obstacle.vertices.length - 1; i += 1) {
         const p1 = obstacle.vertices[i];
         const p2 = obstacle.vertices[i + 1];
         if (distance2D(p1, p2) < EPSILON) continue;
-        barrierSegments.push({ p1, p2, height });
+        barrierSegments.push({ p1, p2, height, length: totalLength });
       }
     }
     if (obstacle.type === 'building') {
       const footprint = obstacle.footprint ?? [];
       if (footprint.length < 3) continue;
       const segments: BarrierSegment[] = [];
+      // Buildings don't use side diffraction (enclosed polygons)
       for (let i = 0; i < footprint.length; i += 1) {
         const p1 = footprint[i];
         const p2 = footprint[(i + 1) % footprint.length];
         if (distance2D(p1, p2) < EPSILON) continue;
-        segments.push({ p1, p2, height });
+        segments.push({ p1, p2, height, length: Infinity });
       }
       if (segments.length) {
         buildings.push({ segments, height });
@@ -206,34 +215,100 @@ function buildBarrierGeometry(scene: Scene): BarrierGeometry {
   return { barrierSegments, buildings };
 }
 
+/**
+ * Compute the path difference for side (horizontal) diffraction around a barrier endpoint.
+ * Path: Source → Edge → Receiver
+ * Delta: |S→Edge| + |Edge→R| - |S→R|
+ */
+function computeSidePathDelta(
+  source: Point3D,
+  receiver: Point3D,
+  edgePoint: Point2D,
+  edgeHeight: number,
+  direct3D: number
+): number {
+  // Edge point at barrier height (or at the midpoint between source/receiver heights)
+  const edgeZ = Math.min(edgeHeight, Math.max(source.z, receiver.z));
+
+  const pathA = Math.hypot(
+    distance2D({ x: source.x, y: source.y }, edgePoint),
+    edgeZ - source.z
+  );
+  const pathB = Math.hypot(
+    distance2D(edgePoint, { x: receiver.x, y: receiver.y }),
+    edgeZ - receiver.z
+  );
+
+  return pathA + pathB - direct3D;
+}
+
+/**
+ * Determine if side diffraction should be computed for a barrier.
+ * - 'off': Never compute side diffraction (ISO 9613-2 infinite barrier assumption)
+ * - 'auto': Compute for barriers shorter than threshold (default 50m)
+ * - 'on': Always compute side diffraction
+ */
+function shouldUseSideDiffraction(
+  barrierLength: number,
+  mode: 'off' | 'auto' | 'on',
+  lengthThreshold = 50
+): boolean {
+  if (mode === 'off') return false;
+  if (mode === 'on') return true;
+  return barrierLength < lengthThreshold; // 'auto' mode
+}
+
 function computeThinBarrierDelta(
   source: Point3D,
   receiver: Point3D,
   source2D: Point2D,
   receiver2D: Point2D,
   segments: BarrierSegment[],
-  direct3D: number
+  direct3D: number,
+  sideDiffractionMode: 'off' | 'auto' | 'on' = 'auto'
 ): number | null {
-  let maxDelta: number | null = null;
+  let minDelta: number | null = null;
 
   for (const segment of segments) {
     const intersection = segmentIntersection(source2D, receiver2D, segment.p1, segment.p2);
     if (!intersection) continue;
 
+    // === OVER-TOP DIFFRACTION (always computed) ===
     // Split SR at the intersection point in 2D, then "lift" to the barrier top height in 3D.
-    // Note: This is a surrogate diffraction path; it is NOT a full ISO 9613-2 diffraction implementation.
     const distSI = distance2D(source2D, intersection);
     const distIR = distance2D(intersection, receiver2D);
     const pathA = Math.hypot(distSI, segment.height - source.z);
     const pathB = Math.hypot(distIR, segment.height - receiver.z);
-    const delta = pathA + pathB - direct3D;
+    const topDelta = pathA + pathB - direct3D;
 
-    if (maxDelta === null || delta > maxDelta) {
-      maxDelta = delta;
+    let bestDelta = topDelta;
+
+    // === SIDE DIFFRACTION (if enabled) ===
+    // Compute paths around the left and right edges of the barrier
+    if (shouldUseSideDiffraction(segment.length, sideDiffractionMode)) {
+      // Left edge (p1)
+      const leftDelta = computeSidePathDelta(source, receiver, segment.p1, segment.height, direct3D);
+      // Right edge (p2)
+      const rightDelta = computeSidePathDelta(source, receiver, segment.p2, segment.height, direct3D);
+
+      // Take the minimum delta (least obstructed path) among top and sides
+      // Only consider paths with positive delta (sound must bend around/over barrier)
+      if (leftDelta > 0 && leftDelta < bestDelta) {
+        bestDelta = leftDelta;
+      }
+      if (rightDelta > 0 && rightDelta < bestDelta) {
+        bestDelta = rightDelta;
+      }
+    }
+
+    // For multiple barriers, we accumulate the minimum effective delta
+    // (the receiver "hears through" the least-blocked path)
+    if (minDelta === null || bestDelta < minDelta) {
+      minDelta = bestDelta;
     }
   }
 
-  return maxDelta;
+  return minDelta;
 }
 
 function computeBuildingDelta(
@@ -270,7 +345,8 @@ function computeBuildingDelta(
 function computeBarrierPathDiff(
   source: Point3D,
   receiver: Point3D,
-  geometry: BarrierGeometry
+  geometry: BarrierGeometry,
+  sideDiffractionMode: 'off' | 'auto' | 'on' = 'auto'
 ): { blocked: boolean; pathDifference: number } {
   if (!geometry.barrierSegments.length && !geometry.buildings.length) {
     return { blocked: false, pathDifference: 0 };
@@ -284,7 +360,7 @@ function computeBarrierPathDiff(
 
   let maxDelta: number | null = null;
 
-  const thinDelta = computeThinBarrierDelta(source, receiver, s2, r2, geometry.barrierSegments, direct3D);
+  const thinDelta = computeThinBarrierDelta(source, receiver, s2, r2, geometry.barrierSegments, direct3D, sideDiffractionMode);
   if (thinDelta !== null) {
     maxDelta = thinDelta;
   }
@@ -341,7 +417,7 @@ export class CPUEngine implements Engine {
         // Barrier geometry stage: 2D intersection test + 3D path-difference delta.
         // `blocked` toggles which attenuation terms are applied in calculatePropagation().
         const barrier = barrierGeometry
-          ? computeBarrierPathDiff(src.position, recv.position, barrierGeometry)
+          ? computeBarrierPathDiff(src.position, recv.position, barrierGeometry, propConfig.barrierSideDiffraction ?? 'auto')
           : { blocked: false, pathDifference: 0 };
 
         // Calculate per-band propagation
@@ -466,7 +542,7 @@ export class CPUEngine implements Engine {
 
         // Barrier logic is applied per source->sample path.
         const barrier = barrierGeometry
-          ? computeBarrierPathDiff(src.position, pt, barrierGeometry)
+          ? computeBarrierPathDiff(src.position, pt, barrierGeometry, propConfig.barrierSideDiffraction ?? 'auto')
           : { blocked: false, pathDifference: 0 };
 
         const bandedProp = calculateBandedPropagation(
@@ -547,7 +623,7 @@ export class CPUEngine implements Engine {
 
         // Barrier logic is applied per source->grid-point path.
         const barrier = barrierGeometry
-          ? computeBarrierPathDiff(src.position, pt, barrierGeometry)
+          ? computeBarrierPathDiff(src.position, pt, barrierGeometry, propConfig.barrierSideDiffraction ?? 'auto')
           : { blocked: false, pathDifference: 0 };
 
         const bandedProp = calculateBandedPropagation(
