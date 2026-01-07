@@ -3896,11 +3896,14 @@ function setSelection(next: Selection) {
     setActiveProbe(current.id);
   }
 
-  // Reveal the context inspector when there's a valid selection to show
+  // Reveal the context inspector when there's a valid selection to show,
+  // BUT not if the element already has a pinned panel
   if (contextPanel) {
     const hasInspectorContent = current.type !== 'none' && current.type !== 'probe';
-    contextPanel.classList.toggle('is-open', hasInspectorContent);
-    contextPanel.setAttribute('aria-hidden', hasInspectorContent ? 'false' : 'true');
+    const isAlreadyPinned = hasInspectorContent && isElementPinned(current);
+    const shouldShowPanel = hasInspectorContent && !isAlreadyPinned;
+    contextPanel.classList.toggle('is-open', shouldShowPanel);
+    contextPanel.setAttribute('aria-hidden', shouldShowPanel ? 'false' : 'true');
   }
   if (panelStatsSection) {
     panelStatsSection.classList.toggle('is-hidden', current.type !== 'panel');
@@ -3914,6 +3917,14 @@ function setSelection(next: Selection) {
   renderPanelLegend();
   renderPanelStats();
   requestRender();
+}
+
+/** Check if an element already has a pinned context panel */
+function isElementPinned(sel: Selection): boolean {
+  if (sel.type === 'none' || sel.type === 'probe') return false;
+  return pinnedContextPanels.some(
+    (pinned) => pinned.selection.type === sel.type && pinned.selection.id === sel.id
+  );
 }
 
 /** Get the display name for the currently selected element */
