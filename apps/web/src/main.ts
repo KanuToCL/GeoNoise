@@ -1427,10 +1427,9 @@ function renderPanelStatsFor(panelId: string, container: HTMLElement) {
   }
 
   const rows: Array<[string, string]> = [
+    ['Min', `${formatLevel(result.LAeq_min)} dB`],
     ['Average', `${formatLevel(result.LAeq_avg)} dB`],
     ['L50', `${formatLevel(result.LAeq_p50)} dB`],
-    ['L95', `${formatLevel(result.LAeq_p95)} dB`],
-    ['Min', `${formatLevel(result.LAeq_min)} dB`],
     ['Max', `${formatLevel(result.LAeq_max)} dB`],
     ['Samples', `${result.sampleCount}`],
   ];

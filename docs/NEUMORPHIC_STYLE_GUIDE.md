@@ -168,6 +168,44 @@ box-shadow:
 
 ---
 
+## Input Fields
+
+All input fields (text inputs, number inputs, selects) use the sunken neumorphic style:
+
+### Default State
+```css
+padding: 8px 12px;
+border-radius: 12px;
+border: none;
+background: var(--bg);
+box-shadow:
+  inset 3px 3px 6px rgba(100, 110, 130, 0.25),
+  inset -2px -2px 4px rgba(255, 255, 255, 0.6);
+```
+
+### Hover State
+```css
+box-shadow:
+  inset 4px 4px 8px rgba(100, 110, 130, 0.3),
+  inset -3px -3px 5px rgba(255, 255, 255, 0.5);
+```
+
+### Focus State
+```css
+box-shadow:
+  inset 4px 4px 8px rgba(100, 110, 130, 0.3),
+  inset -3px -3px 5px rgba(255, 255, 255, 0.5),
+  0 0 0 3px rgba(45, 140, 255, 0.3);
+```
+
+**Applied to:**
+- `.property-row input` / `.property-row select`
+- `.source-field input`
+- `.spectrum-gain-input`
+- `.stat-row` (stats display)
+
+---
+
 ## Toggle Switches
 
 Toggle switches use an inset track with a raised thumb that extends beyond the track:
