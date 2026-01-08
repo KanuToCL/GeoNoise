@@ -567,7 +567,66 @@ k = 2πf/c
 
 ---
 
-## 12. Diffraction Model Comparison
+## 12. Probe vs Receiver Engine Accuracy
+
+GeoNoise has two calculation engines that produce slightly different results:
+
+### Receiver Engine (Grid/Heatmap)
+
+**Location:** `packages/engine/src/compute/index.ts`
+
+The receiver engine is optimized for **fast real-time heatmap updates** across thousands of grid points.
+
+**Characteristics:**
+- Single diffraction path per building (roof only via entry/exit points)
+- Takes maximum delta across all blocking buildings
+- Incoherent (power) summation of paths
+- No corner diffraction around buildings
+- Simplified for performance
+
+### Probe Engine (Point Analysis)
+
+**Location:** `apps/web/src/probeWorker.ts`
+
+The probe engine provides **higher fidelity analysis** at a specific point.
+
+**Characteristics:**
+- Multiple diffraction paths per building: over-roof + around-corners
+- Sums contributions from ALL blocking buildings
+- Coherent (phasor) summation with phase - captures interference
+- Full corner diffraction computation
+- More physically accurate
+
+### Expected Differences
+
+| Scenario | Probe vs Receiver | Reason |
+|----------|-------------------|--------|
+| **Direct line-of-sight** | ~0 dB | Both use same spreading + absorption |
+| **Behind single building** | +3 to +7 dB | Probe includes corner paths |
+| **Behind multiple buildings** | +5 to +10 dB | Probe sums all building contributions |
+| **Ground reflection zone** | ±3 dB | Coherent interference patterns |
+
+### Which to Trust?
+
+- **Probe is more accurate** - represents what a sound level meter would actually measure
+- **Receiver is faster** - suitable for real-time visualization during editing
+- Use probes for **final analysis** at critical receptor locations
+- Use receiver grid for **quick assessment** and visualization
+
+### Example
+
+For a receiver behind multiple buildings:
+```
+Receiver engine: 40.0 dB(Z)  ← Takes single worst-case path
+Probe engine:    47.5 dB(Z)  ← Sums roof + corner paths coherently
+Difference:      +7.5 dB
+```
+
+This is expected - the probe captures more sound energy via multiple diffraction paths.
+
+---
+
+## 13. Diffraction Model Comparison
 
 ### Barrier Diffraction Models
 

@@ -2543,6 +2543,19 @@ function renderProbeChartOn(canvas: HTMLCanvasElement, ctx: CanvasRenderingConte
   const overallLevel = calculateOverallLevel(data.magnitudes as Spectrum9, displayWeighting);
   const weightingUnit = displayWeighting === 'Z' ? 'dB' : `dB(${displayWeighting})`;
 
+  // Check if there's essentially no energy (all bands below threshold)
+  // This avoids showing A-weighting-shaped noise floor when there's no signal.
+  // Use MIN_LEVEL as the threshold since that's what the engine returns for silence.
+  const NOISE_FLOOR_THRESHOLD = -99; // dB - only filter out MIN_LEVEL (-100)
+  const hasSignal = weightedMagnitudes.some(m => m > NOISE_FLOOR_THRESHOLD);
+
+  if (!hasSignal) {
+    ctxChart.fillStyle = readCssVar('--probe-text');
+    ctxChart.font = '11px "Work Sans", sans-serif';
+    ctxChart.fillText('No significant signal at probe location.', padding.left, padding.top + 12);
+    return;
+  }
+
   const minFreq = Math.min(...data.frequencies);
   const maxFreq = Math.max(...data.frequencies);
   const logMin = Math.log10(minFreq);

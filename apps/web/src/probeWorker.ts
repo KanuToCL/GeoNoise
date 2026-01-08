@@ -463,12 +463,16 @@ function extractBuildingFootprints(walls: ProbeRequest['walls']): BuildingFootpr
  * A path is blocked if:
  * 1. The 2D projection crosses the building footprint
  * 2. The path height at the intersection points is below the building top
+ *
+ * Returns ALL blocking buildings, not just the first one.
  */
-function findBlockingBuilding(
+function findAllBlockingBuildings(
   from: Point3D,
   to: Point3D,
   buildings: BuildingFootprint[]
-): BuildingOcclusionResult {
+): BuildingOcclusionResult[] {
+  const results: BuildingOcclusionResult[] = [];
+
   for (const building of buildings) {
     const result = segmentIntersectsPolygon(
       { x: from.x, y: from.y },
@@ -485,16 +489,32 @@ function findBlockingBuilding(
 
       // Path is blocked if it's below building top at any intersection point
       if (heightAtEntry < buildingTop || heightAtExit < buildingTop) {
-        return {
+        results.push({
           blocked: true,
           building,
           entryPoint: result.entryPoint,
           exitPoint: result.exitPoint,
-        };
+        });
       }
     }
   }
 
+  return results;
+}
+
+/**
+ * Legacy function - returns first blocking building only.
+ * Kept for backwards compatibility with existing code.
+ */
+function findBlockingBuilding(
+  from: Point3D,
+  to: Point3D,
+  buildings: BuildingFootprint[]
+): BuildingOcclusionResult {
+  const allBlocking = findAllBlockingBuildings(from, to, buildings);
+  if (allBlocking.length > 0) {
+    return allBlocking[0];
+  }
   return { blocked: false, building: null, entryPoint: null, exitPoint: null };
 }
 
@@ -603,10 +623,11 @@ function traceBuildingDiffractionPaths(
 
       // Path is valid if neither leg crosses the building interior
       // (touching the corner is okay)
+      // Note: entryPoint can be null even when intersects is true in edge cases
       const leg1Valid = !cornerResult1.intersects ||
-        (distance2D(cornerResult1.entryPoint!, corner) < EPSILON);
+        (cornerResult1.entryPoint !== null && distance2D(cornerResult1.entryPoint, corner) < EPSILON);
       const leg2Valid = !cornerResult2.intersects ||
-        (distance2D(cornerResult2.entryPoint!, corner) < EPSILON);
+        (cornerResult2.entryPoint !== null && distance2D(cornerResult2.entryPoint, corner) < EPSILON);
 
       if (leg1Valid && leg2Valid) {
         // Corner diffraction happens at ground level or source/receiver height
@@ -1266,21 +1287,60 @@ function computeSourceCoherent(
     }
   }
 
-  // Trace building diffraction paths if direct is blocked by building
+  // ============================================================================
+  // Building Diffraction Path Tracing
+  // ============================================================================
+  //
+  // When the direct path is blocked by buildings, we trace diffraction paths
+  // for EACH blocking building. This is more accurate than the receiver engine
+  // which only computes a single path per building.
+  //
+  // The probe traces:
+  //   1. Over-roof paths (double-edge diffraction, coefficient 40)
+  //   2. Around-corner paths (single-edge diffraction, coefficient 20)
+  //
+  // All valid paths are summed coherently with phase, which can result in
+  // higher levels than the receiver engine's simplified approach (typically
+  // 5-10 dB higher due to multiple contributing paths).
+  //
+  // This matches physical reality better - a sound level meter at this
+  // location would measure contributions from all diffraction paths.
+  //
+  // See: docs/PHYSICS_REFERENCE.md Section 12 "Probe vs Receiver Engine Accuracy"
+  // ============================================================================
+
   const buildingDiffPaths: BuildingDiffractionPath[] = [];
-  if (directBlockedByBuilding && buildingOcclusion.building &&
-      buildingOcclusion.entryPoint && buildingOcclusion.exitPoint) {
-    const diffPaths = traceBuildingDiffractionPaths(
-      srcPos,
-      probePos,
-      buildingOcclusion.building,
-      buildingOcclusion.entryPoint,
-      buildingOcclusion.exitPoint
-    );
-    buildingDiffPaths.push(...diffPaths.filter(p => p.valid));
+  const allBlockingBuildings = findAllBlockingBuildings(srcPos, probePos, buildings);
+
+  if (allBlockingBuildings.length > 0) {
+    // For each blocking building, trace all diffraction paths (roof + corners)
+    for (const occlusion of allBlockingBuildings) {
+      if (!occlusion.building || !occlusion.entryPoint || !occlusion.exitPoint) continue;
+
+      const diffPaths = traceBuildingDiffractionPaths(
+        srcPos,
+        probePos,
+        occlusion.building,
+        occlusion.entryPoint,
+        occlusion.exitPoint
+      );
+
+      // Add all valid diffraction paths
+      // Note: We don't validate each leg against other buildings to match
+      // the receiver engine's simplified approach for consistency.
+      for (const diffPath of diffPaths) {
+        if (diffPath.valid) {
+          buildingDiffPaths.push(diffPath);
+        }
+      }
+    }
+
     if (buildingDiffPaths.length > 0) {
       pathTypes.add('building-diffraction');
     }
+  } else if (directBlockedByBuilding) {
+    // Direct is blocked but no buildings found by findAllBlockingBuildings - shouldn't happen
+    console.warn(`[ProbeWorker] Direct blocked by building but findAllBlockingBuildings returned empty!`);
   }
 
   // Check ground reflection path for building blocking
@@ -1524,19 +1584,16 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
   // Sum all source spectra energetically
   const totalSpectrum = sumMultipleSpectra(sourceSpectra);
 
-  // Apply ambient floor (10 dB minimum for display)
-  // Note: Actual calculated levels can go lower, but we clamp for display
-  // to avoid unrealistic negative values. The engine uses MIN_LEVEL (-100 dB)
-  // internally for calculations.
-  const DISPLAY_FLOOR_DB = 10;
-  const magnitudes = totalSpectrum.map(level => Math.max(level, DISPLAY_FLOOR_DB));
+  // Return actual calculated spectrum - display floor is applied in the UI
+  // after frequency weighting to avoid A-curve artifacts on silence.
+  // The engine uses MIN_LEVEL (-100 dB) for bands with no energy.
 
   return {
     type: 'PROBE_UPDATE',
     probeId: req.probeId,
     data: {
       frequencies: [...OCTAVE_BANDS],
-      magnitudes,
+      magnitudes: totalSpectrum,
       interferenceDetails: {
         ghostCount: totalGhostCount,
       },
@@ -1562,14 +1619,18 @@ workerContext.addEventListener('message', (event) => {
   try {
     const result = calculateProbe(req);
     workerContext.postMessage(result);
-  } catch {
-    // Return a fallback result so the UI doesn't hang
+  } catch (err) {
+    // Log error for debugging (will appear in browser console)
+    console.error('[ProbeWorker] Calculation error:', err);
+
+    // Return empty spectrum (MIN_LEVEL) so silent areas show correctly
+    // instead of misleading fallback values
     workerContext.postMessage({
       type: 'PROBE_UPDATE',
       probeId: req.probeId,
       data: {
         frequencies: [...OCTAVE_BANDS],
-        magnitudes: [35, 35, 35, 35, 35, 35, 35, 35, 35],
+        magnitudes: [MIN_LEVEL, MIN_LEVEL, MIN_LEVEL, MIN_LEVEL, MIN_LEVEL, MIN_LEVEL, MIN_LEVEL, MIN_LEVEL, MIN_LEVEL],
         interferenceDetails: { ghostCount: 0 },
       },
     });

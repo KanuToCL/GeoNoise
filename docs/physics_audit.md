@@ -1482,3 +1482,8 @@ interface RayPathWithSpectralLoss extends RayPath {
 |------|---------|--------|--------|
 | 2025-01-08 | — | Initial audit created | — |
 | 2025-01-08 | — | Added detailed formulations and proposed implementations | — |
+| 2025-01-08 | #20 | Fixed: Display floor was applied before A-weighting, causing A-curve artifacts | — |
+| 2025-01-08 | #21 | Fixed: Error fallback in probeWorker returned 35 dB instead of MIN_LEVEL | — |
+| 2025-01-08 | #22 | Fixed: Null pointer exception in traceBuildingDiffractionPaths corner validation | — |
+| 2025-01-08 | #23 | Fixed: Probe only traced diffraction for first blocking building, not all | — |
+| 2025-01-08 | — | Added documentation for Probe vs Receiver accuracy differences in PHYSICS_REFERENCE.md | — |
