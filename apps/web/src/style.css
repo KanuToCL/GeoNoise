@@ -2686,23 +2686,27 @@ textarea:focus-visible,
   gap: 18px;
 }
 
-/* Inset scrollbar for modal cards */
+/* Ultra-minimal inset scrollbar for modal cards - carved into the plastic */
 .modal-card::-webkit-scrollbar {
-  width: 16px;
+  width: 8px;
 }
 
 .modal-card::-webkit-scrollbar-track {
-  background: transparent;
-  border-left: 12px solid transparent;
-  background-clip: padding-box;
+  background: #e0e5ec;
+  border-radius: 4px;
+  margin: 12px 4px;
+  box-shadow: inset 2px 2px 4px #a3b1c6, inset -2px -2px 4px #f0f4f8;
 }
 
 .modal-card::-webkit-scrollbar-thumb {
-  background: linear-gradient(145deg, #f0f4f8, #d8dfe8);
-  border-radius: 10px;
-  border: 4px solid transparent;
-  background-clip: padding-box;
-  box-shadow: inset 0 0 0 1px #c8d0dc;
+  background: #cdd4de;
+  border-radius: 4px;
+  border: none;
+  box-shadow: inset 1px 1px 2px #a3b1c6;
+}
+
+.modal-card::-webkit-scrollbar-thumb:hover {
+  background: #c0c8d4;
 }
 
 .modal-plate {
