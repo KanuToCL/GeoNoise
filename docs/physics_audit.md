@@ -164,6 +164,91 @@ export function agrTwoRayDb(
 
 ---
 
+### 2b. computeProbeCoherent Double-Counts Direct Path with Two-Ray Ground Model
+- [ ] **Status:** Open
+- **Location:** `packages/engine/src/probeCompute/index.ts:341-375`
+- **Impact:** Incorrect levels (observed -146 dB instead of ~70 dB)
+- **Related to:** Issue #2 (Two-Ray Ground Model)
+
+#### Description
+When `groundReflection = true`, the `computeProbeCoherent` function double-counts the direct path:
+
+1. `computeGroundReflectionPhasor` uses `agrTwoRayDb` which computes the **combined interference** between direct and ground-reflected paths
+2. But then this phasor is **added to** `pathPhasors` which **still includes the standalone direct path**
+3. Result: direct path is counted twice with different phases, causing incorrect interference
+
+#### Current Code Implementation
+```typescript
+// In computeProbeCoherent:
+
+// Handle ground reflection specially using the accurate two-ray model
+let groundPhasor: SpectralPhasor | null = null;
+if (config.groundReflection && source.position.z > 0 && probePosition.z > 0) {
+  groundPhasor = computeGroundReflectionPhasor(source, probePosition, config);
+  // ↑ This uses agrTwoRayDb which ALREADY includes direct+ground interference
+}
+
+// Compute phasors for all other paths
+const nonGroundPaths = paths.filter(p => p.type !== 'ground');  // Keeps 'direct'!
+const pathPhasors = computeSourcePhasors(source, probePosition, nonGroundPaths, config);
+// ↑ This STILL includes the direct path as a standalone phasor
+
+// Combine them - WRONG: direct is now counted twice!
+const allPhasors = groundPhasor ? [...pathPhasors, groundPhasor] : pathPhasors;
+```
+
+#### Mathematical Analysis
+With two-ray model, `agrTwoRayDb` returns:
+```
+A_gr = -20·log₁₀(|1 + Γ·(r₁/r₂)·e^(jφ)|)
+```
+
+This ratio already represents the **combined effect** of direct + ground reflected.
+
+When we compute:
+```typescript
+const level = sourceLevel - directAtten - agrDb;
+```
+
+We get the level **after** two-ray interference. Adding this phasor to a standalone direct path phasor creates:
+```
+Total = (Direct phasor) + (Two-ray combined phasor)
+      = p·e^(jφ₁) + p'·e^(jφ₂)
+```
+
+Where `p'` already accounts for direct+ground, so we're effectively adding:
+```
+= p·e^(jφ₁) + [p_direct + p_ground]·e^(jφ₂)
+= 2×Direct + Ground  (with phase complications)
+```
+
+#### Observed Behavior
+- Test input: 100 dB source at 10m distance
+- Expected: ~70 dB (100 - 20·log₁₀(10) - 11)
+- Actual: -146 dB (essentially P_MIN)
+
+The extreme low value comes from destructive interference when the direct path phasor cancels with the two-ray phasor.
+
+#### Proposed Fix
+Option A: Filter out direct path when using two-ray ground model:
+```typescript
+// Compute phasors for paths EXCEPT direct (two-ray handles it)
+const nonDirectNonGroundPaths = paths.filter(p =>
+  p.type !== 'ground' && (groundPhasor ? p.type !== 'direct' : true)
+);
+const pathPhasors = computeSourcePhasors(source, probePosition, nonDirectNonGroundPaths, config);
+```
+
+Option B: Compute ground reflection as separate phasor (not using two-ray):
+```typescript
+// Trace ground path as standalone phasor, let coherent sum handle interference
+const groundPath = traceGroundPath(source, receiver, ...);
+const groundPhasor = computePathPhasor(groundPath, ...);  // Just ground, not combined
+// Then sum: direct + ground coherently
+```
+
+---
+
 ### 3. Barrier + Ground Effect Interaction Physically Incorrect
 - [ ] **Status:** Open
 - **Location:** `packages/engine/src/propagation/index.ts:314`
