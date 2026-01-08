@@ -3521,6 +3521,16 @@ function createSpectrumEditor(
   const sliders: HTMLInputElement[] = [];
   const valueDisplays: HTMLSpanElement[] = [];
 
+  // Store fill elements for updating
+  const fillElements: HTMLDivElement[] = [];
+
+  // Helper to calculate fill height percentage
+  const calcFillPercent = (value: number): number => {
+    const min = 40;
+    const max = 130;
+    return ((value - min) / (max - min)) * 100;
+  };
+
   for (let i = 0; i < OCTAVE_BANDS.length; i++) {
     const bandIndex = i;
     const freq = OCTAVE_BANDS[i];
@@ -3535,7 +3545,17 @@ function createSpectrumEditor(
     valueDisplay.textContent = Math.round(source.spectrum[i]).toString();
     valueDisplays.push(valueDisplay);
 
-    // Vertical slider (range input rotated via CSS)
+    // Track wrapper (sunken gutter)
+    const trackWrapper = document.createElement('div');
+    trackWrapper.className = 'spectrum-slider-track';
+
+    // Fill element (solid color level indicator)
+    const fillEl = document.createElement('div');
+    fillEl.className = 'spectrum-slider-fill';
+    fillEl.style.height = `${calcFillPercent(source.spectrum[i])}%`;
+    fillElements.push(fillEl);
+
+    // Vertical slider (range input using writing-mode)
     const slider = document.createElement('input');
     slider.type = 'range';
     slider.className = 'spectrum-slider';
@@ -3556,6 +3576,8 @@ function createSpectrumEditor(
       const next = Number(slider.value);
       valueDisplay.textContent = Math.round(next).toString();
       slider.title = `${freqLabel} Hz: ${Math.round(next)} dB Lw`;
+      // Update fill height
+      fillEl.style.height = `${calcFillPercent(next)}%`;
     });
 
     // Handle slider change (commit value)
@@ -3570,8 +3592,12 @@ function createSpectrumEditor(
       }
     });
 
+    // Assemble track: fill + slider inside track wrapper
+    trackWrapper.appendChild(fillEl);
+    trackWrapper.appendChild(slider);
+
     sliderColumn.appendChild(valueDisplay);
-    sliderColumn.appendChild(slider);
+    sliderColumn.appendChild(trackWrapper);
     sliderColumn.appendChild(freqLabelEl);
     slidersContainer.appendChild(sliderColumn);
   }
@@ -3583,6 +3609,7 @@ function createSpectrumEditor(
     for (let i = 0; i < 9; i++) {
       sliders[i].value = source.spectrum[i].toString();
       valueDisplays[i].textContent = Math.round(source.spectrum[i]).toString();
+      fillElements[i].style.height = `${calcFillPercent(source.spectrum[i])}%`;
       const freq = OCTAVE_BANDS[i];
       const freqLabel = freq >= 1000 ? `${freq / 1000}k` : String(freq);
       sliders[i].title = `${freqLabel} Hz: ${Math.round(source.spectrum[i])} dB Lw`;

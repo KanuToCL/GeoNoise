@@ -109,6 +109,65 @@ The ring is offset from the button edge using a background-colored "spacer" shad
 
 ---
 
+## Spectrum Sliders
+
+Vertical sliders for frequency band control use a neumorphic design with:
+- **Sunken track gutter** - thin inset channel
+- **Solid color fill** - orange gradient showing level
+- **Raised thumb** - neumorphic circle with orange ring
+
+### Structure
+```
+┌─────────────────┐
+│  value (100)    │
+│                 │
+│    ┌───┐        │
+│    │   │ ← sunken track (10px wide)
+│    │ ● │ ← raised thumb with orange ring
+│    │███│ ← solid orange fill (height = value %)
+│    │███│        │
+│    └───┘        │
+│                 │
+│  freq (1k)      │
+└─────────────────┘
+```
+
+### Track (Sunken Gutter)
+```css
+width: 10px;
+height: 70px;
+border-radius: 999px;
+background: var(--bg);
+box-shadow:
+  inset 2px 2px 4px rgba(100, 110, 130, 0.3),
+  inset -1px -1px 3px rgba(255, 255, 255, 0.6);
+```
+
+### Fill (Solid Orange Level)
+```css
+background: linear-gradient(to top, #e8a060, #f0c090);
+border-radius: 999px;
+/* Height set dynamically via JS */
+```
+
+### Thumb (Raised with Orange Ring)
+```css
+width: 18px;
+height: 18px;
+border-radius: 50%;
+background: var(--bg);
+border: 2px solid #e8a060;
+box-shadow:
+  2px 2px 5px rgba(100, 110, 130, 0.35),
+  -1px -1px 3px rgba(255, 255, 255, 0.8);
+```
+
+### Thumb States
+- **Hover**: `transform: scale(1.1)` with enhanced shadows
+- **Active/Dragging**: Inset shadows (sunken feel)
+
+---
+
 ## Toggle Switches
 
 Toggle switches use an inset track with a raised thumb that extends beyond the track:

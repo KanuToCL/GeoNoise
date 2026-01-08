@@ -2467,11 +2467,12 @@ textarea:focus-visible,
 .spectrum-sliders-container {
   display: flex;
   justify-content: space-between;
-  gap: 4px;
-  padding: 8px 4px;
-  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-softer);
+  gap: 6px;
+  padding: 12px 8px;
+  background: var(--bg);
+  border-radius: 16px;
+  border: none;
+  box-shadow: inset 4px 4px 8px rgba(100, 110, 130, 0.2), inset -4px -4px 8px rgba(255, 255, 255, 0.7);
 }
 
 .spectrum-slider-column {
@@ -2492,64 +2493,109 @@ textarea:focus-visible,
   text-align: center;
 }
 
+/* Neumorphic vertical slider wrapper */
+.spectrum-slider-track {
+  position: relative;
+  width: 10px;
+  height: 70px;
+  border-radius: 999px;
+  background: var(--bg);
+  /* Sunken track gutter */
+  box-shadow:
+    inset 2px 2px 4px rgba(100, 110, 130, 0.3),
+    inset -1px -1px 3px rgba(255, 255, 255, 0.6);
+  margin: 4px 0;
+}
+
+/* Solid color fill level - orange tone */
+.spectrum-slider-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-radius: 999px;
+  background: linear-gradient(to top, #e8a060, #f0c090);
+  /* Default height set by JS via style */
+  transition: height 50ms ease;
+}
+
+/* Hidden native input overlaid for interaction */
 .spectrum-slider {
   -webkit-appearance: none;
   appearance: none;
-  width: 70px;
-  height: 6px;
+  position: absolute;
+  width: 10px;
+  height: 70px;
   background: transparent;
-  transform: rotate(-90deg);
-  transform-origin: center center;
-  margin: 30px 0;
   cursor: pointer;
+  margin: 0;
+  /* Vertical slider via writing-mode */
+  writing-mode: vertical-lr;
+  direction: rtl;
+  z-index: 2;
 }
 
 .spectrum-slider::-webkit-slider-runnable-track {
-  height: 6px;
-  border-radius: 3px;
-  background: linear-gradient(to right, var(--border), var(--source-chart-line));
-  box-shadow: inset 1px 1px 3px #d0d0d0;
+  width: 10px;
+  height: 100%;
+  background: transparent;
+  border-radius: 999px;
 }
 
 .spectrum-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
-  border: 2px solid var(--source-chart-marker);
-  box-shadow: 0 2px 4px #d0d0d0, var(--shadow-raised);
-  margin-top: -4px;
+  background: var(--bg);
+  /* Raised neumorphic thumb */
+  box-shadow:
+    2px 2px 5px rgba(100, 110, 130, 0.35),
+    -1px -1px 3px rgba(255, 255, 255, 0.8);
+  border: 2px solid #e8a060;
   cursor: grab;
-  transition: transform 0.1s ease;
+  transition: transform 100ms ease, box-shadow 100ms ease;
+  margin-left: -4px;
 }
 
 .spectrum-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
-  border-color: var(--source-chart-line);
+  transform: scale(1.1);
+  box-shadow:
+    3px 3px 6px rgba(100, 110, 130, 0.4),
+    -2px -2px 4px rgba(255, 255, 255, 0.9);
 }
 
 .spectrum-slider::-webkit-slider-thumb:active {
   cursor: grabbing;
-  transform: scale(1.1);
+  transform: scale(1.05);
+  /* Sunken when dragging */
+  box-shadow:
+    inset 2px 2px 4px rgba(100, 110, 130, 0.25),
+    inset -1px -1px 3px rgba(255, 255, 255, 0.5);
 }
 
 .spectrum-slider::-moz-range-track {
-  height: 6px;
-  border-radius: 3px;
-  background: linear-gradient(to right, var(--border), var(--source-chart-line));
-  box-shadow: inset 1px 1px 3px rgba(0, 0, 0, 0.1);
+  width: 10px;
+  height: 100%;
+  background: transparent;
+  border-radius: 999px;
 }
 
 .spectrum-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
-  border: 2px solid var(--source-chart-marker);
-  box-shadow: 0 2px 4px #d0d0d0;
+  background: var(--bg);
+  box-shadow:
+    2px 2px 5px rgba(100, 110, 130, 0.35),
+    -1px -1px 3px rgba(255, 255, 255, 0.8);
+  border: 2px solid #e8a060;
   cursor: grab;
+}
+
+.spectrum-slider::-moz-range-thumb:hover {
+  transform: scale(1.1);
 }
 
 .spectrum-slider-freq {
