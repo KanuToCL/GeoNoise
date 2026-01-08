@@ -2651,6 +2651,13 @@ textarea:focus-visible,
   color: var(--text-subtle);
 }
 
+/* =============================================================================
+   Modal Layout - Centered Card with Scrollbar
+   =============================================================================
+   A moderately-sized centered modal with neumorphic scrollbar.
+   Not full span - provides comfortable reading width.
+   ============================================================================= */
+
 .modal {
   position: fixed;
   inset: 0;
@@ -2675,32 +2682,32 @@ textarea:focus-visible,
 .modal-card {
   position: relative;
   z-index: 1;
-  width: min(760px, 92vw);
-  max-height: 80vh;
+  width: min(900px, 94vw);
+  max-height: 85vh;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 24px;
-  padding-right: 36px; /* Extra padding to bring content away from scrollbar */
+  padding: 28px;
+  padding-right: 40px;
   display: flex;
   flex-direction: column;
   gap: 18px;
 }
 
-/* Ultra-minimal inset scrollbar for modal cards - carved into the plastic */
+/* Neumorphic inset scrollbar for modal cards */
 .modal-card::-webkit-scrollbar {
-  width: 8px;
+  width: 10px;
 }
 
 .modal-card::-webkit-scrollbar-track {
   background: #e0e5ec;
-  border-radius: 4px;
+  border-radius: 5px;
   margin: 12px 4px;
   box-shadow: inset 2px 2px 4px #a3b1c6, inset -2px -2px 4px #f0f4f8;
 }
 
 .modal-card::-webkit-scrollbar-thumb {
   background: #cdd4de;
-  border-radius: 4px;
+  border-radius: 5px;
   border: none;
   box-shadow: inset 1px 1px 2px #a3b1c6;
 }
@@ -2710,10 +2717,10 @@ textarea:focus-visible,
 }
 
 .modal-plate {
-  border-radius: 30px;
+  border-radius: 28px;
   background: var(--brand-bg);
   border: none;
-  box-shadow: 18px 18px 36px var(--shadow-dark), -18px -18px 36px var(--shadow-light);
+  box-shadow: 16px 16px 32px var(--shadow-dark), -16px -16px 32px var(--shadow-light);
 }
 
 .modal-header {
@@ -2757,9 +2764,13 @@ textarea:focus-visible,
   text-shadow: 1px 1px 0 var(--shadow-light-soft), -1px -1px 1px rgba(0, 0, 0, 0.2);
 }
 
+/* Pill-based flowing grid - sections redistribute when expanded */
 .spec-grid {
-  display: grid;
-  gap: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-content: start;
+  justify-content: center;
 }
 
 .spec-section {
@@ -2773,19 +2784,36 @@ textarea:focus-visible,
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   Collapsible Physics Sections
+   Pill-style Collapsible Physics Sections
+   - Collapsed: compact horizontal pills that flow/wrap
+   - Expanded: full width, other pills redistribute around it
    ───────────────────────────────────────────────────────────────────────────── */
 
 .collapsible-section {
-  border-radius: 18px;
+  border-radius: 999px;
   background: var(--brand-bg);
   box-shadow: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
   overflow: hidden;
-  transition: box-shadow 200ms ease;
+  /* Smooth, slow transitions for organic feel */
+  transition:
+    border-radius 500ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 400ms cubic-bezier(0.4, 0, 0.2, 1),
+    flex 600ms cubic-bezier(0.4, 0, 0.2, 1),
+    max-width 600ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* Collapsed: auto-width pill that wraps with others */
+  flex: 0 0 auto;
+  max-width: 480px;
 }
 
 .collapsible-section:hover {
   box-shadow: 8px 8px 16px var(--shadow-dark), -8px -8px 16px var(--shadow-light);
+}
+
+/* Expanded: wider but not full edge-to-edge, rounded corners */
+.collapsible-section.is-open {
+  border-radius: 24px;
+  flex: 1 0 100%;
+  max-width: 100%;
 }
 
 .collapsible-header {
@@ -2793,7 +2821,7 @@ textarea:focus-visible,
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 18px;
+  padding: 10px 18px;
   cursor: pointer;
   user-select: none;
   transition: background 160ms ease;
@@ -2801,6 +2829,11 @@ textarea:focus-visible,
 
 .collapsible-header:hover {
   background: #f0f4f8;
+}
+
+/* When expanded, add more vertical padding */
+.collapsible-section.is-open .collapsible-header {
+  padding: 14px 18px;
 }
 
 .collapsible-header-left {
@@ -2846,7 +2879,7 @@ textarea:focus-visible,
   color: var(--text-muted);
   background: var(--brand-bg);
   box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
-  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
   flex-shrink: 0;
 }
 
@@ -2857,11 +2890,15 @@ textarea:focus-visible,
 .collapsible-body {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  transition:
+    max-height 600ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 400ms cubic-bezier(0.4, 0, 0.2, 1) 100ms;
 }
 
 .collapsible-section.is-open .collapsible-body {
   max-height: 2000px;
+  opacity: 1;
 }
 
 .collapsible-content {
@@ -3166,10 +3203,20 @@ textarea:focus-visible,
   margin-top: 4px;
 }
 
-@media (min-width: 900px) {
-  .spec-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+/* Equations grid - CSS grid layout for Full Equations tab */
+.equations-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  padding: 20px 0;
+}
+
+.equations-grid .spec-section {
+  min-width: 0;
+}
+
+.equations-grid .spec-section--full {
+  grid-column: 1 / -1;
 }
 
 @keyframes fadeIn {

@@ -476,6 +476,45 @@ From the original project TODO:
 | Terrain/topography | Low | Very High | Future |
 | Diffracted path reflections | Low | High | Future |
 | Auralization/HRTF | Low | Very High | Future |
+| Bouncing/physics equation tiles | Low | Medium | Future |
+
+---
+
+## Bouncing Physics Equation Tiles
+
+> **Status:** Future Enhancement
+> **Priority:** Low
+
+### Concept
+
+In the Full Equations tab, have the section containers (Core Levels, Geometry, Spreading, etc.) float freely and bounce off each other using physics simulation. This creates a playful, interactive experience that showcases the neumorphic design.
+
+### Implementation Notes
+
+- Target `.spec-section` containers with absolute positioning
+- Use AABB (axis-aligned bounding box) collision detection
+- Implement momentum-based elastic collisions
+- Sections bounce off container walls
+- Gentle friction + occasional random nudges to keep motion going
+
+### Technical Challenges
+
+- Initial positioning needs to avoid overlap
+- Collision resolution can cause overlapping if not carefully separated
+- Performance with many sections at 60fps
+- May need to pause animation when tab not visible
+
+### Attempted Implementation
+
+An initial implementation was attempted using:
+- `position: absolute` on `.equations-grid .spec-section`
+- requestAnimationFrame physics loop
+- AABB collision detection with momentum exchange
+
+However, the initial grid layout and collision resolution caused sections to overlap. Future work could:
+1. Use a force-directed layout algorithm (like D3.js force simulation)
+2. Start with sections spread apart in a Masonry-like layout
+3. Add "settling" phase before enabling bouncing
 
 ---
 
