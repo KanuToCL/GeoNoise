@@ -6,6 +6,38 @@ This document contains the implementation history of completed features. For pla
 
 ## 2026-01-08
 
+### Select Box Multi-Selection Tool
+
+**Status:** ✅ Implemented (v0.4.5)
+
+Added a rectangular select box tool for selecting multiple elements at once and performing batch operations.
+
+#### Features
+
+- **Ctrl/Cmd+click drag** on empty canvas to draw rectangular selection box
+- **Multi-element selection** - Select sources, receivers, probes, panels, barriers, buildings
+- **Batch operations** - Delete and duplicate from inspector panel buttons
+- **Ctrl+A** to select all elements
+- **Ctrl+D** to duplicate selection (new elements become selected)
+- **Shift+click** to add/remove individual elements from selection
+- **Escape** to deselect all
+- **Inspector panel** shows count of selected items with action buttons
+- **Pin option hidden** for multi-selection (can't pin multiple elements)
+- **Selection halos** rendered on all selected elements
+
+#### Known Issues
+
+- **Multi-move not working** - Clicking to drag a multi-selection currently resets to single selection. Group move needs debugging. Workaround: duplicate selection, then move duplicated items.
+
+#### Technical Details
+
+- Extended `Selection` type with `{ type: 'multi'; items: SelectionItem[] }` variant
+- Added `DragState` variants: `'select-box'` and `'move-multi'`
+- Helper functions: `isElementSelected()`, `selectionToItems()`, `itemsToSelection()`, `getSelectedCount()`, `getElementsInSelectBox()`
+- Batch operations: `duplicateMultiSelection()`, `selectAll()`, extended `deleteSelection()`
+
+---
+
 ### Settings Popover Z-Index / Stacking Context Fix
 
 **Status:** ✅ Fixed (Critical Bug)

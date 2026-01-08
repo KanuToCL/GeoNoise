@@ -35,8 +35,11 @@ This document contains planned features and enhancements for GeoNoise. For compl
 - Building diffraction models UI exposure
 - Expose `maxReflections` setting in UI (currently hardcoded to 0)
 
-### 🔮 Future Enhancements
+## ✅ Recently Implemented
 
+- **[Select Box Multi-Selection Tool](./FEATURE_SELECT_BOX.md)** - Rectangular marquee selection of multiple elements for batch operations (delete, duplicate). Ctrl+click drag to draw select box, shift+click for additive selection.
+
+## 🔮 Future Enhancements
 - Configurable diffraction model selection (Maekawa / Kurze-Anderson / ISO 9613-2)
 - Higher-order reflections (2nd, 3rd order bounces)
 - Wall reflections for diffracted paths

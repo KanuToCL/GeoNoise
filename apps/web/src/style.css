@@ -2132,6 +2132,47 @@ button.icon-button {
   color: var(--text-soft);
 }
 
+.multi-selection-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.multi-selection-counts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.multi-selection-count-item {
+  padding: 4px 0;
+}
+
+.multi-selection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.multi-action-btn {
+  flex: 1 1 auto;
+  min-width: 80px;
+  padding: 8px 12px;
+  font-size: 12px;
+  border-radius: 12px;
+}
+
+.multi-action-btn.danger {
+  color: #ff6b6b;
+}
+
+.multi-action-btn.secondary {
+  opacity: 0.8;
+}
+
 .text-button {
   border: none;
   background: transparent;

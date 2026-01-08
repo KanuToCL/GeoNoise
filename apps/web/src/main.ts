@@ -347,6 +347,13 @@ type Tool =
   | 'measure'
   | 'delete';
 
+type SelectableElementType = 'source' | 'receiver' | 'probe' | 'panel' | 'barrier' | 'building';
+
+interface SelectionItem {
+  elementType: SelectableElementType;
+  id: string;
+}
+
 type Selection =
   | { type: 'none' }
   | { type: 'source'; id: string }
@@ -354,7 +361,8 @@ type Selection =
   | { type: 'receiver'; id: string }
   | { type: 'panel'; id: string }
   | { type: 'barrier'; id: string }
-  | { type: 'building'; id: string };
+  | { type: 'building'; id: string }
+  | { type: 'multi'; items: SelectionItem[] };
 
 type DragState =
   | null
@@ -391,6 +399,15 @@ type DragState =
       startRotation: number;
       startLength: number;
       startMidpoint: Point;
+    }
+  | {
+      type: 'select-box';
+      startCanvasPoint: Point;
+      currentCanvasPoint: Point;
+    }
+  | {
+      type: 'move-multi';
+      offsets: Map<string, Point>;
     };
 
 type DragContribution = {
@@ -860,6 +877,13 @@ function sameSelection(a: Selection | null, b: Selection | null) {
   if (!a || !b) return false;
   if (a.type !== b.type) return false;
   if (a.type === 'none' || b.type === 'none') return a.type === b.type;
+  if (a.type === 'multi' || b.type === 'multi') {
+    if (a.type !== 'multi' || b.type !== 'multi') return false;
+    if (a.items.length !== b.items.length) return false;
+    return a.items.every((item, i) =>
+      item.elementType === b.items[i].elementType && item.id === b.items[i].id
+    );
+  }
   return a.id === b.id;
 }
 
@@ -3024,6 +3048,7 @@ function createPinnedContextPanel(sel: Selection) {
   const panelId = `pinned-context-${pinnedContextSeq++}`;
 
   // Get element name
+  if (sel.type === 'multi') return; // Can't pin multi-selection
   let elementName = `${selectionTypeLabel(sel.type)} ${sel.id.toUpperCase()}`;
   if (sel.type === 'source') {
     const source = scene.sources.find(s => s.id === sel.id);
@@ -3944,7 +3969,7 @@ function setActiveTool(tool: Tool) {
 function setSelection(next: Selection) {
   selection = next;
   for (const building of scene.buildings) {
-    building.selected = selection.type === 'building' && selection.id === building.id;
+    building.selected = isElementSelected(selection, 'building', building.id);
   }
   const current = selection;
   if (current.type === 'probe') {
@@ -3959,6 +3984,10 @@ function setSelection(next: Selection) {
     const shouldShowPanel = hasInspectorContent && !isAlreadyPinned;
     contextPanel.classList.toggle('is-open', shouldShowPanel);
     contextPanel.setAttribute('aria-hidden', shouldShowPanel ? 'false' : 'true');
+  }
+  // Hide pin button for multi-selection (can't pin multiple elements)
+  if (contextPin) {
+    contextPin.style.display = current.type === 'multi' ? 'none' : '';
   }
   if (panelStatsSection) {
     panelStatsSection.classList.toggle('is-hidden', current.type !== 'panel');
@@ -3976,9 +4005,10 @@ function setSelection(next: Selection) {
 
 /** Check if an element already has a pinned context panel */
 function isElementPinned(sel: Selection): boolean {
-  if (sel.type === 'none' || sel.type === 'probe') return false;
+  if (sel.type === 'none' || sel.type === 'probe' || sel.type === 'multi') return false;
   return pinnedContextPanels.some(
-    (pinned) => pinned.selection.type === sel.type && pinned.selection.id === sel.id
+    (pinned) => pinned.selection.type !== 'none' && pinned.selection.type !== 'multi' &&
+                pinned.selection.type === sel.type && pinned.selection.id === sel.id
   );
 }
 
@@ -3986,6 +4016,7 @@ function isElementPinned(sel: Selection): boolean {
 function getSelectedElementName(): string {
   const current = selection;
   if (current.type === 'none') return 'Select an element';
+  if (current.type === 'multi') return `${current.items.length} items selected`;
 
   const defaultName = `${selectionTypeLabel(current.type)} ${current.id.toUpperCase()}`;
 
@@ -4045,6 +4076,12 @@ function updateContextTitle(): void {
   const current = selection;
   if (current.type === 'none') {
     contextTitle.textContent = 'Select an element';
+    contextTitle.title = '';
+    return;
+  }
+
+  if (current.type === 'multi') {
+    contextTitle.textContent = `${current.items.length} items selected`;
     contextTitle.title = '';
     return;
   }
@@ -4113,6 +4150,68 @@ function renderPropertiesFor(current: Selection, container: HTMLElement) {
     }
 
     container.appendChild(empty);
+    return;
+  }
+
+  if (current.type === 'multi') {
+    const counts = getSelectedCount(current);
+    const summary = document.createElement('div');
+    summary.className = 'multi-selection-summary';
+
+    const countsDiv = document.createElement('div');
+    countsDiv.className = 'multi-selection-counts';
+    const totalCount = current.items.length;
+    countsDiv.innerHTML = `<strong>${totalCount} items selected</strong>`;
+
+    const details: string[] = [];
+    if (counts.source > 0) details.push(`${counts.source} source${counts.source > 1 ? 's' : ''}`);
+    if (counts.receiver > 0) details.push(`${counts.receiver} receiver${counts.receiver > 1 ? 's' : ''}`);
+    if (counts.probe > 0) details.push(`${counts.probe} probe${counts.probe > 1 ? 's' : ''}`);
+    if (counts.panel > 0) details.push(`${counts.panel} panel${counts.panel > 1 ? 's' : ''}`);
+    if (counts.barrier > 0) details.push(`${counts.barrier} barrier${counts.barrier > 1 ? 's' : ''}`);
+    if (counts.building > 0) details.push(`${counts.building} building${counts.building > 1 ? 's' : ''}`);
+
+    if (details.length > 0) {
+      const detailsSpan = document.createElement('span');
+      detailsSpan.className = 'multi-selection-count-item';
+      detailsSpan.textContent = details.join(', ');
+      countsDiv.appendChild(detailsSpan);
+    }
+
+    summary.appendChild(countsDiv);
+
+    const actions = document.createElement('div');
+    actions.className = 'multi-selection-actions';
+
+    const duplicateBtn = document.createElement('button');
+    duplicateBtn.type = 'button';
+    duplicateBtn.className = 'ui-button multi-action-btn';
+    duplicateBtn.textContent = 'Duplicate';
+    duplicateBtn.addEventListener('click', () => {
+      duplicateMultiSelection();
+    });
+    actions.appendChild(duplicateBtn);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'ui-button multi-action-btn danger';
+    deleteBtn.textContent = 'Delete All';
+    deleteBtn.addEventListener('click', () => {
+      deleteSelection(current);
+    });
+    actions.appendChild(deleteBtn);
+
+    const deselectBtn = document.createElement('button');
+    deselectBtn.type = 'button';
+    deselectBtn.className = 'ui-button multi-action-btn secondary';
+    deselectBtn.textContent = 'Deselect';
+    deselectBtn.addEventListener('click', () => {
+      setSelection({ type: 'none' });
+    });
+    actions.appendChild(deselectBtn);
+
+    summary.appendChild(actions);
+    container.appendChild(summary);
     return;
   }
 
@@ -4892,6 +4991,118 @@ function hitTestBuildingHandle(point: Point) {
   return null;
 }
 
+// Multi-selection helper functions
+function isElementSelected(sel: Selection, elementType: string, id: string): boolean {
+  if (sel.type === 'multi') {
+    return sel.items.some((item) => item.elementType === elementType && item.id === id);
+  }
+  return sel.type === elementType && 'id' in sel && sel.id === id;
+}
+
+function selectionToItems(sel: Selection): SelectionItem[] {
+  if (sel.type === 'none') return [];
+  if (sel.type === 'multi') return [...sel.items];
+  return [{ elementType: sel.type as SelectableElementType, id: sel.id }];
+}
+
+function itemsToSelection(items: SelectionItem[]): Selection {
+  if (items.length === 0) return { type: 'none' };
+  if (items.length === 1) {
+    const item = items[0];
+    return { type: item.elementType, id: item.id } as Selection;
+  }
+  return { type: 'multi', items };
+}
+
+function getSelectedCount(sel: Selection): Record<SelectableElementType, number> {
+  const counts: Record<SelectableElementType, number> = {
+    source: 0,
+    receiver: 0,
+    probe: 0,
+    panel: 0,
+    barrier: 0,
+    building: 0,
+  };
+  const items = selectionToItems(sel);
+  for (const item of items) {
+    counts[item.elementType]++;
+  }
+  return counts;
+}
+
+function getPolygonCentroid(points: Point[]): Point {
+  if (points.length === 0) return { x: 0, y: 0 };
+  let cx = 0,
+    cy = 0;
+  for (const p of points) {
+    cx += p.x;
+    cy += p.y;
+  }
+  return { x: cx / points.length, y: cy / points.length };
+}
+
+function getPanelCentroid(panel: Panel): Point {
+  return getPolygonCentroid(panel.points);
+}
+
+function getElementsInSelectBox(startCanvas: Point, endCanvas: Point): SelectionItem[] {
+  const items: SelectionItem[] = [];
+
+  const minX = Math.min(startCanvas.x, endCanvas.x);
+  const maxX = Math.max(startCanvas.x, endCanvas.x);
+  const minY = Math.min(startCanvas.y, endCanvas.y);
+  const maxY = Math.max(startCanvas.y, endCanvas.y);
+
+  const isInBox = (canvasPoint: Point) =>
+    canvasPoint.x >= minX && canvasPoint.x <= maxX && canvasPoint.y >= minY && canvasPoint.y <= maxY;
+
+  for (const source of scene.sources) {
+    const canvasPoint = worldToCanvas(source);
+    if (isInBox(canvasPoint)) {
+      items.push({ elementType: 'source', id: source.id });
+    }
+  }
+
+  for (const receiver of scene.receivers) {
+    const canvasPoint = worldToCanvas(receiver);
+    if (isInBox(canvasPoint)) {
+      items.push({ elementType: 'receiver', id: receiver.id });
+    }
+  }
+
+  for (const probe of scene.probes) {
+    const canvasPoint = worldToCanvas(probe);
+    if (isInBox(canvasPoint)) {
+      items.push({ elementType: 'probe', id: probe.id });
+    }
+  }
+
+  for (const panel of scene.panels) {
+    const centroid = getPanelCentroid(panel);
+    const canvasPoint = worldToCanvas(centroid);
+    if (isInBox(canvasPoint)) {
+      items.push({ elementType: 'panel', id: panel.id });
+    }
+  }
+
+  for (const barrier of scene.barriers) {
+    const midpoint = { x: (barrier.p1.x + barrier.p2.x) / 2, y: (barrier.p1.y + barrier.p2.y) / 2 };
+    const canvasPoint = worldToCanvas(midpoint);
+    if (isInBox(canvasPoint)) {
+      items.push({ elementType: 'barrier', id: barrier.id });
+    }
+  }
+
+  for (const building of scene.buildings) {
+    const canvasPoint = worldToCanvas(building);
+    if (isInBox(canvasPoint)) {
+      items.push({ elementType: 'building', id: building.id });
+    }
+  }
+
+  return items;
+}
+
 function hitTest(point: Point) {
   const threshold = 12;
   const hitSource = scene.sources.find((source) => {
@@ -4931,6 +5142,39 @@ function hitTest(point: Point) {
 }
 
 function deleteSelection(target: Selection) {
+  if (target.type === 'multi') {
+    for (const item of target.items) {
+      if (item.elementType === 'source') {
+        scene.sources = scene.sources.filter((s) => s.id !== item.id);
+      }
+      if (item.elementType === 'receiver') {
+        scene.receivers = scene.receivers.filter((r) => r.id !== item.id);
+      }
+      if (item.elementType === 'probe') {
+        scene.probes = scene.probes.filter((p) => p.id !== item.id);
+        probeResults.delete(item.id);
+        probePending.delete(item.id);
+        unpinProbe(item.id);
+        if (activeProbeId === item.id) {
+          setActiveProbe(null);
+        }
+      }
+      if (item.elementType === 'panel') {
+        scene.panels = scene.panels.filter((p) => p.id !== item.id);
+      }
+      if (item.elementType === 'barrier') {
+        scene.barriers = scene.barriers.filter((b) => b.id !== item.id);
+      }
+      if (item.elementType === 'building') {
+        scene.buildings = scene.buildings.filter((b) => b.id !== item.id);
+      }
+    }
+    setSelection({ type: 'none' });
+    updateCounts();
+    pushHistory();
+    computeScene();
+    return;
+  }
   if (target.type === 'source') {
     scene.sources = scene.sources.filter((item) => item.id !== target.id);
   }
@@ -4959,6 +5203,107 @@ function deleteSelection(target: Selection) {
   updateCounts();
   pushHistory();
   computeScene();
+}
+
+function duplicateMultiSelection(): void {
+  const items = selectionToItems(selection);
+  if (items.length === 0) return;
+
+  const newItems: SelectionItem[] = [];
+  const offset = 2;
+
+  for (const item of items) {
+    if (item.elementType === 'source') {
+      const source = scene.sources.find((s) => s.id === item.id);
+      if (source) {
+        const dup = duplicateSource(source);
+        dup.x += offset;
+        dup.y -= offset;
+        scene.sources.push(dup);
+        newItems.push({ elementType: 'source', id: dup.id });
+      }
+    }
+    if (item.elementType === 'receiver') {
+      const receiver = scene.receivers.find((r) => r.id === item.id);
+      if (receiver) {
+        const dup = duplicateReceiver(receiver);
+        dup.x += offset;
+        dup.y -= offset;
+        scene.receivers.push(dup);
+        newItems.push({ elementType: 'receiver', id: dup.id });
+      }
+    }
+    if (item.elementType === 'probe') {
+      const probe = scene.probes.find((p) => p.id === item.id);
+      if (probe) {
+        const dup = duplicateProbe(probe);
+        dup.x += offset;
+        dup.y -= offset;
+        scene.probes.push(dup);
+        newItems.push({ elementType: 'probe', id: dup.id });
+      }
+    }
+    if (item.elementType === 'panel') {
+      const panel = scene.panels.find((p) => p.id === item.id);
+      if (panel) {
+        const dup = duplicatePanel(panel);
+        dup.points = panel.points.map((pt) => ({ x: pt.x + offset, y: pt.y - offset }));
+        scene.panels.push(dup);
+        newItems.push({ elementType: 'panel', id: dup.id });
+      }
+    }
+    if (item.elementType === 'barrier') {
+      const barrier = scene.barriers.find((b) => b.id === item.id);
+      if (barrier) {
+        const dup = duplicateBarrier(barrier);
+        dup.p1 = { x: barrier.p1.x + offset, y: barrier.p1.y - offset };
+        dup.p2 = { x: barrier.p2.x + offset, y: barrier.p2.y - offset };
+        scene.barriers.push(dup);
+        newItems.push({ elementType: 'barrier', id: dup.id });
+      }
+    }
+    if (item.elementType === 'building') {
+      const building = scene.buildings.find((b) => b.id === item.id);
+      if (building) {
+        const dup = duplicateBuilding(building);
+        dup.x += offset;
+        dup.y -= offset;
+        scene.buildings.push(dup);
+        newItems.push({ elementType: 'building', id: dup.id });
+      }
+    }
+  }
+
+  setSelection(itemsToSelection(newItems));
+  updateCounts();
+  pushHistory();
+  computeScene();
+}
+
+function selectAll(): void {
+  const items: SelectionItem[] = [];
+
+  for (const source of scene.sources) {
+    items.push({ elementType: 'source', id: source.id });
+  }
+  for (const receiver of scene.receivers) {
+    items.push({ elementType: 'receiver', id: receiver.id });
+  }
+  for (const probe of scene.probes) {
+    items.push({ elementType: 'probe', id: probe.id });
+  }
+  for (const panel of scene.panels) {
+    items.push({ elementType: 'panel', id: panel.id });
+  }
+  for (const barrier of scene.barriers) {
+    items.push({ elementType: 'barrier', id: barrier.id });
+  }
+  for (const building of scene.buildings) {
+    items.push({ elementType: 'building', id: building.id });
+  }
+
+  setSelection(itemsToSelection(items));
+  requestRender();
 }
 
 function commitBarrierDraft() {
@@ -5117,6 +5462,25 @@ function drawNoiseMap() {
   ctx.restore();
 }
 
+function drawSelectBox() {
+  if (!dragState || dragState.type !== 'select-box') return;
+  const { startCanvasPoint, currentCanvasPoint } = dragState;
+
+  const x = Math.min(startCanvasPoint.x, currentCanvasPoint.x);
+  const y = Math.min(startCanvasPoint.y, currentCanvasPoint.y);
+  const w = Math.abs(currentCanvasPoint.x - startCanvasPoint.x);
+  const h = Math.abs(currentCanvasPoint.y - startCanvasPoint.y);
+
+  ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+  ctx.fillRect(x, y, w, h);
+
+  ctx.strokeStyle = 'rgba(59, 130, 246, 0.6)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.strokeRect(x, y, w, h);
+  ctx.setLineDash([]);
+}
+
 function drawMeasurement() {
   if (!measureStart || !measureEnd) return;
   const start = worldToCanvas(measureStart);
@@ -5175,7 +5539,7 @@ function drawPanels() {
     ctx.fill();
     ctx.stroke();
 
-    if (selection.type === 'panel' && selection.id === panel.id) {
+    if (isElementSelected(selection, 'panel', panel.id)) {
       ctx.strokeStyle = canvasTheme.selectionHalo;
       ctx.lineWidth = 10;
       ctx.stroke();
@@ -5265,7 +5629,7 @@ function drawBarriers() {
   for (const barrier of scene.barriers) {
     const start = worldToCanvas(barrier.p1);
     const end = worldToCanvas(barrier.p2);
-    const isSelected = selection.type === 'barrier' && selection.id === barrier.id;
+    const isSelected = isElementSelected(selection, 'barrier', barrier.id);
 
     if (isSelected) {
       drawLine(start, end, canvasTheme.selectionHalo, 12);
@@ -5327,7 +5691,7 @@ function drawSources() {
     ctx.fill();
     ctx.stroke();
 
-    if (selection.type === 'source' && selection.id === source.id) {
+    if (isElementSelected(selection, 'source', source.id)) {
       ctx.fillStyle = canvasTheme.selectionHalo;
       ctx.beginPath();
       ctx.arc(p.x, p.y, 18, 0, Math.PI * 2);
@@ -5381,7 +5745,7 @@ function drawReceivers() {
     ctx.fill();
     ctx.stroke();
 
-    if (selection.type === 'receiver' && selection.id === receiver.id) {
+    if (isElementSelected(selection, 'receiver', receiver.id)) {
       ctx.fillStyle = canvasTheme.selectionHalo;
       ctx.beginPath();
       ctx.arc(p.x, p.y, 18, 0, Math.PI * 2);
@@ -5427,7 +5791,7 @@ function drawProbes() {
   for (const probe of scene.probes) {
     const p = worldToCanvas(probe);
     const isActive = probe.id === activeProbeId;
-    const isSelected = selection.type === 'probe' && selection.id === probe.id;
+    const isSelected = isElementSelected(selection, 'probe', probe.id);
 
     ctx.save();
     if (isActive || isSelected) {
@@ -5534,6 +5898,10 @@ function renderLoop() {
   if (activeTool === 'measure') {
     drawMeasurement();
   }
+
+  if (dragState?.type === 'select-box') {
+    drawSelectBox();
+  }
 }
 
 function setInteractionActive(active: boolean) {
@@ -5555,6 +5923,7 @@ function shouldLiveUpdateMap(activeDrag: DragState | null) {
     'building',
     'building-resize',
     'building-rotate',
+    'move-multi',
   ];
   return geometryDragTypes.includes(activeDrag.type);
 }
@@ -5676,6 +6045,58 @@ function applyDrag(worldPoint: Point) {
       panel.points[activeDrag.index] = { x: targetPoint.x, y: targetPoint.y };
     }
   }
+  if (activeDrag.type === 'move-multi') {
+    // Move all elements in the current multi-selection
+    if (selection.type === 'multi') {
+      for (const item of selection.items) {
+        const offset = activeDrag.offsets.get(item.id);
+        if (!offset) continue;
+        const itemTarget = { x: worldPoint.x - offset.x, y: worldPoint.y - offset.y };
+
+        if (item.elementType === 'source') {
+          const source = scene.sources.find((s) => s.id === item.id);
+          if (source) {
+            source.x = itemTarget.x;
+            source.y = itemTarget.y;
+          }
+        } else if (item.elementType === 'receiver') {
+          const receiver = scene.receivers.find((r) => r.id === item.id);
+          if (receiver) {
+            receiver.x = itemTarget.x;
+            receiver.y = itemTarget.y;
+          }
+        } else if (item.elementType === 'probe') {
+          const probe = scene.probes.find((p) => p.id === item.id);
+          if (probe) {
+            probe.x = itemTarget.x;
+            probe.y = itemTarget.y;
+            requestProbeUpdate(probe.id);
+          }
+        } else if (item.elementType === 'panel') {
+          const panel = scene.panels.find((p) => p.id === item.id);
+          if (panel && panel.points[0]) {
+            const dx = itemTarget.x - panel.points[0].x;
+            const dy = itemTarget.y - panel.points[0].y;
+            panel.points = panel.points.map((pt) => ({ x: pt.x + dx, y: pt.y + dy }));
+          }
+        } else if (item.elementType === 'barrier') {
+          const barrier = scene.barriers.find((b) => b.id === item.id);
+          if (barrier) {
+            const dx = itemTarget.x - barrier.p1.x;
+            const dy = itemTarget.y - barrier.p1.y;
+            barrier.p1 = { x: barrier.p1.x + dx, y: barrier.p1.y + dy };
+            barrier.p2 = { x: barrier.p2.x + dx, y: barrier.p2.y + dy };
+          }
+        } else if (item.elementType === 'building') {
+          const building = scene.buildings.find((b) => b.id === item.id);
+          if (building) {
+            building.x = itemTarget.x;
+            building.y = itemTarget.y;
+          }
+        }
+      }
+    }
+  }
 
   // Limit live noise-map work to drags that affect propagation.
   const shouldUpdateMap = shouldLiveUpdateMap(activeDrag);
@@ -5750,7 +6171,12 @@ function handlePointerMove(event: MouseEvent) {
   }
 
   if (dragState) {
-    throttledDragMove(worldPoint);
+    if (dragState.type === 'select-box') {
+      dragState.currentCanvasPoint = canvasPoint;
+      requestRender();
+    } else {
+      throttledDragMove(worldPoint);
+    }
   }
 
   if (activeTool === 'measure' && measureStart && !measureLocked) {
@@ -5897,30 +6323,69 @@ function handlePointerDown(event: MouseEvent) {
   }
 
   if (hit) {
-    setSelection(hit);
     const worldHit = canvasToWorld(canvasPoint);
+
+    // Shift+click adds/removes elements from selection
+    if (event.shiftKey && activeTool === 'select') {
+      const currentItems = selectionToItems(selection);
+      const hitType = hit.type as SelectableElementType;
+      const existingIndex = currentItems.findIndex(
+        (item) => item.elementType === hitType && item.id === hit.id
+      );
+
+      if (existingIndex >= 0) {
+        // Remove from selection if already selected
+        currentItems.splice(existingIndex, 1);
+      } else {
+        // Add to selection
+        currentItems.push({ elementType: hitType, id: hit.id });
+      }
+
+      setSelection(itemsToSelection(currentItems));
+      requestRender();
+      return;
+    }
+
+    // Check if clicking on an element that's part of multi-selection
+    // If so, start multi-move instead of resetting to single selection
+    // TODO: Fix multi-move - currently resets to single selection when clicking to drag
+    const isInMultiSelection = selection.type === 'multi' && isElementSelected(selection, hit.type, hit.id);
+    if (selection.type === 'multi' && isInMultiSelection) {
+      // Start move-multi drag - calculate offsets for all selected items
+      const offsets = new Map<string, Point>();
+      for (const item of selection.items) {
+        if (item.elementType === 'source') {
+          const source = scene.sources.find((s) => s.id === item.id);
+          if (source) offsets.set(item.id, { x: worldHit.x - source.x, y: worldHit.y - source.y });
+        } else if (item.elementType === 'receiver') {
+          const receiver = scene.receivers.find((r) => r.id === item.id);
+          if (receiver) offsets.set(item.id, { x: worldHit.x - receiver.x, y: worldHit.y - receiver.y });
+        } else if (item.elementType === 'probe') {
+          const probe = scene.probes.find((p) => p.id === item.id);
+          if (probe) offsets.set(item.id, { x: worldHit.x - probe.x, y: worldHit.y - probe.y });
+        } else if (item.elementType === 'panel') {
+          const panel = scene.panels.find((p) => p.id === item.id);
+          if (panel && panel.points[0]) offsets.set(item.id, { x: worldHit.x - panel.points[0].x, y: worldHit.y - panel.points[0].y });
+        } else if (item.elementType === 'barrier') {
+          const barrier = scene.barriers.find((b) => b.id === item.id);
+          if (barrier) offsets.set(item.id, { x: worldHit.x - barrier.p1.x, y: worldHit.y - barrier.p1.y });
+        } else if (item.elementType === 'building') {
+          const building = scene.buildings.find((b) => b.id === item.id);
+          if (building) offsets.set(item.id, { x: worldHit.x - building.x, y: worldHit.y - building.y });
+        }
+      }
+      dragState = { type: 'move-multi', offsets };
+      dragDirty = false;
+      startInteractionForDrag(dragState);
+      return;
+    }
+
+    setSelection(hit);
     dragDirty = false;
 
     if (hit.type === 'source') {
       const source = scene.sources.find((item) => item.id === hit.id);
       if (source) {
-        if (event.shiftKey) {
-          const duplicate = duplicateSource(source);
-          duplicate.x = source.x + 2;
-          duplicate.y = source.y - 2;
-          scene.sources.push(duplicate);
-          updateCounts();
-          setSelection({ type: 'source', id: duplicate.id });
-          dragDirty = true;
-          dragState = {
-            type: 'source',
-            id: duplicate.id,
-            offset: { x: worldHit.x - duplicate.x, y: worldHit.y - duplicate.y },
-          };
-          primeDragContribution(duplicate.id);
-          startInteractionForDrag(dragState);
-          return;
-        }
         dragState = { type: 'source', id: source.id, offset: { x: worldHit.x - source.x, y: worldHit.y - source.y } };
         primeDragContribution(source.id);
       }
@@ -5928,112 +6393,50 @@ function handlePointerDown(event: MouseEvent) {
     if (hit.type === 'probe') {
       const probe = scene.probes.find((item) => item.id === hit.id);
       if (probe) {
-        if (event.shiftKey) {
-          const duplicate = duplicateProbe(probe);
-          duplicate.x = probe.x + 2;
-          duplicate.y = probe.y - 2;
-          scene.probes.push(duplicate);
-          setSelection({ type: 'probe', id: duplicate.id });
-          dragDirty = true;
-          dragState = {
-            type: 'probe',
-            id: duplicate.id,
-            offset: { x: worldHit.x - duplicate.x, y: worldHit.y - duplicate.y },
-          };
-          return;
-        }
         dragState = { type: 'probe', id: probe.id, offset: { x: worldHit.x - probe.x, y: worldHit.y - probe.y } };
       }
     }
     if (hit.type === 'receiver') {
       const receiver = scene.receivers.find((item) => item.id === hit.id);
       if (receiver) {
-        if (event.shiftKey) {
-          const duplicate = duplicateReceiver(receiver);
-          duplicate.x = receiver.x + 2;
-          duplicate.y = receiver.y - 2;
-          scene.receivers.push(duplicate);
-          updateCounts();
-          setSelection({ type: 'receiver', id: duplicate.id });
-          dragDirty = true;
-          dragState = {
-            type: 'receiver',
-            id: duplicate.id,
-            offset: { x: worldHit.x - duplicate.x, y: worldHit.y - duplicate.y },
-          };
-          startInteractionForDrag(dragState);
-          return;
-        }
         dragState = { type: 'receiver', id: receiver.id, offset: { x: worldHit.x - receiver.x, y: worldHit.y - receiver.y } };
       }
     }
     if (hit.type === 'panel') {
       const panel = scene.panels.find((item) => item.id === hit.id);
       if (panel) {
-        if (event.shiftKey) {
-          const duplicate = duplicatePanel(panel);
-          duplicate.points = panel.points.map((pt) => ({ x: pt.x + 2, y: pt.y - 2 }));
-          scene.panels.push(duplicate);
-          updateCounts();
-          setSelection({ type: 'panel', id: duplicate.id });
-          dragDirty = true;
-          const first = duplicate.points[0];
-        dragState = { type: 'panel', id: duplicate.id, offset: { x: worldHit.x - first.x, y: worldHit.y - first.y } };
-        startInteractionForDrag(dragState);
-        return;
-      }
-      const first = panel.points[0];
-      dragState = { type: 'panel', id: panel.id, offset: { x: worldHit.x - first.x, y: worldHit.y - first.y } };
+        const first = panel.points[0];
+        dragState = { type: 'panel', id: panel.id, offset: { x: worldHit.x - first.x, y: worldHit.y - first.y } };
       }
     }
     if (hit.type === 'barrier') {
       const barrier = scene.barriers.find((item) => item.id === hit.id);
       if (barrier) {
-        if (event.shiftKey) {
-          const duplicate = duplicateBarrier(barrier);
-          duplicate.p1 = { x: barrier.p1.x + 2, y: barrier.p1.y - 2 };
-          duplicate.p2 = { x: barrier.p2.x + 2, y: barrier.p2.y - 2 };
-          scene.barriers.push(duplicate);
-          updateCounts();
-          setSelection({ type: 'barrier', id: duplicate.id });
-          dragDirty = true;
-          dragState = {
-            type: 'barrier',
-            id: duplicate.id,
-            offset: { x: worldHit.x - duplicate.p1.x, y: worldHit.y - duplicate.p1.y },
-          };
-          startInteractionForDrag(dragState);
-          return;
-        }
         dragState = { type: 'barrier', id: barrier.id, offset: { x: worldHit.x - barrier.p1.x, y: worldHit.y - barrier.p1.y } };
       }
     }
     if (hit.type === 'building') {
       const building = scene.buildings.find((item) => item.id === hit.id);
       if (building) {
-        if (event.shiftKey) {
-          const duplicate = duplicateBuilding(building);
-          duplicate.x = building.x + 2;
-          duplicate.y = building.y - 2;
-          scene.buildings.push(duplicate);
-          updateCounts();
-          setSelection({ type: 'building', id: duplicate.id });
-          dragDirty = true;
-          dragState = {
-            type: 'building',
-            id: duplicate.id,
-            offset: { x: worldHit.x - duplicate.x, y: worldHit.y - duplicate.y },
-          };
-          startInteractionForDrag(dragState);
-          return;
-        }
         dragState = { type: 'building', id: building.id, offset: { x: worldHit.x - building.x, y: worldHit.y - building.y } };
       }
     }
   } else {
-    setSelection({ type: 'none' });
     if (activeTool === 'select') {
-      panState = { start: canvasPoint, origin: { ...panOffset } };
+      if (event.ctrlKey || event.metaKey) {
+        // Ctrl/Cmd + click drag starts select box
+        dragState = {
+          type: 'select-box',
+          startCanvasPoint: canvasPoint,
+          currentCanvasPoint: canvasPoint,
+        };
+        requestRender();
+      } else {
+        setSelection({ type: 'none' });
+        panState = { start: canvasPoint, origin: { ...panOffset } };
+      }
+    } else {
+      setSelection({ type: 'none' });
     }
   }
 
@@ -6069,6 +6472,13 @@ function handlePointerUp() {
   }
   if (panState) {
     panState = null;
+    return;
+  }
+  if (dragState?.type === 'select-box') {
+    const selected = getElementsInSelectBox(dragState.startCanvasPoint, dragState.currentCanvasPoint);
+    setSelection(itemsToSelection(selected));
+    dragState = null;
+    requestRender();
     return;
   }
   if (dragState) {
@@ -6148,6 +6558,20 @@ function wireKeyboard() {
         redo();
       } else {
         undo();
+      }
+      return;
+    }
+
+    if ((event.metaKey || event.ctrlKey) && (event.key === 'a' || event.key === 'A')) {
+      event.preventDefault();
+      selectAll();
+      return;
+    }
+
+    if ((event.metaKey || event.ctrlKey) && (event.key === 'd' || event.key === 'D')) {
+      event.preventDefault();
+      if (selection.type !== 'none') {
+        duplicateMultiSelection();
       }
       return;
     }
@@ -6253,7 +6677,7 @@ function wireContextPanel() {
   // Double-click on context title to edit element name
   if (contextTitle) {
     contextTitle.addEventListener('dblclick', () => {
-      if (selection.type === 'none') return;
+      if (selection.type === 'none' || selection.type === 'multi') return;
 
       const currentName = getSelectedElementName();
       const defaultName = `${selectionTypeLabel(selection.type)} ${selection.id.toUpperCase()}`;
