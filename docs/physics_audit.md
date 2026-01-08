@@ -165,10 +165,11 @@ export function agrTwoRayDb(
 ---
 
 ### 2b. computeProbeCoherent Double-Counts Direct Path with Two-Ray Ground Model
-- [ ] **Status:** Open
+- [x] **Status:** Resolved
 - **Location:** `packages/engine/src/probeCompute/index.ts:341-375`
 - **Impact:** Incorrect levels (observed -146 dB instead of ~70 dB)
 - **Related to:** Issue #2 (Two-Ray Ground Model)
+- **Fixed:** Used Option B - removed `computeGroundReflectionPhasor`, now all paths (direct, ground, wall, diffraction) are processed uniformly through `computeSourcePhasors` and coherent summation handles interference naturally
 
 #### Description
 When `groundReflection = true`, the `computeProbeCoherent` function double-counts the direct path:
