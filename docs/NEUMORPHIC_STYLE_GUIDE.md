@@ -206,6 +206,31 @@ box-shadow:
 
 ---
 
+## Badges
+
+Small status badges use raised neumorphic styling:
+
+```css
+.probe-title-badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text-muted);
+  /* Raised neumorphic style */
+  box-shadow: 2px 2px 4px rgba(100, 110, 130, 0.3),
+              -1px -1px 3px rgba(255, 255, 255, 0.7);
+}
+```
+
+**Applied to:**
+- `.probe-title-badge` - Panel status badges (PINNED, SNAPSHOT, etc.)
+
+---
+
 ## Toggle Switches
 
 Toggle switches use an inset track with a raised thumb that extends beyond the track:
