@@ -484,18 +484,26 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  opacity: 0.7;
+  opacity: 0.85;
   position: relative;
-  /* Contained shadow - no white glow that bleeds onto map */
-  box-shadow: 2px 2px 4px rgba(100, 110, 130, 0.25), -1px -1px 3px rgba(255, 255, 255, 0.5);
-  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease, color 160ms ease, opacity 160ms ease;
+  /* Raised state - neumorphic outer shadows */
+  box-shadow: 3px 3px 6px rgba(100, 110, 130, 0.3), -2px -2px 5px rgba(255, 255, 255, 0.7);
+  transition: transform 160ms ease, box-shadow 200ms ease, background 160ms ease, color 160ms ease, opacity 160ms ease;
 }
 
 .dock-button:hover {
-  background: #e8ecf2;
+  background: var(--bg);
   color: var(--text);
-  opacity: 0.9;
-  box-shadow: 3px 3px 6px rgba(100, 110, 130, 0.3), -2px -2px 4px rgba(255, 255, 255, 0.6);
+  opacity: 1;
+  /* Sunken state - neumorphic inset shadows */
+  box-shadow: inset 3px 3px 6px rgba(100, 110, 130, 0.25), inset -2px -2px 5px rgba(255, 255, 255, 0.6);
+  transform: scale(0.98);
+}
+
+.dock-button:active {
+  /* Deeper sunken on press */
+  box-shadow: inset 4px 4px 8px rgba(100, 110, 130, 0.35), inset -3px -3px 6px rgba(255, 255, 255, 0.5);
+  transform: scale(0.96);
 }
 
 .dock-button.is-active {
