@@ -16,7 +16,7 @@ GeoNoise uses a "carved from the same material" aesthetic where UI elements appe
 Elements appear to float above the surface:
 
 ```css
-box-shadow: 3px 3px 6px rgba(100, 110, 130, 0.3), 
+box-shadow: 3px 3px 6px rgba(100, 110, 130, 0.3),
             -2px -2px 5px rgba(255, 255, 255, 0.7);
 ```
 
@@ -24,7 +24,7 @@ box-shadow: 3px 3px 6px rgba(100, 110, 130, 0.3),
 Elements appear pushed into the surface:
 
 ```css
-box-shadow: inset 3px 3px 6px rgba(100, 110, 130, 0.25), 
+box-shadow: inset 3px 3px 6px rgba(100, 110, 130, 0.25),
             inset -2px -2px 5px rgba(255, 255, 255, 0.6);
 ```
 
@@ -32,7 +32,7 @@ box-shadow: inset 3px 3px 6px rgba(100, 110, 130, 0.25),
 For the moment of click/tap:
 
 ```css
-box-shadow: inset 4px 4px 8px rgba(100, 110, 130, 0.35), 
+box-shadow: inset 4px 4px 8px rgba(100, 110, 130, 0.35),
             inset -3px -3px 6px rgba(255, 255, 255, 0.5);
 ```
 
@@ -51,8 +51,8 @@ All buttons follow a **raised-to-sunken** interaction pattern:
 
 ### Transition Timing
 ```css
-transition: transform 160ms ease, 
-            box-shadow 200ms ease, 
+transition: transform 160ms ease,
+            box-shadow 200ms ease,
             background 160ms ease;
 ```
 
