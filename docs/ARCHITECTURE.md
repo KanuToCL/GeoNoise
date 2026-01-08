@@ -952,7 +952,75 @@ npm -w @geonoise/engine run test:watch  # Watch tests for specific package
 
 ---
 
-## 13. Long-Term Vision
+## 13. UI Design System
+
+### Neumorphic Style Guide
+
+GeoNoise uses a **solid opaque plastic neumorphism** design language. Key principles:
+
+| Principle | Description |
+|-----------|-------------|
+| **No Transparency** | All colors are solid hex values - no `rgba()` or `backdrop-filter: blur()` |
+| **Dual Shadows** | Raised elements have light shadow (top-left) and dark shadow (bottom-right) |
+| **Material Unity** | Surface colors match background (`#e0e5ec`) so elements blend seamlessly |
+| **Hard Edges for Overlays** | Floating containers over the map use simple drop shadows |
+| **Neumorphic Inners** | Interactive elements inside containers retain full neumorphic treatment |
+
+### Shadow Patterns
+
+```css
+/* Floating containers over the map - hard edge, no glow */
+.floating-container {
+  box-shadow: 0 8px 32px #8a95a8, 0 2px 8px #a0a8b8;
+}
+
+/* Raised elements inside containers - full neumorphic */
+.raised-element {
+  box-shadow: var(--shadow-raised);
+  /* Expands to: 8px 8px 18px #a3b1c6, -8px -8px 18px #f0f4f8 */
+}
+
+/* Pressed/inset elements - inverted neumorphic */
+.pressed-element {
+  box-shadow: var(--shadow-pressed);
+  /* Expands to: inset 5px 5px 12px #a3b1c6, inset -5px -5px 12px #f0f4f8 */
+}
+```
+
+### Key CSS Variables
+
+| Variable | Value | Usage |
+|----------|-------|-------|
+| `--bg` | `#e0e5ec` | Page/panel background |
+| `--shadow-light` | `#f0f4f8` | Light highlight (top-left) |
+| `--shadow-dark` | `#a3b1c6` | Dark shadow (bottom-right) |
+| `--shadow-raised` | dual shadow | Buttons, toggles, cards |
+| `--shadow-pressed` | inset dual | Input fields, active states |
+| `--shadow-panel` | larger dual | Major floating panels |
+
+### Component Categories
+
+**Floating Containers** (hard edge shadows):
+- `.topbar` - Top navigation bar
+- `.context-panel`, `.probe-panel` - Inspector panels
+- `.layers-popover`, `.settings-popover` - Dropdown menus
+- `.dock-tools`, `.dock-fab` - Bottom dock elements
+- `.db-legend` - Decibel legend bar
+
+**Inner Elements** (neumorphic shadows):
+- `.ui-button`, `.tool-button` - All buttons
+- `.toggle` - Toggle switches with track/knob
+- `.property-row input/select` - Form inputs
+- `.status-chip` - Status LED indicators
+
+### Files
+
+- **Theme Variables**: [apps/web/src/styles/theme.css](../apps/web/src/styles/theme.css)
+- **Component Styles**: [apps/web/src/style.css](../apps/web/src/style.css)
+
+---
+
+## 14. Long-Term Vision
 
 - **Multi-frequency band lazy loop**: Defer per-band calculations until needed, enabling efficient banded output without computing all octave bands upfront
 - **HRTF for probes with direction**: Head-related transfer functions for directional probes, supporting auralization and binaural rendering
