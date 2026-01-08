@@ -143,7 +143,7 @@
 
   --canvas-grid: var(--grid-line);
   --canvas-panel-stroke: var(--accent-dark);
-  --canvas-panel-fill: #c8d0dc;
+  --canvas-panel-fill: transparent;
   --canvas-panel-selected: var(--accent);
   --canvas-panel-handle-fill: var(--accent-contrast);
   --canvas-panel-handle-stroke: var(--accent-dark);
@@ -286,7 +286,7 @@
 
   --canvas-grid: var(--grid-line);
   --canvas-panel-stroke: var(--accent-dark);
-  --canvas-panel-fill: #d4dce8;
+  --canvas-panel-fill: transparent;
   --canvas-panel-selected: var(--accent);
   --canvas-panel-handle-fill: var(--surface-2);
   --canvas-panel-handle-stroke: var(--accent-dark);
