@@ -1715,13 +1715,9 @@ button.primary.is-cancel {
 }
 
 .canvas-status {
-  position: absolute;
-  bottom: 86px;
-  left: 18px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  z-index: 2;
   pointer-events: none;
 }
 

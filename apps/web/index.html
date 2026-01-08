@@ -29,32 +29,8 @@
       <!-- Fullscreen map canvas layer. -->
       <div class="canvas-frame">
         <canvas id="mapCanvas"></canvas>
-        <div class="canvas-status">
-          <div class="scale-bar">
-            <div class="scale-line" id="scaleLine"></div>
-            <div class="scale-text" id="scaleText">100 m</div>
-          </div>
-          <div class="canvas-status-line" aria-live="polite">
-            <span class="canvas-status-item">x: <span id="debug-x">0.0</span>m y: <span id="debug-y">0.0</span>m</span>
-            <span class="canvas-status-sep">|</span>
-            <span class="canvas-status-item">Units: Meters</span>
-            <span class="canvas-status-sep">|</span>
-            <span class="canvas-status-item">Mode: <span id="debug-mode">Select</span></span>
-            <span class="canvas-status-sep">|</span>
-            <button
-              class="status-refine-button"
-              id="refineButton"
-              type="button"
-              title="Force high-quality refine"
-              aria-label="Force high-quality refine"
-            >
-              <span class="status-refine-icon" aria-hidden="true">⟳</span>
-              <span>Refine</span>
-            </button>
-          </div>
-        </div>
         <div class="snap-indicator" id="snapIndicator"></div>
-        <!-- Help button on left side -->
+        <!-- Help button and status on left side -->
         <div class="canvas-corner-left" id="canvasCornerLeft">
           <div class="canvas-help" id="canvasHelp">
             <button
@@ -78,6 +54,31 @@
                 <strong>Tools</strong><br>
                 Use dock buttons or keyboard shortcuts
               </div>
+            </div>
+          </div>
+          <!-- Status info to the right of help button -->
+          <div class="canvas-status">
+            <div class="scale-bar">
+              <div class="scale-line" id="scaleLine"></div>
+              <div class="scale-text" id="scaleText">100 m</div>
+            </div>
+            <div class="canvas-status-line" aria-live="polite">
+              <span class="canvas-status-item">x: <span id="debug-x">0.0</span>m y: <span id="debug-y">0.0</span>m</span>
+              <span class="canvas-status-sep">|</span>
+              <span class="canvas-status-item">Units: Meters</span>
+              <span class="canvas-status-sep">|</span>
+              <span class="canvas-status-item">Mode: <span id="debug-mode">Select</span></span>
+              <span class="canvas-status-sep">|</span>
+              <button
+                class="status-refine-button"
+                id="refineButton"
+                type="button"
+                title="Force high-quality refine"
+                aria-label="Force high-quality refine"
+              >
+                <span class="status-refine-icon" aria-hidden="true">⟳</span>
+                <span>Refine</span>
+              </button>
             </div>
           </div>
         </div>
