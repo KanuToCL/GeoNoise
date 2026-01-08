@@ -14,7 +14,9 @@ describe('CSV export schema', () => {
           LAeq_min: 60.111,
           LAeq_max: 70.999,
           LAeq_avg: 66.666,
+          LAeq_p25: 62.5,
           LAeq_p50: 65.5,
+          LAeq_p75: 68.0,
           LAeq_p95: 69.2,
           samples: [
             { x: 0, y: 0, z: 1.5, LAeq: 64.444 },

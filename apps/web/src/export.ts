@@ -1,6 +1,6 @@
 /**
  * Export utilities and types for scene results
- * 
+ *
  * Spectral Source Migration (Jan 2026):
  * - Added Spectrum9 type for 9-band octave spectra
  * - ReceiverResult now includes LCeq, LZeq, and Leq_spectrum
@@ -13,7 +13,7 @@ export type Spectrum9 = [number, number, number, number, number, number, number,
 
 /**
  * Result for a single receiver point
- * 
+ *
  * Spectral Source Migration (Jan 2026):
  * - Added LCeq and LZeq for C and Z weighted totals
  * - Added Leq_spectrum for full 9-band spectrum at receiver
@@ -41,7 +41,9 @@ export type PanelResult = {
   LAeq_min: number;
   LAeq_max: number;
   LAeq_avg: number;
+  LAeq_p25: number;
   LAeq_p50: number;
+  LAeq_p75: number;
   LAeq_p95: number;
   samples: PanelSample[];
 };

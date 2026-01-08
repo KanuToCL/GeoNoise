@@ -1333,20 +1333,26 @@ function recomputePanelStats(panelResult: PanelResult) {
     panelResult.LAeq_min = MIN_LEVEL;
     panelResult.LAeq_max = MIN_LEVEL;
     panelResult.LAeq_avg = MIN_LEVEL;
+    panelResult.LAeq_p25 = MIN_LEVEL;
     panelResult.LAeq_p50 = MIN_LEVEL;
+    panelResult.LAeq_p75 = MIN_LEVEL;
     panelResult.LAeq_p95 = MIN_LEVEL;
     return;
   }
 
   const avg = energyToDb(energySum / laeqs.length);
   const sorted = [...laeqs].sort((a, b) => a - b);
+  const p25Index = Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.25) - 1));
   const p50Index = Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.5) - 1));
+  const p75Index = Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.75) - 1));
   const p95Index = Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1));
 
   panelResult.LAeq_min = min;
   panelResult.LAeq_max = max;
   panelResult.LAeq_avg = avg;
+  panelResult.LAeq_p25 = sorted[p25Index];
   panelResult.LAeq_p50 = sorted[p50Index];
+  panelResult.LAeq_p75 = sorted[p75Index];
   panelResult.LAeq_p95 = sorted[p95Index];
 }
 
@@ -1426,11 +1432,13 @@ function renderPanelStatsFor(panelId: string, container: HTMLElement) {
     return;
   }
 
+  const iqr = result.LAeq_p75 - result.LAeq_p25;
   const rows: Array<[string, string]> = [
     ['Min', `${formatLevel(result.LAeq_min)} dB`],
     ['Average', `${formatLevel(result.LAeq_avg)} dB`],
     ['L50', `${formatLevel(result.LAeq_p50)} dB`],
     ['Max', `${formatLevel(result.LAeq_max)} dB`],
+    ['L75-L25', `${formatLevel(iqr)} dB`],
     ['Samples', `${result.sampleCount}`],
   ];
 
@@ -1822,7 +1830,9 @@ async function computePanel(
       LAeq_min: result.LAeq_min,
       LAeq_max: result.LAeq_max,
       LAeq_avg: result.LAeq_avg,
+      LAeq_p25: MIN_LEVEL,
       LAeq_p50: MIN_LEVEL,
+      LAeq_p75: MIN_LEVEL,
       LAeq_p95: result.LAeq_p95,
       samples: (result.samples ?? []).map((sample) => ({
         x: sample.x,
