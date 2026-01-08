@@ -715,6 +715,13 @@
                   <div class="formula-highlight">A<sub>bar</sub> = 10·log₁₀(3 + 40·N) &nbsp;&nbsp; capped at 25 dB</div>
                   <p class="spec-text">Note: coefficient is <strong>40</strong> (not 20) for double-edge diffraction.</p>
                   <p class="spec-text"><strong>Horizontal diffraction:</strong> Also computed around building corners using single-edge Maekawa. The minimum-loss path is selected.</p>
+
+                  <p class="spec-text" style="margin-top: 16px;"><strong>Probe vs Grid Accuracy:</strong></p>
+                  <div style="background: var(--surface-lo); border-radius: 8px; padding: 12px; margin-top: 8px;">
+                    <p class="spec-text" style="margin: 0 0 8px 0;"><strong>Probe engine</strong> traces multiple diffraction paths (roof + all corners) and sums them coherently with phase. This is more physically accurate.</p>
+                    <p class="spec-text" style="margin: 0 0 8px 0;"><strong>Receiver grid</strong> uses a simplified single-path model for real-time performance.</p>
+                    <p class="spec-text" style="margin: 0; color: var(--text-muted);"><em>Expected difference: Probe shows 5-10 dB higher levels behind buildings due to multiple contributing paths. Use probes for final analysis at critical locations.</em></p>
+                  </div>
                 </div>
               </div>
             </div>
