@@ -2,7 +2,7 @@
 
 > **Created:** 2025-01-09
 > **Status:** Active
-> **Current Coverage:** 80 tests passing (61 engine + 19 shared/backends/web)
+> **Current Coverage:** 86 tests passing (67 engine + 19 shared/backends/web)
 
 This document outlines recommended unit tests for GeoNoise, organized by priority. Tests are linked to physics audit issues where applicable.
 
@@ -13,7 +13,7 @@ This document outlines recommended unit tests for GeoNoise, organized by priorit
 | Package | Test File | Tests | Description |
 |---------|-----------|-------|-------------|
 | `packages/shared` | `phasor/index.spec.ts` | 26 | Complex arithmetic, pressure/dB conversion, phasor summation |
-| `packages/engine` | `propagation.spec.ts` | 38 | Spreading loss, speed of sound, weighting curves, edge cases |
+| `packages/engine` | `propagation.spec.ts` | 44 | Spreading loss, atmospheric absorption path, speed of sound, weighting curves |
 | `packages/engine` | `probe-diffraction.spec.ts` | 11 | Probe computation (Issue #2b), simple/coherent modes |
 | `packages/engine` | `ground-two-ray.spec.ts` | 6 | Two-ray ground reflection model |
 | `packages/engine` | `panel.spec.ts` | 3 | Panel sampling and statistics |
@@ -45,15 +45,17 @@ describe('Barrier + Ground Interaction', () => {
 });
 ```
 
-### Atmospheric Absorption Path Length (Issue #4)
+### Atmospheric Absorption Path Length (Issue #4) ✅ IMPLEMENTED
 **Location:** `packages/engine/src/propagation/index.ts`
 
 ```typescript
-describe('Atmospheric Absorption - Actual Path Length', () => {
-  it('uses direct distance for unblocked paths');
-  it('uses A+B distance for diffracted paths over barrier');
-  it('uses reflected path length for wall reflections');
-  it('shows measurable difference at 16kHz for 10m+ detour');
+describe('Atmospheric Absorption Path Length - Issue #4 Fix', () => {
+  it('uses direct distance when actualPathLength is not provided');
+  it('uses actualPathLength when provided (diffracted path)');
+  it('actualPathLength produces higher absorption than direct distance');
+  it('difference is significant at high frequencies');
+  it('difference is minimal at low frequencies');
+  it('spreading loss is based on direct distance, not actual path');
 });
 ```
 
@@ -346,3 +348,4 @@ npx vitest watch
 | 2025-01-09 | Added 3 coherent probe tests (Issue #2b) |
 | 2025-01-09 | Fixed cpuWorkerBackend test (missing spectrum) |
 | 2025-01-09 | Added 19 low-hanging tests: speed of sound, weighting curves, edge cases |
+| 2025-01-09 | Added 6 Issue #4 tests: atmospheric absorption path length |
