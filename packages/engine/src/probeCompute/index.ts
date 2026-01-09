@@ -347,6 +347,7 @@ export function computeProbeCoherent(
     },
     maxReflectionOrder: config.wallReflections ? 1 : 0,
     includeDiffraction: config.barrierDiffraction,
+    maxDiffractionDeltaForUnblockedPath: 5.0, // Issue #11: trace nearby diffraction for coherent summation
     speedOfSound: c,
   };
 

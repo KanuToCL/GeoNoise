@@ -1,15 +1,15 @@
 /**
  * 2.5D Ray-Tracing for Acoustic Propagation
- * 
+ *
  * Implements the image source method for first-order reflections
  * and geometric ray tracing for barrier diffraction.
- * 
+ *
  * Key concepts from game audio RT engines adapted for acoustics:
  * - Image source method for specular reflections
  * - Path validation (visibility checks)
  * - Multi-path coherent summation
  * - Edge diffraction via Uniform Theory of Diffraction (UTD)
- * 
+ *
  * Coordinate system: 2.5D where XY is plan view and Z is height.
  */
 
@@ -42,12 +42,12 @@ export interface ReflectingSurface {
 }
 
 /** Ray path type enumeration */
-export type PathType = 
+export type PathType =
   | 'direct'           // Line of sight
   | 'ground'           // Ground reflection
   | 'wall'             // First-order wall reflection
   | 'wall-ground'      // Wall reflection + ground reflection
-  | 'ground-wall'      // Ground reflection + wall reflection  
+  | 'ground-wall'      // Ground reflection + wall reflection
   | 'diffracted'       // Over/around barrier
   | 'building-roof';   // Over building roof
 
@@ -122,7 +122,7 @@ function normalize2D(v: Point2D): Point2D {
 
 /** 2D segment intersection - returns intersection point or null */
 export function segmentIntersection2D(
-  p1: Point2D, p2: Point2D, 
+  p1: Point2D, p2: Point2D,
   q1: Point2D, q2: Point2D
 ): Point2D | null {
   const r = { x: p2.x - p1.x, y: p2.y - p1.y };
@@ -167,19 +167,19 @@ export function isPathBlocked(
 /** Mirror a point across a line segment (2D) */
 export function mirrorPoint2D(point: Point2D, segment: Segment2D): Point2D {
   const { p1, p2 } = segment;
-  
+
   // Direction vector of the line
   const dx = p2.x - p1.x;
   const dy = p2.y - p1.y;
   const lenSq = dx * dx + dy * dy;
-  
+
   if (lenSq < EPSILON) return point;
-  
+
   // Project point onto line
   const t = ((point.x - p1.x) * dx + (point.y - p1.y) * dy) / lenSq;
   const projX = p1.x + t * dx;
   const projY = p1.y + t * dy;
-  
+
   // Mirror = 2 * projection - point
   return {
     x: 2 * projX - point.x,
@@ -215,15 +215,15 @@ export function surfaceNormal(surface: ReflectingSurface, towardPoint: Point2D):
   const { p1, p2 } = surface.segment;
   const dx = p2.x - p1.x;
   const dy = p2.y - p1.y;
-  
+
   // Two possible normals
   const n1 = normalize2D({ x: -dy, y: dx });
   const n2 = normalize2D({ x: dy, y: -dx });
-  
+
   // Choose the one pointing toward the point
   const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
   const toPoint = { x: towardPoint.x - mid.x, y: towardPoint.y - mid.y };
-  
+
   return dot2D(n1, toPoint) > 0 ? n1 : n2;
 }
 
@@ -240,15 +240,15 @@ export function createImageSources(
   _maxOrder = 1  // Reserved for higher-order reflections
 ): ImageSource[] {
   const imageSources: ImageSource[] = [];
-  
+
   for (const surface of surfaces) {
     const imagePos = mirrorPoint3D(source, surface.segment);
-    
+
     // Phase change on reflection (simplified model)
     // Hard surfaces: 0 phase change
     // Soft surfaces: π phase change (cancellation tendency)
     const phaseChange = surface.surfaceType === 'soft' ? Math.PI : 0;
-    
+
     imageSources.push({
       position: imagePos,
       surface,
@@ -257,10 +257,10 @@ export function createImageSources(
       phaseChange,
     });
   }
-  
+
   // TODO: Higher order reflections (maxOrder > 1)
   // Would require recursive image source generation
-  
+
   return imageSources;
 }
 
@@ -278,10 +278,10 @@ export function traceDirectPath(
 ): RayPath {
   const s2d = { x: source.x, y: source.y };
   const r2d = { x: receiver.x, y: receiver.y };
-  
+
   const dist = distance3D(source, receiver);
   const blocked = isPathBlocked(s2d, r2d, surfaces);
-  
+
   return {
     type: 'direct',
     totalDistance: dist,
@@ -307,7 +307,7 @@ export function traceGroundPath(
   // Ground image source is the source mirrored below ground (z → -z)
   // This is used implicitly in the similar triangles calculation below
   // to find where the specular reflection point would be.
-  
+
   // Find ground reflection point using similar triangles
   const t = source.z / (source.z + receiver.z);
   const groundPoint: Point3D = {
@@ -315,19 +315,19 @@ export function traceGroundPath(
     y: source.y + t * (receiver.y - source.y),
     z: 0,
   };
-  
+
   // Path distances
   const pathA = distance3D(source, groundPoint);
   const pathB = distance3D(groundPoint, receiver);
   const totalDistance = pathA + pathB;
   const directDistance = distance3D(source, receiver);
-  
+
   // Check if path is blocked
   const s2d = { x: source.x, y: source.y };
   const g2d = { x: groundPoint.x, y: groundPoint.y };
   const r2d = { x: receiver.x, y: receiver.y };
   const blocked = isPathBlocked(s2d, g2d, surfaces) || isPathBlocked(g2d, r2d, surfaces);
-  
+
   // Phase change from ground reflection
   let phaseChange = 0;
   if (groundParams.type === 'soft') {
@@ -335,7 +335,7 @@ export function traceGroundPath(
   } else if (groundParams.type === 'mixed') {
     phaseChange = Math.PI * groundParams.mixedFactor;
   }
-  
+
   // Absorption from ground (simplified - real model uses impedance)
   let absorption = 0;
   if (groundParams.type === 'soft') {
@@ -343,7 +343,7 @@ export function traceGroundPath(
   } else if (groundParams.type === 'mixed') {
     absorption = 0.1 * groundParams.mixedFactor;
   }
-  
+
   return {
     type: 'ground',
     totalDistance,
@@ -367,44 +367,44 @@ export function traceWallPaths(
 ): RayPath[] {
   const paths: RayPath[] = [];
   const imageSources = createImageSources(source, surfaces, 1);
-  
+
   for (const imageSource of imageSources) {
     // Find reflection point on the surface
     const r2d = { x: receiver.x, y: receiver.y };
     const img2d = { x: imageSource.position.x, y: imageSource.position.y };
-    
+
     const reflectionPoint2D = findReflectionPoint(r2d, img2d, imageSource.surface);
     if (!reflectionPoint2D) continue;
-    
+
     // Check if reflection point is on the segment
     const seg = imageSource.surface.segment;
     const segLen = distance2D(seg.p1, seg.p2);
     const d1 = distance2D(reflectionPoint2D, seg.p1);
     const d2 = distance2D(reflectionPoint2D, seg.p2);
     if (d1 > segLen + EPSILON || d2 > segLen + EPSILON) continue;
-    
+
     // 3D reflection point (at surface height or interpolated)
     const reflectionPoint3D: Point3D = {
       ...reflectionPoint2D,
       z: Math.min(imageSource.surface.height, Math.max(source.z, receiver.z)),
     };
-    
+
     // Calculate path distances
     const pathA = distance3D(source, reflectionPoint3D);
     const pathB = distance3D(reflectionPoint3D, receiver);
     const totalDistance = pathA + pathB;
     const directDistance = distance3D(source, receiver);
-    
+
     // Check if path is blocked (excluding the reflection surface itself)
     const s2d = { x: source.x, y: source.y };
     const surfacesToCheck = allSurfaces.filter(s => s !== imageSource.surface);
-    const blocked = 
+    const blocked =
       isPathBlocked(s2d, reflectionPoint2D, surfacesToCheck) ||
       isPathBlocked(reflectionPoint2D, r2d, surfacesToCheck);
-    
+
     // Check height clearance (simple model - reflection point must be below surface top)
     const heightValid = reflectionPoint3D.z <= imageSource.surface.height;
-    
+
     paths.push({
       type: 'wall',
       totalDistance,
@@ -417,7 +417,7 @@ export function traceWallPaths(
       valid: !blocked && heightValid,
     });
   }
-  
+
   return paths;
 }
 
@@ -433,29 +433,29 @@ export function traceDiffractionPath(
 ): RayPath | null {
   const s2d = { x: source.x, y: source.y };
   const r2d = { x: receiver.x, y: receiver.y };
-  
+
   // Check if barrier blocks direct path
   const intersection = segmentIntersection2D(s2d, r2d, barrier.segment.p1, barrier.segment.p2);
   if (!intersection) return null;
-  
+
   // Diffraction point at barrier top above intersection
   const diffractionPoint: Point3D = {
     x: intersection.x,
     y: intersection.y,
     z: barrier.height,
   };
-  
+
   // Path distances (over-the-top path)
   const pathA = distance3D(source, diffractionPoint);
   const pathB = distance3D(diffractionPoint, receiver);
   const totalDistance = pathA + pathB;
   const directDistance = distance3D(source, receiver);
   const pathDifference = totalDistance - directDistance;
-  
+
   // Maekawa diffraction loss (simplified)
   // N = 2 * delta / lambda, Abar = 10*log10(3 + 20*N)
   // We'll compute this per-frequency in the calling code
-  
+
   return {
     type: 'diffracted',
     totalDistance,
@@ -483,6 +483,16 @@ export interface RayTracingConfig {
   maxReflectionOrder: number;
   /** Include diffraction over barriers */
   includeDiffraction: boolean;
+  /**
+   * Maximum path difference (meters) for diffraction when direct path is unblocked.
+   * When the direct path is clear, diffraction paths with path difference less than
+   * this value will still be traced for coherent summation accuracy.
+   * Set to 0 to disable (only trace diffraction when direct is blocked).
+   * Default: 5.0 meters (~1 wavelength at 63 Hz)
+   *
+   * Issue #11 fix: Enables correct interference patterns near barrier edges.
+   */
+  maxDiffractionDeltaForUnblockedPath: number;
   /** Speed of sound for phase calculations */
   speedOfSound: number;
 }
@@ -496,14 +506,15 @@ export const DEFAULT_RAYTRACING_CONFIG: RayTracingConfig = {
   },
   maxReflectionOrder: 1,
   includeDiffraction: true,
+  maxDiffractionDeltaForUnblockedPath: 5.0, // ~1 wavelength at 63 Hz
   speedOfSound: SPEED_OF_SOUND_20C,
 };
 
 /**
  * Trace all acoustic paths from source to receiver
- * 
+ *
  * Returns an array of valid ray paths that can be coherently summed.
- * 
+ *
  * @param source - Source position (3D)
  * @param receiver - Receiver position (3D)
  * @param reflectingSurfaces - Walls/barriers that can reflect sound
@@ -519,11 +530,11 @@ export function traceAllPaths(
 ): RayPath[] {
   const paths: RayPath[] = [];
   const allSurfaces = [...reflectingSurfaces, ...diffractingSurfaces];
-  
+
   // 1. Direct path
   const directPath = traceDirectPath(source, receiver, diffractingSurfaces);
   paths.push(directPath);
-  
+
   // 2. Ground reflection
   if (config.includeGround && source.z > 0 && receiver.z > 0) {
     const groundPath = traceGroundPath(source, receiver, diffractingSurfaces, config.ground);
@@ -531,7 +542,7 @@ export function traceAllPaths(
       paths.push(groundPath);
     }
   }
-  
+
   // 3. First-order wall reflections
   if (config.maxReflectionOrder >= 1) {
     const wallPaths = traceWallPaths(source, receiver, reflectingSurfaces, allSurfaces);
@@ -541,26 +552,42 @@ export function traceAllPaths(
       }
     }
   }
-  
-  // 4. Diffraction paths (when direct path is blocked)
-  if (config.includeDiffraction && !directPath.valid) {
+
+  // 4. Diffraction paths
+  // Issue #11 fix: Trace diffraction for all barriers that could contribute to
+  // coherent summation, not just when the direct path is blocked.
+  if (config.includeDiffraction) {
     for (const barrier of diffractingSurfaces) {
       const diffPath = traceDiffractionPath(source, receiver, barrier, allSurfaces);
-      if (diffPath && diffPath.valid) {
+      if (!diffPath) continue;
+
+      // When direct path is blocked, diffraction is the PRIMARY path - always include it
+      if (!directPath.valid) {
+        if (diffPath.valid) {
+          paths.push(diffPath);
+        }
+        continue;
+      }
+
+      // When direct path is unblocked, only include diffraction paths with
+      // small path difference that could interfere significantly with direct wave.
+      // This is controlled by maxDiffractionDeltaForUnblockedPath config.
+      const maxDelta = config.maxDiffractionDeltaForUnblockedPath ?? 0;
+      if (maxDelta > 0 && diffPath.valid && diffPath.pathDifference < maxDelta) {
         paths.push(diffPath);
       }
     }
   }
-  
+
   // 5. Wall + Ground combination paths (second order)
   // TODO: Implement wall-ground and ground-wall paths for more accuracy
-  
+
   return paths;
 }
 
 /**
  * Calculate Maekawa diffraction attenuation
- * 
+ *
  * @param pathDifference - Delta = detoured path - direct path (meters)
  * @param frequency - Frequency in Hz
  * @param speedOfSound - Speed of sound in m/s
@@ -573,9 +600,9 @@ export function maekawaDiffraction(
 ): number {
   const lambda = speedOfSound / frequency;
   const N = (2 * pathDifference) / lambda; // Fresnel number
-  
+
   if (N < -0.1) return 0; // Negative path difference - no attenuation
-  
+
   const attenuation = 10 * Math.log10(3 + 20 * N);
   return Math.min(Math.max(attenuation, 0), 25); // Cap at 25 dB
 }
@@ -589,14 +616,14 @@ export function atmosphericAbsorptionCoeff(
   humidity = 50
 ): number {
   // Simplified model - real implementation uses ISO 9613-1
-  // Note: humidity affects absorption through molecular relaxation 
+  // Note: humidity affects absorption through molecular relaxation
   // frequencies, which are already incorporated in the formula below
   // via temperature-dependent exponential terms.
   void humidity; // Used implicitly via standard atmosphere model
-  
+
   const f2 = frequency * frequency;
   const t = temperature + 273.15;
-  
+
   // Approximation valid for typical outdoor conditions
   const alpha = 8.686 * f2 * (
     1.84e-11 * Math.pow(t / 293.15, 0.5) +
@@ -605,6 +632,6 @@ export function atmosphericAbsorptionCoeff(
       0.1068 * Math.exp(-3352 / t) / (f2 / 4e9 + 0.01275 * Math.exp(-2239.1 / t))
     )
   );
-  
+
   return Math.max(alpha, 0);
 }

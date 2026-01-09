@@ -10,13 +10,14 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 
 ## Quick Status Summary
 
-### ✅ Resolved (8)
+### ✅ Resolved (9)
 - **#1** Spreading Loss Formula Constant Ambiguity — *Fixed with exact constants + documentation*
 - **#2** Two-Ray Ground Model Sign Inconsistency — *Resolved by design (see [Calculation Profile Presets](./ROADMAP.md#calculation-profile-presets))*
 - **#2b** computeProbeCoherent Double-Counts Direct Path — *Fixed: paths now processed uniformly*
 - **#4** Atmospheric Absorption Uses Direct Distance — *Fixed: now uses actualPathLength for diffracted paths*
 - **#5 (probeWorker)** Simplified Atmospheric Absorption in probeWorker — *Fixed: now respects UI model selection*
 - **#10** "Simple" Atmospheric Absorption Model Incorrectly Formulated — *Fixed: replaced buggy formula with lookup table*
+- **#11** Diffraction Only Traced When Direct Path Blocked — *Fixed: now traces diffraction for nearby barriers even when direct path is unblocked (for coherent summation accuracy)*
 - **#16** Same Formula for Thin/Thick Barriers — *Fixed: buildings now use coefficient 40 and cap 25 dB*
 - **#18** Speed of Sound Constant vs Formula Mismatch — *Fixed: added Environmental Conditions UI for user-controlled temperature/humidity/pressure*
 
@@ -24,12 +25,11 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 - **#3** Barrier + Ground Effect Interaction Physically Incorrect
 - **#5** Side Diffraction Geometry Oversimplified
 
-### 🟠 Moderate - Pending (5)
+### 🟠 Moderate - Pending (4)
 - **#6** Delany-Bazley Extrapolation Outside Valid Range
 - **#7** Ground Reflection Assumes Flat Ground (z=0)
 - **#8** Maekawa Negative N Threshold Documentation
 - **#9** Wall Reflection Height Geometry Incorrect
-- **#11** Diffraction Only Traced When Direct Path Blocked
 
 ### 🟡 Minor - Pending (5)
 - **#13** Sommerfeld Correction Discontinuity at |w|=4
@@ -989,9 +989,9 @@ calculations, use `atmosphericAbsorption: 'iso9613'` mode which uses the full fo
 ---
 
 ### 11. Diffraction Only Traced When Direct Path Blocked
-- [ ] **Status:** Open
+- [x] **Status:** Resolved
 - **Location:** `packages/engine/src/raytracing/index.ts:545-546`
-- **Impact:** Missing paths for coherent summation
+- **Impact:** Missing paths for coherent summation → Now traces nearby diffraction for accuracy
 
 #### Current Formulation (Math)
 For coherent summation, all contributing paths must be included:
@@ -1005,46 +1005,71 @@ This requires ALL paths with significant energy, including:
 - Combined paths
 ```
 
-#### Current Code Implementation
+#### Resolution
+Added `maxDiffractionDeltaForUnblockedPath` configuration parameter (default: 5.0 meters, ~1 wavelength at 63 Hz).
+
+When the direct path is unblocked but a barrier is nearby (path difference < threshold), the diffraction path is now traced for coherent summation accuracy. This captures interference patterns that were previously missing.
+
+#### Implementation Details
+
+**raytracing/index.ts - New config parameter:**
 ```typescript
-// 4. Diffraction paths (when direct path is blocked)
-if (config.includeDiffraction && !directPath.valid) {  // ONLY when blocked!
-  for (const barrier of diffractingSurfaces) {
-    const diffPath = traceDiffractionPath(source, receiver, barrier, allSurfaces);
-    if (diffPath && diffPath.valid) paths.push(diffPath);
-  }
+export interface RayTracingConfig {
+  // ... existing fields ...
+
+  /**
+   * Maximum path difference (meters) for diffraction when direct path is unblocked.
+   * When the direct path is clear, diffraction paths with path difference less than
+   * this value will still be traced for coherent summation accuracy.
+   * Set to 0 to disable (only trace diffraction when direct is blocked).
+   * Default: 5.0 meters (~1 wavelength at 63 Hz)
+   */
+  maxDiffractionDeltaForUnblockedPath: number;
 }
+
+export const DEFAULT_RAYTRACING_CONFIG: RayTracingConfig = {
+  // ...
+  maxDiffractionDeltaForUnblockedPath: 5.0, // ~1 wavelength at 63 Hz
+};
 ```
 
-#### Proposed Implementation
+**raytracing/index.ts - Updated traceAllPaths():**
 ```typescript
 // 4. Diffraction paths
-// Trace diffraction for barriers that are "close enough" to contribute,
-// even if direct path is unblocked (for coherent summation accuracy)
+// Issue #11 fix: Trace diffraction for all barriers that could contribute to
+// coherent summation, not just when the direct path is blocked.
 if (config.includeDiffraction) {
   for (const barrier of diffractingSurfaces) {
-    // Always check barriers that could contribute significant energy
     const diffPath = traceDiffractionPath(source, receiver, barrier, allSurfaces);
-
     if (!diffPath) continue;
 
-    // For blocked direct path: diffraction is the primary path
+    // When direct path is blocked, diffraction is the PRIMARY path - always include it
     if (!directPath.valid) {
       if (diffPath.valid) paths.push(diffPath);
       continue;
     }
 
-    // For unblocked direct path: only include if diffraction path is
-    // close enough in length to potentially interfere significantly
-    // (within ~1 wavelength at lowest frequency of interest)
-    const maxDeltaForInterference = 5.0;  // meters (~1λ at 63 Hz)
-
-    if (diffPath.valid && diffPath.pathDifference < maxDeltaForInterference) {
+    // When direct path is unblocked, only include diffraction paths with
+    // small path difference that could interfere significantly with direct wave.
+    const maxDelta = config.maxDiffractionDeltaForUnblockedPath ?? 0;
+    if (maxDelta > 0 && diffPath.valid && diffPath.pathDifference < maxDelta) {
       paths.push(diffPath);
     }
   }
 }
 ```
+
+**probeCompute/index.ts - Enabled for coherent probe:**
+```typescript
+const rtConfig: RayTracingConfig = {
+  // ...
+  maxDiffractionDeltaForUnblockedPath: 5.0, // Issue #11: trace nearby diffraction
+};
+```
+
+#### Test Coverage
+- 11 new unit tests in `packages/engine/tests/probe-diffraction.spec.ts`
+- Tests cover: blocked path behavior (preserved), unblocked path threshold, multiple barriers, path difference geometry
 
 ---
 
