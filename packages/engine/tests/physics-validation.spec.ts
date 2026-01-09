@@ -81,6 +81,7 @@ afterAll(() => {
 
 describe('Spreading Loss - ISO 9613-2', () => {
   const EXACT_4PI = 10 * Math.log10(4 * Math.PI); // 10.99 dB
+  const EXACT_2PI = 10 * Math.log10(2 * Math.PI); // 7.98 dB
 
   it('spherical spreading at 1m = 10.99 dB', () => {
     const actual = spreadingLoss(1, 'spherical');
@@ -146,6 +147,44 @@ describe('Spreading Loss - ISO 9613-2', () => {
     recordResult({
       category: 'Spreading',
       name: 'Inverse Square Law',
+      expected: `${expected.toFixed(2)} dB/doubling`,
+      actual: `${actual.toFixed(2)} dB/doubling`,
+      tolerance: '±0.01 dB',
+      passed,
+      reference: 'Physics'
+    });
+
+    expect(actual).toBeCloseTo(expected, 2);
+  });
+
+  it('cylindrical spreading at 1m = 7.98 dB', () => {
+    const actual = spreadingLoss(1, 'cylindrical');
+    const expected = EXACT_2PI;
+    const passed = Math.abs(actual - expected) < 0.01;
+
+    recordResult({
+      category: 'Spreading',
+      name: 'Cylindrical @ 1m',
+      expected: `${expected.toFixed(2)} dB`,
+      actual: `${actual.toFixed(2)} dB`,
+      tolerance: '±0.01 dB',
+      passed,
+      reference: 'ISO 9613-2'
+    });
+
+    expect(actual).toBeCloseTo(expected, 2);
+  });
+
+  it('cylindrical: +3.01 dB per distance doubling', () => {
+    const at10 = spreadingLoss(10, 'cylindrical');
+    const at20 = spreadingLoss(20, 'cylindrical');
+    const actual = at20 - at10;
+    const expected = 10 * Math.log10(2); // 3.0103 dB
+    const passed = Math.abs(actual - expected) < 0.01;
+
+    recordResult({
+      category: 'Spreading',
+      name: 'Cylindrical Law',
       expected: `${expected.toFixed(2)} dB/doubling`,
       actual: `${actual.toFixed(2)} dB/doubling`,
       tolerance: '±0.01 dB',

@@ -12,6 +12,8 @@ This report validates the acoustic propagation engine against known physical val
 | Spreading | Spherical @ 10m | 30.99 dB | 30.99 dB | ±0.01 dB | ✅ | ISO 9613-2 Eq.6 |
 | Spreading | Spherical @ 100m | 50.99 dB | 50.99 dB | ±0.01 dB | ✅ | ISO 9613-2 Eq.6 |
 | Spreading | Inverse Square Law | 6.02 dB/doubling | 6.02 dB/doubling | ±0.01 dB | ✅ | Physics |
+| Spreading | Cylindrical @ 1m | 7.98 dB | 7.98 dB | ±0.01 dB | ✅ | ISO 9613-2 |
+| Spreading | Cylindrical Law | 3.01 dB/doubling | 3.01 dB/doubling | ±0.01 dB | ✅ | Physics |
 | Diffraction | Default threshold | 5 m (~1λ @ 63Hz) | 5.00 m | exact | ✅ | Issue #11 |
 | Diffraction | Blocked → diffract | direct blocked + 1 diffraction | blocked=true, diff=1 | exact | ✅ | Issue #11 |
 | Diffraction | Disabled → no diff | direct valid, 0 diffraction | valid=true, diff=0 | exact | ✅ | Issue #11 |
@@ -44,7 +46,7 @@ This report validates the acoustic propagation engine against known physical val
 
 ## Summary
 
-**33/33 tests passed** ✅
+**35/35 tests passed** ✅
 
 ## How to Run
 
@@ -58,7 +60,7 @@ PHYSICS_REPORT=true npx vitest run tests/physics-validation.spec.ts
 
 ## Categories Tested
 
-1. **Spreading Loss** (4 tests) - Geometric divergence per ISO 9613-2
+1. **Spreading Loss** (6 tests) - Geometric divergence per ISO 9613-2 (spherical + cylindrical)
 2. **Diffraction Ray Tracing** (6 tests) - Issue #11 fix for coherent summation
 3. **Atmospheric Absorption** (3 tests) - Air absorption per ISO 9613-1
 4. **Barrier Diffraction** (6 tests) - Maekawa formula for thin and thick barriers
