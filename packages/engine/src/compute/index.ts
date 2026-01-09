@@ -446,7 +446,7 @@ export class CPUEngine implements Engine {
         // `blocked` toggles which attenuation terms are applied in calculatePropagation().
         const barrier = barrierGeometry
           ? computeBarrierPathDiff(src.position, recv.position, barrierGeometry, propConfig.barrierSideDiffraction ?? 'auto')
-          : { blocked: false, pathDifference: 0, actualPathLength: dist };
+          : { blocked: false, pathDifference: 0, actualPathLength: dist, barrierType: 'thin' as const };
 
         // Calculate per-band propagation
         const bandedProp = calculateBandedPropagation(
@@ -573,7 +573,7 @@ export class CPUEngine implements Engine {
         // Barrier logic is applied per source->sample path.
         const barrier = barrierGeometry
           ? computeBarrierPathDiff(src.position, pt, barrierGeometry, propConfig.barrierSideDiffraction ?? 'auto')
-          : { blocked: false, pathDifference: 0, actualPathLength: dist };
+          : { blocked: false, pathDifference: 0, actualPathLength: dist, barrierType: 'thin' as const };
 
         const bandedProp = calculateBandedPropagation(
           dist, src.position.z, pt.z, propConfig, meteo,
@@ -655,7 +655,7 @@ export class CPUEngine implements Engine {
         // Barrier logic is applied per source->grid-point path.
         const barrier = barrierGeometry
           ? computeBarrierPathDiff(src.position, pt, barrierGeometry, propConfig.barrierSideDiffraction ?? 'auto')
-          : { blocked: false, pathDifference: 0, actualPathLength: dist };
+          : { blocked: false, pathDifference: 0, actualPathLength: dist, barrierType: 'thin' as const };
 
         const bandedProp = calculateBandedPropagation(
           dist, src.position.z, pt.z, propConfig, meteo,
