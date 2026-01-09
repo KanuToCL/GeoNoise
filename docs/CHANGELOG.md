@@ -4,6 +4,40 @@ This document contains the implementation history of completed features. For pla
 
 ---
 
+## 2026-01-09
+
+### Noise Map Live Recalculation
+
+**Status:** ✅ Implemented (v0.4.6)
+
+Changed the noise map behavior so it **recalculates in place** instead of disappearing when scene changes occur.
+
+#### Before
+When any of the following changed, the noise map would completely disappear:
+- Source band Lw values
+- Settings dropdown or boolean values
+- Building/wall dimensions
+
+Users had to manually regenerate the map after each change.
+
+#### After
+The noise map now **stays visible** and **recalculates in the background** when:
+- Source band Lw values change
+- Any settings value (dropdowns or bools) changes
+- Elements like buildings or walls change dimensions
+
+The map uses low-resolution (fast) updates during editing for responsive feedback.
+
+#### Technical Details
+
+- Added `recalculateNoiseMapIfVisible()` function that triggers a silent low-res recompute if map is visible
+- Updated `pushHistory()` to recalculate by default instead of invalidating
+- Updated `computeScene()` to recalculate by default instead of invalidating
+- New options: `invalidateMap: true` forces clear, `recalculateMap: false` skips map ops
+- Scene load and undo/redo still invalidate (clear) the map as before
+
+---
+
 ## 2026-01-08
 
 ### Select Box Multi-Selection Tool

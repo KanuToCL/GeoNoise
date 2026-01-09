@@ -948,14 +948,18 @@ function snapshotScene(): SceneSnapshot {
   };
 }
 
-function pushHistory(options?: { markDirty?: boolean; invalidateMap?: boolean }) {
+function pushHistory(options?: { markDirty?: boolean; invalidateMap?: boolean; recalculateMap?: boolean }) {
   const snap = snapshotScene();
   history = history.slice(0, historyIndex + 1);
   history.push(snap);
   historyIndex = history.length - 1;
   updateUndoRedoButtons();
-  if (options?.invalidateMap !== false) {
+  // By default, recalculate the map if visible (keeps map on screen)
+  // Use invalidateMap: true to force clear, or recalculateMap: false to skip
+  if (options?.invalidateMap === true) {
     invalidateNoiseMap();
+  } else if (options?.recalculateMap !== false) {
+    recalculateNoiseMapIfVisible();
   }
   if (options?.markDirty !== false) {
     markDirty();
@@ -1002,7 +1006,7 @@ function applySnapshot(snap: SceneSnapshot) {
   setActiveProbe(activeProbeId);
   updateUndoRedoButtons();
   invalidateNoiseMap();
-  computeScene();
+  computeScene({ recalculateMap: false });
 }
 
 function undo() {
@@ -1897,6 +1901,19 @@ function invalidateNoiseMap() {
   requestRender();
 }
 
+/**
+ * Recalculate the noise map if it's currently visible.
+ * Unlike invalidateNoiseMap(), this keeps the existing map displayed
+ * while computing the new one in the background.
+ */
+function recalculateNoiseMapIfVisible() {
+  if (!layers.noiseMap || !noiseMap) {
+    return; // Map not visible, nothing to recalculate
+  }
+  // Use low resolution for live updates to keep UI responsive
+  recalculateNoiseMap(RES_LOW, 2500);
+}
+
 type NoiseMapComputeOptions = {
   resolutionPx?: number;
   maxPoints?: number;
@@ -2031,9 +2048,13 @@ function recalculateNoiseMap(resolutionPx: number, maxPoints?: number) {
   void computeNoiseMapInternal({ resolutionPx, maxPoints, silent: true, requestId: 'grid:live' });
 }
 
-function computeScene(options: { invalidateMap?: boolean } = {}) {
-  if (options.invalidateMap !== false) {
+function computeScene(options: { invalidateMap?: boolean; recalculateMap?: boolean } = {}) {
+  // By default, recalculate the map if visible (keeps map on screen)
+  // Use invalidateMap: true to force clear, or recalculateMap: false to skip
+  if (options.invalidateMap === true) {
     invalidateNoiseMap();
+  } else if (options.recalculateMap !== false) {
+    recalculateNoiseMapIfVisible();
   }
   pruneResults();
   renderResults();
@@ -6974,9 +6995,9 @@ function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
   history = [];
   historyIndex = -1;
   invalidateNoiseMap();
-  pushHistory({ markDirty: false });
+  pushHistory({ markDirty: false, recalculateMap: false });
   renderResults();
-  computeScene();
+  computeScene({ recalculateMap: false });
   markSaved();
 }
 
