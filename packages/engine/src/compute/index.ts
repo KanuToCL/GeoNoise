@@ -216,27 +216,43 @@ function buildBarrierGeometry(scene: Scene): BarrierGeometry {
 }
 
 /**
- * Compute the path difference for side (horizontal) diffraction around a barrier endpoint.
- * Path: Source → Edge → Receiver
- * Delta: |S→Edge| + |Edge→R| - |S→R|
+ * Compute the path difference for horizontal (around-the-end) diffraction.
+ *
+ * Issue #5 Fix: For finite barriers, sound can diffract AROUND the ends
+ * (horizontally) in addition to OVER the top (vertically). The horizontal
+ * path goes around at ground level, not at barrier height.
+ *
+ * Path: Source → Edge at ground → Receiver
+ * Delta: |S→(edge_x, edge_y, ground_z)| + |(edge_x, edge_y, ground_z)→R| - |S→R|
+ *
+ * @param source - Source position (3D)
+ * @param receiver - Receiver position (3D)
+ * @param edgePoint - 2D position of barrier endpoint
+ * @param groundElevation - Ground height at edge point (typically 0)
+ * @param direct3D - Direct 3D distance from source to receiver
+ * @returns Path difference δ in meters
  */
 function computeSidePathDelta(
   source: Point3D,
   receiver: Point3D,
   edgePoint: Point2D,
-  edgeHeight: number,
+  groundElevation: number,
   direct3D: number
 ): number {
-  // Edge point at barrier height (or at the midpoint between source/receiver heights)
-  const edgeZ = Math.min(edgeHeight, Math.max(source.z, receiver.z));
+  // Issue #5 Fix: Horizontal diffraction goes AROUND at ground level
+  // The edge point is at ground elevation, not barrier height
+  const edgeZ = groundElevation;
 
+  // 3D distance from source to edge point at ground
   const pathA = Math.hypot(
     distance2D({ x: source.x, y: source.y }, edgePoint),
-    edgeZ - source.z
+    source.z - edgeZ
   );
+
+  // 3D distance from edge point at ground to receiver
   const pathB = Math.hypot(
     distance2D(edgePoint, { x: receiver.x, y: receiver.y }),
-    edgeZ - receiver.z
+    receiver.z - edgeZ
   );
 
   return pathA + pathB - direct3D;
@@ -256,84 +272,6 @@ function shouldUseSideDiffraction(
   if (mode === 'off') return false;
   if (mode === 'on') return true;
   return barrierLength < lengthThreshold; // 'auto' mode
-}
-
-function computeThinBarrierDelta(
-  source: Point3D,
-  receiver: Point3D,
-  source2D: Point2D,
-  receiver2D: Point2D,
-  segments: BarrierSegment[],
-  direct3D: number,
-  sideDiffractionMode: 'off' | 'auto' | 'on' = 'auto'
-): number | null {
-  let minDelta: number | null = null;
-
-  for (const segment of segments) {
-    const intersection = segmentIntersection(source2D, receiver2D, segment.p1, segment.p2);
-    if (!intersection) continue;
-
-    // === OVER-TOP DIFFRACTION (always computed) ===
-    // Split SR at the intersection point in 2D, then "lift" to the barrier top height in 3D.
-    const distSI = distance2D(source2D, intersection);
-    const distIR = distance2D(intersection, receiver2D);
-    const pathA = Math.hypot(distSI, segment.height - source.z);
-    const pathB = Math.hypot(distIR, segment.height - receiver.z);
-    const topDelta = pathA + pathB - direct3D;
-
-    let bestDelta = topDelta;
-
-    // === SIDE DIFFRACTION (if enabled) ===
-    // Compute paths around the left and right edges of the barrier
-    if (shouldUseSideDiffraction(segment.length, sideDiffractionMode)) {
-      // Left edge (p1)
-      const leftDelta = computeSidePathDelta(source, receiver, segment.p1, segment.height, direct3D);
-      // Right edge (p2)
-      const rightDelta = computeSidePathDelta(source, receiver, segment.p2, segment.height, direct3D);
-
-      // Take the minimum delta (least obstructed path) among top and sides
-      // Only consider paths with positive delta (sound must bend around/over barrier)
-      if (leftDelta > 0 && leftDelta < bestDelta) {
-        bestDelta = leftDelta;
-      }
-      if (rightDelta > 0 && rightDelta < bestDelta) {
-        bestDelta = rightDelta;
-      }
-    }
-
-    // For multiple barriers, we accumulate the minimum effective delta
-    // (the receiver "hears through" the least-blocked path)
-    if (minDelta === null || bestDelta < minDelta) {
-      minDelta = bestDelta;
-    }
-  }
-
-  return minDelta;
-}
-
-function computeBuildingDelta(
-  source: Point3D,
-  receiver: Point3D,
-  source2D: Point2D,
-  receiver2D: Point2D,
-  building: BuildingObstacle,
-  direct3D: number
-): number | null {
-  const intersections = collectIntersections(source2D, receiver2D, building.segments);
-  if (intersections.length < 2) {
-    return computeThinBarrierDelta(source, receiver, source2D, receiver2D, building.segments, direct3D);
-  }
-
-  const entry = intersections[0];
-  const exit = intersections[intersections.length - 1];
-  const distSourceToIn = distance2D(source2D, entry);
-  const distAcrossRoof = distance2D(entry, exit);
-  const distOutToRecv = distance2D(exit, receiver2D);
-  const pathUp = Math.hypot(distSourceToIn, building.height - source.z);
-  const pathRoof = distAcrossRoof;
-  const pathDown = Math.hypot(distOutToRecv, building.height - receiver.z);
-
-  return pathUp + pathRoof + pathDown - direct3D;
 }
 
 /** Barrier type for diffraction calculation */
@@ -420,9 +358,10 @@ function computeBarrierPathDiff(
     let bestDelta = topDelta;
 
     // Side diffraction (if enabled) - find minimum path
+    // Issue #5 Fix: Horizontal diffraction at ground level (groundElevation = 0)
     if (shouldUseSideDiffraction(segment.length, sideDiffractionMode)) {
-      const leftDelta = computeSidePathDelta(source, receiver, segment.p1, segment.height, direct3D);
-      const rightDelta = computeSidePathDelta(source, receiver, segment.p2, segment.height, direct3D);
+      const leftDelta = computeSidePathDelta(source, receiver, segment.p1, 0, direct3D);
+      const rightDelta = computeSidePathDelta(source, receiver, segment.p2, 0, direct3D);
 
       if (leftDelta > 0 && leftDelta < bestDelta) {
         bestDelta = leftDelta;

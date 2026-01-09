@@ -1,7 +1,7 @@
 # Physics Engine Audit
 
 > **Audit Date:** 2025-01-08 (Updated: 2025-01-09)
-> **Status:** 9 resolved, 11 pending
+> **Status:** 10 resolved, 10 pending
 > **Auditor:** Physics review session
 
 This document tracks identified issues in the GeoNoise physics engine, organized by severity. Each issue includes the current formulation, current code implementation, and proposed fix.
@@ -10,20 +10,21 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 
 ## Quick Status Summary
 
-### ✅ Resolved (10)
+### ✅ Resolved (11)
 - **#1** Spreading Loss Formula Constant Ambiguity — *Fixed with exact constants + documentation*
 - **#2** Two-Ray Ground Model Sign Inconsistency — *Resolved by design (see [Calculation Profile Presets](./ROADMAP.md#calculation-profile-presets))*
 - **#2b** computeProbeCoherent Double-Counts Direct Path — *Fixed: paths now processed uniformly*
 - **#3** Barrier + Ground Effect Interaction Physically Incorrect — *Fixed: ISO 9613-2 §7.4 additive formula with ground partitioning*
 - **#4** Atmospheric Absorption Uses Direct Distance — *Fixed: now uses actualPathLength for diffracted paths*
+- **#5** Side Diffraction Geometry Oversimplified — *Fixed: horizontal diffraction at ground level*
 - **#5 (probeWorker)** Simplified Atmospheric Absorption in probeWorker — *Fixed: now respects UI model selection*
 - **#10** "Simple" Atmospheric Absorption Model Incorrectly Formulated — *Fixed: replaced buggy formula with lookup table*
 - **#11** Diffraction Only Traced When Direct Path Blocked — *Fixed: now traces diffraction for nearby barriers even when direct path is unblocked (for coherent summation accuracy)*
 - **#16** Same Formula for Thin/Thick Barriers — *Fixed: buildings now use coefficient 40 and cap 25 dB*
 - **#18** Speed of Sound Constant vs Formula Mismatch — *Fixed: added Environmental Conditions UI for user-controlled temperature/humidity/pressure*
 
-### 🔴 Critical - Pending (1)
-- **#5** Side Diffraction Geometry Oversimplified
+### 🔴 Critical - Pending (0)
+*No critical issues pending*
 
 ### 🟠 Moderate - Pending (4)
 - **#6** Delany-Bazley Extrapolation Outside Valid Range
@@ -493,9 +494,9 @@ export function calculatePropagation(
 ---
 
 ### 5. Side Diffraction Geometry Oversimplified
-- [ ] **Status:** Open
-- **Location:** `packages/engine/src/compute/index.ts:223-243`
-- **Impact:** Several dB error for finite barriers
+- [x] **Status:** Resolved
+- **Location:** `packages/engine/src/compute/index.ts:223-268`
+- **Impact:** Several dB error for finite barriers (now fixed)
 
 #### Current Formulation (Math)
 Current (incorrect):
@@ -542,56 +543,61 @@ function computeSidePathDelta(
 }
 ```
 
-#### Proposed Implementation
+#### After (Fixed Code)
+
+**compute/index.ts - Updated computeSidePathDelta():**
 ```typescript
 /**
- * Compute path difference for horizontal diffraction around barrier endpoint.
+ * Compute the path difference for horizontal (around-the-end) diffraction.
  *
- * For finite barriers, sound can diffract AROUND the ends (horizontally)
- * in addition to OVER the top (vertically). The horizontal path goes
- * around at ground level.
+ * Issue #5 Fix: For finite barriers, sound can diffract AROUND the ends
+ * (horizontally) in addition to OVER the top (vertically). The horizontal
+ * path goes around at ground level, not at barrier height.
+ *
+ * Path: Source → Edge at ground → Receiver
+ * Delta: |S→(edge_x, edge_y, ground_z)| + |(edge_x, edge_y, ground_z)→R| - |S→R|
+ *
+ * @param source - Source position (3D)
+ * @param receiver - Receiver position (3D)
+ * @param edgePoint - 2D position of barrier endpoint
+ * @param groundElevation - Ground height at edge point (typically 0)
+ * @param direct3D - Direct 3D distance from source to receiver
+ * @returns Path difference δ in meters
  */
 function computeSidePathDelta(
-  source: Point3D, receiver: Point3D,
+  source: Point3D,
+  receiver: Point3D,
   edgePoint: Point2D,
-  groundElevation: number = 0,  // Ground height at edge point
+  groundElevation: number,
   direct3D: number
 ): number {
-  // Horizontal diffraction goes AROUND at ground level, not over at barrier height
+  // Issue #5 Fix: Horizontal diffraction goes AROUND at ground level
+  // The edge point is at ground elevation, not barrier height
   const edgeZ = groundElevation;
 
-  const edge3D: Point3D = { x: edgePoint.x, y: edgePoint.y, z: edgeZ };
+  // 3D distance from source to edge point at ground
+  const pathA = Math.hypot(
+    distance2D({ x: source.x, y: source.y }, edgePoint),
+    source.z - edgeZ
+  );
 
-  const pathA = distance3D(source, edge3D);
-  const pathB = distance3D(edge3D, receiver);
+  // 3D distance from edge point at ground to receiver
+  const pathB = Math.hypot(
+    distance2D(edgePoint, { x: receiver.x, y: receiver.y }),
+    receiver.z - edgeZ
+  );
 
   return pathA + pathB - direct3D;
 }
+```
 
-/**
- * Compute the minimum diffraction path for a finite barrier.
- * Considers: over-top, around-left, around-right.
- */
-function computeFiniteBarrierDelta(
-  source: Point3D, receiver: Point3D,
-  segment: BarrierSegment, direct3D: number,
-  intersection: Point2D
-): number {
-  // 1. Over-top diffraction (existing calculation)
-  const distSI = distance2D({ x: source.x, y: source.y }, intersection);
-  const distIR = distance2D(intersection, { x: receiver.x, y: receiver.y });
-  const overTopDelta = Math.hypot(distSI, segment.height - source.z) +
-                       Math.hypot(distIR, segment.height - receiver.z) - direct3D;
-
-  // 2. Around-left (at ground level)
+**All calls to computeSidePathDelta() now pass groundElevation=0:**
+```typescript
+// Issue #5 Fix: Horizontal diffraction at ground level (groundElevation = 0)
+if (shouldUseSideDiffraction(segment.length, sideDiffractionMode)) {
   const leftDelta = computeSidePathDelta(source, receiver, segment.p1, 0, direct3D);
-
-  // 3. Around-right (at ground level)
   const rightDelta = computeSidePathDelta(source, receiver, segment.p2, 0, direct3D);
-
-  // Return minimum positive delta (shortest valid diffraction path)
-  const candidates = [overTopDelta, leftDelta, rightDelta].filter(d => d > 0);
-  return candidates.length > 0 ? Math.min(...candidates) : overTopDelta;
+  // ...
 }
 ```
 
@@ -1592,11 +1598,11 @@ interface RayPathWithSpectralLoss extends RayPath {
 ## 📊 SUMMARY
 
 | Severity | Total | Resolved | Pending |
-|----------|-------|----------|---------|
-| 🔴 Critical | 6 | 5 | 1 |
+|----------|-------|----------|---------||
+| 🔴 Critical | 6 | 6 | 0 |
 | 🟠 Moderate | 7 | 1 | 6 |
 | 🟡 Minor | 7 | 4 | 3 |
-| **Total** | **20** | **10** | **10** |
+| **Total** | **20** | **11** | **9** |
 
 ---
 
