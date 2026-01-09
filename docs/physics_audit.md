@@ -1,7 +1,7 @@
 # Physics Engine Audit
 
 > **Audit Date:** 2025-01-08 (Updated: 2025-01-09)
-> **Status:** 8 resolved, 12 pending
+> **Status:** 9 resolved, 11 pending
 > **Auditor:** Physics review session
 
 This document tracks identified issues in the GeoNoise physics engine, organized by severity. Each issue includes the current formulation, current code implementation, and proposed fix.
@@ -10,10 +10,11 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 
 ## Quick Status Summary
 
-### ✅ Resolved (9)
+### ✅ Resolved (10)
 - **#1** Spreading Loss Formula Constant Ambiguity — *Fixed with exact constants + documentation*
 - **#2** Two-Ray Ground Model Sign Inconsistency — *Resolved by design (see [Calculation Profile Presets](./ROADMAP.md#calculation-profile-presets))*
 - **#2b** computeProbeCoherent Double-Counts Direct Path — *Fixed: paths now processed uniformly*
+- **#3** Barrier + Ground Effect Interaction Physically Incorrect — *Fixed: ISO 9613-2 §7.4 additive formula with ground partitioning*
 - **#4** Atmospheric Absorption Uses Direct Distance — *Fixed: now uses actualPathLength for diffracted paths*
 - **#5 (probeWorker)** Simplified Atmospheric Absorption in probeWorker — *Fixed: now respects UI model selection*
 - **#10** "Simple" Atmospheric Absorption Model Incorrectly Formulated — *Fixed: replaced buggy formula with lookup table*
@@ -21,8 +22,7 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 - **#16** Same Formula for Thin/Thick Barriers — *Fixed: buildings now use coefficient 40 and cap 25 dB*
 - **#18** Speed of Sound Constant vs Formula Mismatch — *Fixed: added Environmental Conditions UI for user-controlled temperature/humidity/pressure*
 
-### 🔴 Critical - Pending (2)
-- **#3** Barrier + Ground Effect Interaction Physically Incorrect
+### 🔴 Critical - Pending (1)
 - **#5** Side Diffraction Geometry Oversimplified
 
 ### 🟠 Moderate - Pending (4)
@@ -257,115 +257,122 @@ const sourceSpectrum = sumSourceSpectralPhasors(pathPhasors, config.coherentSumm
 ---
 
 ### 3. Barrier + Ground Effect Interaction Physically Incorrect
-- [ ] **Status:** Open
-- **Location:** `packages/engine/src/propagation/index.ts:314`
+- [x] **Status:** Resolved
+- **Location:** `packages/engine/src/propagation/index.ts:314`, `packages/engine/src/compute/index.ts`
 - **Impact:** Wrong levels behind barriers on soft ground
+- **Fixed:** ISO 9613-2 §7.4 additive formula with ground partitioning
 
-#### Current Formulation (Math)
-Current approach (incorrect):
-```
-A_total = A_div + A_atm + max(A_bar, A_gr)
-```
-
-ISO 9613-2 Section 7.4 correct approach:
-```
-A_gr = A_s + A_r + A_m
-
-where:
-  A_s = source-region ground effect (source to d_p nearest to source)
-  A_r = receiver-region ground effect (d_p nearest to receiver to receiver)
-  A_m = middle-region ground effect (between diffraction points)
-
-For diffracted path:
-  A_total = A_div + A_atm + A_bar + A_gr(source-side) + A_gr(receiver-side)
-```
-
-#### Current Code Implementation
+#### Before (Problematic Code)
 ```typescript
 // Incorrect: treats barrier and ground as mutually exclusive
 const barrierTerm = barrierBlocked ? Math.max(Abar, Agr) : Agr;
 const totalAttenuation = Adiv + Aatm + barrierTerm;
 ```
 
-#### Proposed Implementation
+#### After (Fixed Code)
+
+**propagation/index.ts - New interface and helper function:**
 ```typescript
-export function calculatePropagation(
-  distance: number,
-  sourceHeight: number,
-  receiverHeight: number,
-  config: PropagationConfig,
-  meteo: Meteo,
-  barrierPathDiff = 0,
-  barrierBlocked = false,
-  frequency = 1000,
-  // NEW: barrier geometry for ground partitioning
-  barrierInfo?: {
-    distSourceToBarrier: number;
-    distBarrierToReceiver: number;
-    barrierHeight: number;
-  }
-): PropagationResult {
-  const Adiv = spreadingLoss(distance, config.spreading);
-
-  let Agr = 0;
-  let Abar = 0;
-
-  if (barrierBlocked && barrierInfo && config.groundReflection) {
-    // ISO 9613-2: Partition ground effect into source and receiver regions
-    const { distSourceToBarrier, distBarrierToReceiver, barrierHeight } = barrierInfo;
-
-    // Source-side ground effect (source to barrier)
-    const Agr_source = calculateGroundEffectRegion(
-      distSourceToBarrier,
-      sourceHeight,
-      barrierHeight,  // "receiver" is barrier top
-      config, meteo, frequency
-    );
-
-    // Receiver-side ground effect (barrier to receiver)
-    const Agr_receiver = calculateGroundEffectRegion(
-      distBarrierToReceiver,
-      barrierHeight,  // "source" is barrier top
-      receiverHeight,
-      config, meteo, frequency
-    );
-
-    Agr = Agr_source + Agr_receiver;
-
-    // Barrier attenuation (additive, not max)
-    const c = speedOfSound(meteo.temperature ?? 20);
-    Abar = barrierAttenuation(barrierPathDiff, frequency, c / frequency);
-
-  } else if (config.groundReflection) {
-    // Unblocked path: normal ground effect calculation
-    Agr = calculateGroundEffect(distance, sourceHeight, receiverHeight, config, meteo, frequency);
-  }
-
-  // Correct: barrier and ground are ADDITIVE for blocked paths
-  const totalAttenuation = Adiv + Aatm + Abar + Agr;
-
-  return { totalAttenuation, spreadingLoss: Adiv, atmosphericAbsorption: Aatm,
-           groundEffect: Agr, barrierAttenuation: Abar, distance, blocked: false };
+export interface BarrierGeometryInfo {
+  distSourceToBarrier: number;
+  distBarrierToReceiver: number;
+  barrierHeight: number;
 }
 
 function calculateGroundEffectRegion(
   distance: number, sourceZ: number, receiverZ: number,
   config: PropagationConfig, meteo: Meteo, frequency: number
 ): number {
-  // Calculate ground effect for a path segment (source region or receiver region)
-  if (config.groundModel === 'twoRayPhasor') {
-    const c = speedOfSound(meteo.temperature ?? 20);
-    const heightDiff = sourceZ - receiverZ;
-    const distance2D = Math.sqrt(Math.max(0, distance * distance - heightDiff * heightDiff));
-    return agrTwoRayDb(frequency, distance2D, sourceZ, receiverZ,
-      config.groundType, config.groundSigmaSoft ?? 20000, config.groundMixedFactor ?? 0.5, c);
+  // Calculates ground effect for a path segment (source or receiver region)
+  // Uses either two-ray phasor model or legacy ISO 9613-2 Eq.10
+  // ...
+}
+```
+
+**propagation/index.ts - Updated calculatePropagation():**
+```typescript
+export function calculatePropagation(
+  distance: number, sourceHeight: number, receiverHeight: number,
+  config: PropagationConfig, meteo: Meteo,
+  barrierPathDiff = 0, barrierBlocked = false,
+  frequency = 1000, actualPathLength?: number,
+  barrierType: BarrierType = 'thin',
+  barrierInfo?: BarrierGeometryInfo  // NEW PARAMETER
+): PropagationResult {
+  // ...
+
+  if (barrierBlocked && barrierInfo && config.groundReflection) {
+    // ISO 9613-2 Section 7.4: Partitioned ground effect for blocked paths
+    const { distSourceToBarrier, distBarrierToReceiver, barrierHeight } = barrierInfo;
+
+    // Source-side ground effect (source to barrier top)
+    const Agr_source = calculateGroundEffectRegion(
+      distSourceToBarrier, sourceHeight, barrierHeight, config, meteo, frequency
+    );
+
+    // Receiver-side ground effect (barrier top to receiver)
+    const Agr_receiver = calculateGroundEffectRegion(
+      distBarrierToReceiver, barrierHeight, receiverHeight, config, meteo, frequency
+    );
+
+    Agr = Agr_source + Agr_receiver;  // Sum of both regions
+
+    // Barrier attenuation
+    Abar = barrierAttenuation(barrierPathDiff, frequency, lambda, barrierType);
+
+    // ADDITIVE combination (correct per ISO 9613-2 §7.4)
+    totalAttenuation = Adiv + Aatm + Abar + Agr;
+  } else if (barrierBlocked) {
+    // Legacy fallback: max(A_bar, A_gr) to avoid negative insertion loss
+    totalAttenuation = Adiv + Aatm + Math.max(Abar, Agr);
   } else {
-    const gt = config.groundType === 'hard' ? GroundType.Hard :
-               config.groundType === 'soft' ? GroundType.Soft : GroundType.Mixed;
-    return groundEffect(distance, sourceZ, receiverZ, gt, frequency);
+    // Unblocked path
+    totalAttenuation = Adiv + Aatm + Agr;
   }
 }
 ```
+
+**compute/index.ts - Updated BarrierPathResult:**
+```typescript
+type BarrierGeometryInfo = {
+  distSourceToBarrier: number;
+  distBarrierToReceiver: number;
+  barrierHeight: number;
+};
+
+type BarrierPathResult = {
+  blocked: boolean;
+  pathDifference: number;
+  actualPathLength: number;
+  barrierType: BarrierType;
+  barrierInfo?: BarrierGeometryInfo;  // NEW: geometry for ground partitioning
+};
+
+function computeBarrierPathDiff(...): BarrierPathResult {
+  // ...
+  // Now captures barrier geometry (distSourceToBarrier, distBarrierToReceiver, barrierHeight)
+  // for each thin barrier and building intersection
+  // ...
+  return {
+    blocked: true,
+    pathDifference: maxDelta,
+    actualPathLength,
+    barrierType: maxBarrierType,
+    barrierInfo: maxBarrierInfo,  // Passed to propagation calculation
+  };
+}
+```
+
+#### Mathematical Impact
+
+| Scenario | Old (max) | New (additive) | Difference |
+|----------|-----------|----------------|------------|
+| A_bar=10, A_gr=5 | 10 dB | 15 dB | +5 dB |
+| A_bar=15, A_gr=8 | 15 dB | 23 dB | +8 dB |
+| A_bar=5, A_gr=10 | 10 dB | 15 dB | +5 dB |
+
+The additive formula produces more realistic attenuation for barriers on soft ground,
+where both barrier diffraction AND ground absorption reduce sound levels.
 
 ---
 
@@ -1586,10 +1593,10 @@ interface RayPathWithSpectralLoss extends RayPath {
 
 | Severity | Total | Resolved | Pending |
 |----------|-------|----------|---------|
-| 🔴 Critical | 6 | 4 | 2 |
+| 🔴 Critical | 6 | 5 | 1 |
 | 🟠 Moderate | 7 | 1 | 6 |
-| 🟡 Minor | 7 | 0 | 7 |
-| **Total** | **20** | **5** | **15** |
+| 🟡 Minor | 7 | 4 | 3 |
+| **Total** | **20** | **10** | **10** |
 
 ---
 

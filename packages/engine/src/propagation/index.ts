@@ -297,6 +297,68 @@ export function barrierAttenuation(
 // ============================================================================
 
 /**
+ * Barrier geometry info for ISO 9613-2 Section 7.4 ground partitioning.
+ * When provided for blocked paths, ground effect is calculated separately
+ * for source-side and receiver-side regions.
+ */
+export interface BarrierGeometryInfo {
+  /** Horizontal distance from source to barrier diffraction point (meters) */
+  distSourceToBarrier: number;
+  /** Horizontal distance from barrier diffraction point to receiver (meters) */
+  distBarrierToReceiver: number;
+  /** Height of the barrier diffraction edge (meters) */
+  barrierHeight: number;
+}
+
+/**
+ * Calculate ground effect for a path segment (source region or receiver region).
+ *
+ * ISO 9613-2 Section 7.4: For diffracted paths, ground effect should be
+ * calculated separately for each segment (source→barrier and barrier→receiver).
+ *
+ * @param distance - Horizontal distance of segment in meters
+ * @param sourceZ - Height of start point above ground in meters
+ * @param receiverZ - Height of end point above ground in meters
+ * @param config - Propagation configuration
+ * @param meteo - Meteorological conditions
+ * @param frequency - Frequency in Hz
+ */
+function calculateGroundEffectRegion(
+  distance: number,
+  sourceZ: number,
+  receiverZ: number,
+  config: PropagationConfig,
+  meteo: Meteo,
+  frequency: number
+): number {
+  if (!config.groundReflection) return 0;
+
+  if (config.groundModel === 'twoRayPhasor') {
+    const c = speedOfSound(meteo.temperature ?? 20);
+    // For path segment, use horizontal distance directly
+    return agrTwoRayDb(
+      frequency,
+      distance,
+      sourceZ,
+      receiverZ,
+      config.groundType,
+      config.groundSigmaSoft ?? 20000,
+      config.groundMixedFactor ?? 0.5,
+      c
+    );
+  } else {
+    // Legacy ISO 9613-2 Eq. (10)
+    const gt =
+      config.groundType === 'hard'
+        ? GroundType.Hard
+        : config.groundType === 'soft'
+          ? GroundType.Soft
+          : GroundType.Mixed;
+    return groundEffect(distance, sourceZ, receiverZ, gt, frequency);
+  }
+}
+
+/**
  * Calculate total propagation loss for a single path
  *
  * @param distance - Direct source-to-receiver distance in meters
@@ -312,6 +374,9 @@ export function barrierAttenuation(
  *                           If not provided, uses direct distance.
  * @param barrierType - Type of barrier ('thin' for walls, 'thick' for buildings).
  *                      Issue #16: thick barriers use coefficient 40 and cap 25 dB.
+ * @param barrierInfo - Optional barrier geometry for ISO 9613-2 Section 7.4 ground partitioning.
+ *                      Issue #3: When provided, ground effect is calculated for source and
+ *                      receiver regions separately, and barrier+ground are additive.
  */
 export function calculatePropagation(
   distance: number,
@@ -323,7 +388,8 @@ export function calculatePropagation(
   barrierBlocked = false,
   frequency = 1000,
   actualPathLength?: number,
-  barrierType: BarrierType = 'thin'
+  barrierType: BarrierType = 'thin',
+  barrierInfo?: BarrierGeometryInfo
 ): PropagationResult {
   // Barrier parameters:
   // - barrierBlocked: set by the geometry stage when the 2D line-of-sight crosses a barrier segment.
@@ -362,11 +428,98 @@ export function calculatePropagation(
   const pathForAbsorption = actualPathLength ?? distance;
   const Aatm = totalAtmosphericAbsorption(pathForAbsorption, frequency, config, meteo);
 
-  // Ground effect (computed regardless of barrier state for QA continuity):
-  // We still calculate Agr even when a barrier blocks the direct path so we can
-  // blend or clamp with Abar and avoid negative insertion-loss discontinuities.
+  // Ground effect and barrier attenuation calculation
+  // Issue #3 Fix: ISO 9613-2 Section 7.4 - For diffracted paths, ground effect
+  // should be partitioned into source-side and receiver-side regions, and the
+  // barrier attenuation should be ADDITIVE with ground effect (not max).
   let Agr = 0;
-  if (config.groundReflection) {
+  let Abar = 0;
+
+  if (barrierBlocked && barrierInfo && config.groundReflection) {
+    // =========================================================================
+    // ISO 9613-2 Section 7.4: Partitioned ground effect for blocked paths
+    // =========================================================================
+    // When barrier geometry is provided, calculate ground effect separately for:
+    // - Source region (source → barrier diffraction point)
+    // - Receiver region (barrier diffraction point → receiver)
+    //
+    // Ground effect formula:
+    //   A_gr = A_gr_source + A_gr_receiver
+    //
+    // Total attenuation (ADDITIVE, not max):
+    //   A_total = A_div + A_atm + A_bar + A_gr
+    // =========================================================================
+    const { distSourceToBarrier, distBarrierToReceiver, barrierHeight } = barrierInfo;
+
+    // Source-side ground effect (source to barrier top)
+    const Agr_source = calculateGroundEffectRegion(
+      distSourceToBarrier,
+      sourceHeight,
+      barrierHeight, // "receiver" for this segment is the barrier diffraction edge
+      config,
+      meteo,
+      frequency
+    );
+
+    // Receiver-side ground effect (barrier top to receiver)
+    const Agr_receiver = calculateGroundEffectRegion(
+      distBarrierToReceiver,
+      barrierHeight, // "source" for this segment is the barrier diffraction edge
+      receiverHeight,
+      config,
+      meteo,
+      frequency
+    );
+
+    // Total ground effect is sum of both regions
+    Agr = Agr_source + Agr_receiver;
+
+    // Barrier attenuation (uses Issue #16 thin/thick formula)
+    const c = speedOfSound(meteo.temperature ?? 20);
+    const lambda = c / frequency;
+    Abar = barrierAttenuation(barrierPathDiff, frequency, lambda, barrierType);
+  } else if (barrierBlocked && config.includeBarriers) {
+    // =========================================================================
+    // Legacy behavior when barrierInfo is not provided
+    // =========================================================================
+    // Uses max(Abar, Agr) to avoid negative insertion loss on soft ground.
+    // This is the fallback for callers that don't provide barrier geometry.
+
+    // Calculate full-path ground effect
+    if (config.groundReflection) {
+      if (config.groundModel === 'twoRayPhasor') {
+        const c = speedOfSound(meteo.temperature ?? 20);
+        const heightDiff = sourceHeight - receiverHeight;
+        const distance2D = Math.sqrt(Math.max(0, distance * distance - heightDiff * heightDiff));
+        Agr = agrTwoRayDb(
+          frequency,
+          distance2D,
+          sourceHeight,
+          receiverHeight,
+          config.groundType,
+          config.groundSigmaSoft ?? 20000,
+          config.groundMixedFactor ?? 0.5,
+          c
+        );
+      } else {
+        const gt =
+          config.groundType === 'hard'
+            ? GroundType.Hard
+            : config.groundType === 'soft'
+              ? GroundType.Soft
+              : GroundType.Mixed;
+        Agr = groundEffect(distance, sourceHeight, receiverHeight, gt, frequency);
+      }
+    }
+
+    // Barrier attenuation
+    const c = speedOfSound(meteo.temperature ?? 20);
+    const lambda = c / frequency;
+    Abar = barrierAttenuation(barrierPathDiff, frequency, lambda, barrierType);
+  } else if (config.groundReflection) {
+    // =========================================================================
+    // Unblocked path: normal ground effect calculation
+    // =========================================================================
     if (config.groundModel === 'twoRayPhasor') {
       const c = speedOfSound(meteo.temperature ?? 20);
       // IMPORTANT: agrTwoRayDb expects 2D horizontal distance, not 3D distance.
@@ -396,27 +549,27 @@ export function calculatePropagation(
     }
   }
 
-  // Barrier attenuation (enabled only when the SR line crosses a barrier).
-  // Uses temperature-dependent speed of sound for lambda = c / f.
-  // Issue #16: Uses barrierType to select thin (coef 20) vs thick (coef 40) formula.
-  let Abar = 0;
-  if (config.includeBarriers && barrierBlocked) {
-    const c = speedOfSound(meteo.temperature ?? 20);
-    const lambda = c / frequency;
-    Abar = barrierAttenuation(barrierPathDiff, frequency, lambda, barrierType);
-  }
-
-  // Final attenuation switch:
-  // - Unblocked: Adiv + Aatm + Agr
-  // - Blocked:   Adiv + Aatm + max(Abar, Agr)
+  // =========================================================================
+  // Final attenuation calculation
+  // =========================================================================
+  // - With barrierInfo:  A_total = A_div + A_atm + A_bar + A_gr  (ADDITIVE - ISO 9613-2 §7.4)
+  // - Without barrierInfo (legacy): A_total = A_div + A_atm + max(A_bar, A_gr)
+  // - Unblocked: A_total = A_div + A_atm + A_gr
   //
-  // QA rationale (ISO/TR 17534-3: negative insertion loss):
-  // If a barrier is detected but its diffraction loss is small (e.g., a low garden wall),
-  // a hard swap Abar-for-Agr can *reduce* total attenuation on soft ground and make levels
-  // jump upward. Using max(Abar, Agr) ensures a barrier cannot make the result louder than
-  // the unblocked ground-effect case while still allowing larger Abar to dominate.
-  const barrierTerm = barrierBlocked ? Math.max(Abar, Agr) : Agr;
-  const totalAttenuation = Adiv + Aatm + barrierTerm;
+  // The max() fallback for legacy blocked paths prevents negative insertion loss
+  // when a small barrier attenuation would otherwise replace larger ground effect.
+  let totalAttenuation: number;
+  if (barrierBlocked && barrierInfo) {
+    // Issue #3 Fix: Additive combination per ISO 9613-2 Section 7.4
+    totalAttenuation = Adiv + Aatm + Abar + Agr;
+  } else if (barrierBlocked) {
+    // Legacy fallback: max() to avoid negative insertion loss
+    const barrierTerm = Math.max(Abar, Agr);
+    totalAttenuation = Adiv + Aatm + barrierTerm;
+  } else {
+    // Unblocked path
+    totalAttenuation = Adiv + Aatm + Agr;
+  }
 
   return {
     totalAttenuation,
@@ -441,6 +594,7 @@ export function calculatePropagation(
  * @param barrierBlocked - Whether direct path is blocked by barrier
  * @param actualPathLength - Actual path length sound travels (for atmospheric absorption)
  * @param barrierType - Type of barrier ('thin' for walls, 'thick' for buildings)
+ * @param barrierInfo - Optional barrier geometry for ISO 9613-2 Section 7.4 ground partitioning
  */
 export function calculateBandedPropagation(
   distance: number,
@@ -451,7 +605,8 @@ export function calculateBandedPropagation(
   barrierPathDiff = 0,
   barrierBlocked = false,
   actualPathLength?: number,
-  barrierType: BarrierType = 'thin'
+  barrierType: BarrierType = 'thin',
+  barrierInfo?: BarrierGeometryInfo
 ): BandedPropagationResult {
   const bands = new Map<number, PropagationResult>();
 
@@ -466,7 +621,8 @@ export function calculateBandedPropagation(
       barrierBlocked,
       freq,
       actualPathLength,
-      barrierType
+      barrierType,
+      barrierInfo
     );
     bands.set(freq, result);
   }
@@ -482,7 +638,8 @@ export function calculateBandedPropagation(
     barrierBlocked,
     1000,
     actualPathLength,
-    barrierType
+    barrierType,
+    barrierInfo
   );
 
   return { bands, overall };

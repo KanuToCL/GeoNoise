@@ -339,6 +339,20 @@ function computeBuildingDelta(
 /** Barrier type for diffraction calculation */
 type BarrierType = 'thin' | 'thick';
 
+/**
+ * Barrier geometry info for ISO 9613-2 Section 7.4 ground partitioning.
+ * When provided for blocked paths, ground effect is calculated separately
+ * for source-side and receiver-side regions.
+ */
+type BarrierGeometryInfo = {
+  /** Horizontal distance from source to barrier diffraction point (meters) */
+  distSourceToBarrier: number;
+  /** Horizontal distance from barrier diffraction point to receiver (meters) */
+  distBarrierToReceiver: number;
+  /** Height of the barrier diffraction edge (meters) */
+  barrierHeight: number;
+};
+
 /** Result of barrier path difference calculation */
 type BarrierPathResult = {
   /** Whether the direct path is blocked by a barrier */
@@ -349,6 +363,12 @@ type BarrierPathResult = {
   actualPathLength: number;
   /** Type of barrier causing the block ('thin' for walls, 'thick' for buildings) */
   barrierType: BarrierType;
+  /**
+   * Barrier geometry for ISO 9613-2 Section 7.4 ground partitioning (Issue #3).
+   * When provided, ground effect is calculated for source and receiver regions
+   * separately, and barrier+ground are additive instead of using max().
+   */
+  barrierInfo?: BarrierGeometryInfo;
 };
 
 // Compute barrier path difference for a source->receiver path.
@@ -357,6 +377,9 @@ type BarrierPathResult = {
 // Step C (buildings): use entry/exit points to traverse across the roof.
 // Step D: choose the largest delta across intersecting obstacles (strongest screen effect).
 // The caller uses `blocked` to swap ground effect out and apply barrier attenuation instead.
+//
+// Issue #3 Fix: Now also returns barrierInfo for ISO 9613-2 Section 7.4 ground partitioning.
+// When provided, ground effect is calculated for source and receiver regions separately.
 //
 // Issue #4 Fix: Now also returns actualPathLength for atmospheric absorption calculation.
 // For diffracted paths, actualPathLength = direct3D + pathDifference (the over-barrier path).
@@ -380,21 +403,98 @@ function computeBarrierPathDiff(
 
   let maxDelta: number | null = null;
   let maxBarrierType: BarrierType = 'thin';
+  let maxBarrierInfo: BarrierGeometryInfo | undefined = undefined;
 
   // Check thin barriers first
-  const thinDelta = computeThinBarrierDelta(source, receiver, s2, r2, geometry.barrierSegments, direct3D, sideDiffractionMode);
-  if (thinDelta !== null) {
-    maxDelta = thinDelta;
-    maxBarrierType = 'thin';
+  for (const segment of geometry.barrierSegments) {
+    const intersection = segmentIntersection(s2, r2, segment.p1, segment.p2);
+    if (!intersection) continue;
+
+    // Compute over-top diffraction delta
+    const distSI = distance2D(s2, intersection);
+    const distIR = distance2D(intersection, r2);
+    const pathA = Math.hypot(distSI, segment.height - source.z);
+    const pathB = Math.hypot(distIR, segment.height - receiver.z);
+    const topDelta = pathA + pathB - direct3D;
+
+    let bestDelta = topDelta;
+
+    // Side diffraction (if enabled) - find minimum path
+    if (shouldUseSideDiffraction(segment.length, sideDiffractionMode)) {
+      const leftDelta = computeSidePathDelta(source, receiver, segment.p1, segment.height, direct3D);
+      const rightDelta = computeSidePathDelta(source, receiver, segment.p2, segment.height, direct3D);
+
+      if (leftDelta > 0 && leftDelta < bestDelta) {
+        bestDelta = leftDelta;
+      }
+      if (rightDelta > 0 && rightDelta < bestDelta) {
+        bestDelta = rightDelta;
+      }
+    }
+
+    // Update max if this barrier has larger delta
+    if (maxDelta === null || bestDelta > maxDelta) {
+      maxDelta = bestDelta;
+      maxBarrierType = 'thin';
+
+      // Issue #3: Capture barrier geometry for ground partitioning
+      // For thin barriers, use horizontal distances from source/receiver to intersection
+      maxBarrierInfo = {
+        distSourceToBarrier: distSI,
+        distBarrierToReceiver: distIR,
+        barrierHeight: segment.height,
+      };
+    }
   }
 
   // Check buildings (thick barriers)
   for (const building of geometry.buildings) {
-    const delta = computeBuildingDelta(source, receiver, s2, r2, building, direct3D);
-    if (delta === null) continue;
-    if (maxDelta === null || delta > maxDelta) {
+    const intersections = collectIntersections(s2, r2, building.segments);
+
+    let delta: number | null = null;
+    let buildingBarrierInfo: BarrierGeometryInfo | undefined = undefined;
+
+    if (intersections.length >= 2) {
+      // Thick barrier: entry and exit points
+      const entry = intersections[0];
+      const exit = intersections[intersections.length - 1];
+      const distSourceToIn = distance2D(s2, entry);
+      const distAcrossRoof = distance2D(entry, exit);
+      const distOutToRecv = distance2D(exit, r2);
+      const pathUp = Math.hypot(distSourceToIn, building.height - source.z);
+      const pathRoof = distAcrossRoof;
+      const pathDown = Math.hypot(distOutToRecv, building.height - receiver.z);
+
+      delta = pathUp + pathRoof + pathDown - direct3D;
+
+      // Issue #3: For thick barriers, use entry and exit points for ground partitioning
+      // Source region: source to entry point (where sound goes "up")
+      // Receiver region: exit point to receiver (where sound comes "down")
+      buildingBarrierInfo = {
+        distSourceToBarrier: distSourceToIn,
+        distBarrierToReceiver: distOutToRecv,
+        barrierHeight: building.height,
+      };
+    } else if (intersections.length === 1) {
+      // Single intersection: treat as thin barrier
+      const intersection = intersections[0];
+      const distSI = distance2D(s2, intersection);
+      const distIR = distance2D(intersection, r2);
+      const pathA = Math.hypot(distSI, building.height - source.z);
+      const pathB = Math.hypot(distIR, building.height - receiver.z);
+      delta = pathA + pathB - direct3D;
+
+      buildingBarrierInfo = {
+        distSourceToBarrier: distSI,
+        distBarrierToReceiver: distIR,
+        barrierHeight: building.height,
+      };
+    }
+
+    if (delta !== null && (maxDelta === null || delta > maxDelta)) {
       maxDelta = delta;
-      maxBarrierType = 'thick'; // Building uses thick barrier formula
+      maxBarrierType = 'thick';
+      maxBarrierInfo = buildingBarrierInfo;
     }
   }
 
@@ -405,7 +505,13 @@ function computeBarrierPathDiff(
   // Actual path length = direct distance + path difference (the detour over/around the barrier)
   const actualPathLength = direct3D + maxDelta;
 
-  return { blocked: true, pathDifference: maxDelta, actualPathLength, barrierType: maxBarrierType };
+  return {
+    blocked: true,
+    pathDifference: maxDelta,
+    actualPathLength,
+    barrierType: maxBarrierType,
+    barrierInfo: maxBarrierInfo,
+  };
 }
 
 /** CPU Engine implementation */
@@ -458,7 +564,8 @@ export class CPUEngine implements Engine {
           barrier.pathDifference,
           barrier.blocked,
           barrier.actualPathLength,
-          barrier.barrierType ?? 'thin'
+          barrier.barrierType ?? 'thin',
+          barrier.barrierInfo
         );
 
         // Apply per-band attenuation to source spectrum
@@ -578,7 +685,7 @@ export class CPUEngine implements Engine {
         const bandedProp = calculateBandedPropagation(
           dist, src.position.z, pt.z, propConfig, meteo,
           barrier.pathDifference, barrier.blocked, barrier.actualPathLength,
-          barrier.barrierType ?? 'thin'
+          barrier.barrierType ?? 'thin', barrier.barrierInfo
         );
 
         // Apply per-band attenuation
@@ -660,7 +767,7 @@ export class CPUEngine implements Engine {
         const bandedProp = calculateBandedPropagation(
           dist, src.position.z, pt.z, propConfig, meteo,
           barrier.pathDifference, barrier.blocked, barrier.actualPathLength,
-          barrier.barrierType ?? 'thin'
+          barrier.barrierType ?? 'thin', barrier.barrierInfo
         );
 
         // Apply per-band attenuation

@@ -935,6 +935,238 @@ describe('Barrier Diffraction - Maekawa', () => {
 });
 
 // ============================================================================
+// 4b. BARRIER + GROUND INTERACTION - Issue #3 Fix
+// ============================================================================
+
+describe('Barrier + Ground Interaction - Issue #3', () => {
+  const config = getDefaultEngineConfig('festival_fast');
+  // Use legacy ground model to ensure predictable ground effect values
+  const propConfig = {
+    ...config.propagation!,
+    groundReflection: true,
+    groundType: 'soft' as const,
+    groundModel: 'legacy' as const, // ISO 9613-2 Eq.10
+    includeBarriers: true
+  };
+  const meteo = config.meteo!;
+
+  it('with barrierInfo: barrier and ground are ADDITIVE', () => {
+    // ISO 9613-2 Section 7.4: When barrierInfo is provided,
+    // A_total = A_div + A_atm + A_bar + A_gr (additive)
+    // Use geometry that produces meaningful ground effect:
+    // - Long distances (50m per segment)
+    // - Low barrier height (2m, close to source/receiver)
+    const barrierInfo = {
+      distSourceToBarrier: 50,
+      distBarrierToReceiver: 50,
+      barrierHeight: 2.0,
+    };
+
+    const result = calculatePropagation(
+      100, 1.5, 1.5, propConfig, meteo,
+      5, true, 1000, 110, 'thin', barrierInfo
+    );
+
+    // Both should be non-zero and summed
+    const barrierNonZero = result.barrierAttenuation > 0;
+    const groundNonZero = result.groundEffect > 0;
+    const passed = barrierNonZero && groundNonZero;
+
+    recordResult({
+      category: 'Barrier+Ground',
+      name: '#3 Additive (with info)',
+      expected: 'A_bar + A_gr (both non-zero)',
+      actual: `A_bar=${result.barrierAttenuation.toFixed(2)}, A_gr=${result.groundEffect.toFixed(2)}`,
+      tolerance: 'inequality',
+      passed,
+      reference: 'ISO 9613-2 §7.4'
+    });
+
+    expect(result.barrierAttenuation).toBeGreaterThan(0);
+    expect(result.groundEffect).toBeGreaterThan(0);
+  });
+
+  it('ground effect partitioned into source and receiver regions', () => {
+    // When barrierInfo is provided, ground effect is calculated for
+    // source-side (source→barrier) and receiver-side (barrier→receiver)
+    const barrierInfo = {
+      distSourceToBarrier: 50,
+      distBarrierToReceiver: 50,
+      barrierHeight: 2.0,
+    };
+
+    const result = calculatePropagation(
+      100, 1.5, 1.5, propConfig, meteo,
+      5, true, 1000, 110, 'thin', barrierInfo
+    );
+
+    // Ground effect should be sum of two regions (positive value for soft ground)
+    const hasPositiveGroundEffect = result.groundEffect > 0;
+
+    recordResult({
+      category: 'Barrier+Ground',
+      name: '#3 Ground partitioning',
+      expected: 'A_gr = A_gr_source + A_gr_receiver > 0',
+      actual: `A_gr=${result.groundEffect.toFixed(2)} (partitioned)`,
+      tolerance: 'positive',
+      passed: hasPositiveGroundEffect,
+      reference: 'ISO 9613-2 §7.4'
+    });
+
+    expect(hasPositiveGroundEffect).toBe(true);
+  });
+
+  it('without barrierInfo: legacy max(A_bar, A_gr) behavior', () => {
+    // Legacy fallback when barrierInfo is not provided
+    // Uses max(A_bar, A_gr) to avoid negative insertion loss
+    const result = calculatePropagation(
+      100, 1.5, 1.5, propConfig, meteo,
+      5, true, 1000, 110, 'thin'
+      // Note: no barrierInfo
+    );
+
+    // Both barrier and ground calculated but combined with max()
+    const barrierCalculated = result.barrierAttenuation > 0;
+
+    recordResult({
+      category: 'Barrier+Ground',
+      name: '#3 Legacy max() fallback',
+      expected: 'max(A_bar, A_gr)',
+      actual: `A_bar=${result.barrierAttenuation.toFixed(2)}, A_gr=${result.groundEffect.toFixed(2)}`,
+      tolerance: 'finite',
+      passed: barrierCalculated,
+      reference: 'Legacy behavior'
+    });
+
+    expect(barrierCalculated).toBe(true);
+  });
+
+  it('additive formula produces more attenuation than max()', () => {
+    // With additive formula, total attenuation should be higher
+    // than the legacy max() approach (since we're adding instead of taking max)
+    const barrierInfo = {
+      distSourceToBarrier: 50,
+      distBarrierToReceiver: 50,
+      barrierHeight: 2.0,
+    };
+
+    const withInfo = calculatePropagation(
+      100, 1.5, 1.5, propConfig, meteo,
+      5, true, 1000, 110, 'thin', barrierInfo
+    );
+
+    const withoutInfo = calculatePropagation(
+      100, 1.5, 1.5, propConfig, meteo,
+      5, true, 1000, 110, 'thin'
+    );
+
+    // Additive should produce more total attenuation when both terms are positive
+    const additiveTotal = withInfo.barrierAttenuation + withInfo.groundEffect;
+    const legacyMax = Math.max(withoutInfo.barrierAttenuation, withoutInfo.groundEffect);
+
+    // When both are positive, additive > max
+    const passed = withInfo.groundEffect > 0 && withInfo.totalAttenuation > withoutInfo.totalAttenuation;
+
+    recordResult({
+      category: 'Barrier+Ground',
+      name: '#3 Additive vs Max comparison',
+      expected: 'Additive produces more attenuation',
+      actual: `additive_total=${withInfo.totalAttenuation.toFixed(2)}, legacy_total=${withoutInfo.totalAttenuation.toFixed(2)}`,
+      tolerance: 'inequality',
+      passed,
+      reference: 'ISO 9613-2 §7.4'
+    });
+
+    expect(withInfo.totalAttenuation).toBeGreaterThan(withoutInfo.totalAttenuation);
+  });
+
+  it('barrier height affects ground partitioning', () => {
+    // Different barrier heights produce different ground effect values
+    // Low barrier = receiver sees more ground in source region
+    // High barrier = barrier edge is high, different geometry
+    const lowBarrier = {
+      distSourceToBarrier: 50,
+      distBarrierToReceiver: 50,
+      barrierHeight: 1.6, // Just above receiver height
+    };
+
+    const highBarrier = {
+      distSourceToBarrier: 50,
+      distBarrierToReceiver: 50,
+      barrierHeight: 5, // Much higher
+    };
+
+    const lowResult = calculatePropagation(
+      100, 1.5, 1.5, propConfig, meteo,
+      2, true, 500, 102, 'thin', lowBarrier
+    );
+
+    const highResult = calculatePropagation(
+      100, 1.5, 1.5, propConfig, meteo,
+      10, true, 500, 120, 'thin', highBarrier
+    );
+
+    // Different barrier heights should produce different ground effects
+    const different = Math.abs(lowResult.groundEffect - highResult.groundEffect) > 0.01;
+
+    recordResult({
+      category: 'Barrier+Ground',
+      name: '#3 Height affects partitioning',
+      expected: 'Different A_gr for different heights',
+      actual: `h=1.6: A_gr=${lowResult.groundEffect.toFixed(2)}, h=5: A_gr=${highResult.groundEffect.toFixed(2)}`,
+      tolerance: 'inequality',
+      passed: different,
+      reference: 'ISO 9613-2 §7.4'
+    });
+
+    expect(different).toBe(true);
+  });
+
+  it('asymmetric barrier position affects ground regions', () => {
+    // Barrier closer to source means larger receiver-side ground effect
+    // and vice versa. Use asymmetric heights to ensure different results.
+    const nearSource = {
+      distSourceToBarrier: 20,
+      distBarrierToReceiver: 80,
+      barrierHeight: 2.5,
+    };
+
+    const nearReceiver = {
+      distSourceToBarrier: 80,
+      distBarrierToReceiver: 20,
+      barrierHeight: 2.5,
+    };
+
+    // Use different source and receiver heights to break symmetry
+    const nearSourceResult = calculatePropagation(
+      100, 2.0, 1.5, propConfig, meteo,
+      5, true, 1000, 110, 'thin', nearSource
+    );
+
+    const nearReceiverResult = calculatePropagation(
+      100, 2.0, 1.5, propConfig, meteo,
+      5, true, 1000, 110, 'thin', nearReceiver
+    );
+
+    // Due to asymmetric geometry, ground effects should differ
+    // Different distances produce different A_gr values with ISO Eq.10
+    const different = Math.abs(nearSourceResult.groundEffect - nearReceiverResult.groundEffect) > 0.01;
+
+    recordResult({
+      category: 'Barrier+Ground',
+      name: '#3 Asymmetric positioning',
+      expected: 'Different A_gr for different positions',
+      actual: `near-src: ${nearSourceResult.groundEffect.toFixed(2)}, near-rcv: ${nearReceiverResult.groundEffect.toFixed(2)}`,
+      tolerance: 'inequality',
+      passed: different,
+      reference: 'ISO 9613-2 §7.4'
+    });
+
+    expect(different).toBe(true);
+  });
+});
+
+// ============================================================================
 // 5. SPEED OF SOUND
 // ============================================================================
 
@@ -1644,40 +1876,6 @@ describe('Combined Propagation', () => {
 // ============================================================================
 
 describe('KNOWN GAPS - Critical Physics Issues', () => {
-  // Issue #3: Barrier + Ground Effect Interaction
-  describe('Issue #3: Barrier + Ground Interaction (NOT IMPLEMENTED)', () => {
-    it('barrier and ground should be ADDITIVE per ISO 9613-2 Section 7.4', () => {
-      // Current: A_total = A_div + A_atm + max(A_bar, A_gr)  ← WRONG
-      // Correct: A_total = A_div + A_atm + A_bar + A_gr_source + A_gr_receiver
-      recordResult({
-        category: 'GAP-Critical',
-        name: '#3 Barrier+Ground additive',
-        expected: 'A_bar + A_gr (additive)',
-        actual: 'max(A_bar, A_gr) (exclusive)',
-        tolerance: 'NOT IMPLEMENTED',
-        passed: false,
-        reference: 'ISO 9613-2 §7.4'
-      });
-      // Mark as known gap - don't fail CI
-      expect(true).toBe(true);
-    });
-
-    it('ground effect should be partitioned into source/receiver regions', () => {
-      // When path is blocked by barrier, ground effect should be calculated
-      // separately for source-side and receiver-side
-      recordResult({
-        category: 'GAP-Critical',
-        name: '#3 Ground partitioning',
-        expected: 'A_gr = A_gr_source + A_gr_receiver',
-        actual: 'Single A_gr for whole path',
-        tolerance: 'NOT IMPLEMENTED',
-        passed: false,
-        reference: 'ISO 9613-2 §7.4'
-      });
-      expect(true).toBe(true);
-    });
-  });
-
   // Issue #5: Side Diffraction Geometry
   describe('Issue #5: Side Diffraction Geometry (NOT IMPLEMENTED)', () => {
     it('horizontal diffraction should go around at ground level', () => {
