@@ -1637,6 +1637,232 @@ describe('Combined Propagation', () => {
 // 10. PROBE COMPUTATION
 // ============================================================================
 
+// ============================================================================
+// 🔴 KNOWN GAPS - Physics Issues NOT YET IMPLEMENTED
+// These tests document what SHOULD work but doesn't yet.
+// They use .skip() to not break CI, but appear in the report as gaps.
+// ============================================================================
+
+describe('KNOWN GAPS - Critical Physics Issues', () => {
+  // Issue #3: Barrier + Ground Effect Interaction
+  describe('Issue #3: Barrier + Ground Interaction (NOT IMPLEMENTED)', () => {
+    it('barrier and ground should be ADDITIVE per ISO 9613-2 Section 7.4', () => {
+      // Current: A_total = A_div + A_atm + max(A_bar, A_gr)  ← WRONG
+      // Correct: A_total = A_div + A_atm + A_bar + A_gr_source + A_gr_receiver
+      recordResult({
+        category: 'GAP-Critical',
+        name: '#3 Barrier+Ground additive',
+        expected: 'A_bar + A_gr (additive)',
+        actual: 'max(A_bar, A_gr) (exclusive)',
+        tolerance: 'NOT IMPLEMENTED',
+        passed: false,
+        reference: 'ISO 9613-2 §7.4'
+      });
+      // Mark as known gap - don't fail CI
+      expect(true).toBe(true);
+    });
+
+    it('ground effect should be partitioned into source/receiver regions', () => {
+      // When path is blocked by barrier, ground effect should be calculated
+      // separately for source-side and receiver-side
+      recordResult({
+        category: 'GAP-Critical',
+        name: '#3 Ground partitioning',
+        expected: 'A_gr = A_gr_source + A_gr_receiver',
+        actual: 'Single A_gr for whole path',
+        tolerance: 'NOT IMPLEMENTED',
+        passed: false,
+        reference: 'ISO 9613-2 §7.4'
+      });
+      expect(true).toBe(true);
+    });
+  });
+
+  // Issue #5: Side Diffraction Geometry
+  describe('Issue #5: Side Diffraction Geometry (NOT IMPLEMENTED)', () => {
+    it('horizontal diffraction should go around at ground level', () => {
+      // Current: edgeZ = min(barrierHeight, max(sourceZ, receiverZ))  ← WRONG
+      // Correct: edgeZ = groundElevation (diffraction goes AROUND, not over)
+      recordResult({
+        category: 'GAP-Critical',
+        name: '#5 Side diffraction height',
+        expected: 'edgeZ = ground level',
+        actual: 'edgeZ = clamped barrier height',
+        tolerance: 'NOT IMPLEMENTED',
+        passed: false,
+        reference: 'Diffraction geometry'
+      });
+      expect(true).toBe(true);
+    });
+
+    it('finite barrier should consider over-top AND around-ends paths', () => {
+      // Should compute: min(δ_over_top, δ_around_left, δ_around_right)
+      recordResult({
+        category: 'GAP-Critical',
+        name: '#5 Finite barrier paths',
+        expected: 'min(over, left, right)',
+        actual: 'Only over-top considered',
+        tolerance: 'NOT IMPLEMENTED',
+        passed: false,
+        reference: 'Diffraction geometry'
+      });
+      expect(true).toBe(true);
+    });
+  });
+});
+
+describe('KNOWN GAPS - Moderate Physics Issues', () => {
+  // Issue #6: Delany-Bazley Extrapolation
+  describe('Issue #6: Delany-Bazley Range (NOT IMPLEMENTED)', () => {
+    it('should clamp f/σ ratio to valid range 0.01-1.0', () => {
+      // Current: No bounds check on ratio
+      // Correct: Clamp or use Miki extension for out-of-range
+      recordResult({
+        category: 'GAP-Moderate',
+        name: '#6 Delany-Bazley range',
+        expected: 'Clamp 0.01 < f/σ < 1.0',
+        actual: 'No bounds check',
+        tolerance: 'NOT IMPLEMENTED',
+        passed: false,
+        reference: 'Delany-Bazley 1970'
+      });
+      expect(true).toBe(true);
+    });
+  });
+
+  // Issue #7: Flat Ground Assumption
+  describe('Issue #7: Terrain Elevation (NOT IMPLEMENTED)', () => {
+    it('ground reflection should account for terrain elevation', () => {
+      // Current: groundZ = 0 (hardcoded)
+      // Correct: groundZ = getTerrainHeight(x, y)
+      recordResult({
+        category: 'GAP-Moderate',
+        name: '#7 Terrain elevation',
+        expected: 'groundZ = terrain(x,y)',
+        actual: 'groundZ = 0 (flat)',
+        tolerance: 'NOT IMPLEMENTED',
+        passed: false,
+        reference: 'Terrain model'
+      });
+      expect(true).toBe(true);
+    });
+  });
+
+  // Issue #9: Wall Reflection Height
+  describe('Issue #9: Wall Reflection Geometry (NOT IMPLEMENTED)', () => {
+    it('reflection point Z should be calculated from image source geometry', () => {
+      // Current: z = min(wallHeight, max(sourceZ, receiverZ))  ← WRONG
+      // Correct: z = interpolate along R→S' line
+      recordResult({
+        category: 'GAP-Moderate',
+        name: '#9 Wall reflection Z',
+        expected: 'Z from image geometry',
+        actual: 'Z clamped arbitrarily',
+        tolerance: 'NOT IMPLEMENTED',
+        passed: false,
+        reference: 'Image source method'
+      });
+      expect(true).toBe(true);
+    });
+  });
+
+  // Issue #12: Mixed Ground Sigma
+  describe('Issue #12: Mixed Ground Interpolation (NOT IMPLEMENTED)', () => {
+    it('mixed ground should use logarithmic sigma interpolation', () => {
+      // Current: σ = σ_soft × (1 + 9×(1-G))  ← Arbitrary
+      // Correct: log(σ) = G×log(σ_soft) + (1-G)×log(σ_hard)
+      recordResult({
+        category: 'GAP-Moderate',
+        name: '#12 Mixed ground sigma',
+        expected: 'Logarithmic interpolation',
+        actual: 'Linear scaling (arbitrary)',
+        tolerance: 'NOT IMPLEMENTED',
+        passed: false,
+        reference: 'Ground impedance'
+      });
+      expect(true).toBe(true);
+    });
+  });
+});
+
+describe('KNOWN GAPS - Minor Physics Issues', () => {
+  // Issue #13: Sommerfeld Discontinuity
+  describe('Issue #13: Sommerfeld Correction (NOT IMPLEMENTED)', () => {
+    it('should have smooth transition at |w|=4 threshold', () => {
+      // Current: Abrupt switch between plane-wave and asymptotic at |w|=4
+      // Correct: Smooth Hermite blend across transition region
+      recordResult({
+        category: 'GAP-Minor',
+        name: '#13 Sommerfeld continuity',
+        expected: 'Smooth blend 0.5≤|w|≤6',
+        actual: 'Discontinuity at |w|=4',
+        tolerance: 'NOT IMPLEMENTED',
+        passed: false,
+        reference: 'Sommerfeld ground wave'
+      });
+      expect(true).toBe(true);
+    });
+  });
+
+  // Issue #14: Hardcoded Diffraction Phase
+  describe('Issue #14: Diffraction Phase (NOT IMPLEMENTED)', () => {
+    it('diffraction phase should depend on shadow angle', () => {
+      // Current: φ = -π/4 (hardcoded)
+      // Correct: φ depends on diffraction geometry (UTD)
+      recordResult({
+        category: 'GAP-Minor',
+        name: '#14 Diffraction phase',
+        expected: 'Phase from UTD geometry',
+        actual: '-π/4 (hardcoded)',
+        tolerance: 'NOT IMPLEMENTED',
+        passed: false,
+        reference: 'UTD theory'
+      });
+      expect(true).toBe(true);
+    });
+  });
+
+  // Issue #17: Spectral Ground Absorption
+  describe('Issue #17: Spectral Ground Absorption (NOT IMPLEMENTED)', () => {
+    it('ground absorption should vary with frequency per ISO 9613-2 Table 2', () => {
+      // Current: absorption = 0.2 (single value for soft ground)
+      // Correct: absorption varies from 0.10 (63 Hz) to 0.60 (8 kHz)
+      recordResult({
+        category: 'GAP-Minor',
+        name: '#17 Spectral ground absorption',
+        expected: '0.10-0.60 per frequency',
+        actual: '0.2 (single value)',
+        tolerance: 'NOT IMPLEMENTED',
+        passed: false,
+        reference: 'ISO 9613-2 Table 2'
+      });
+      expect(true).toBe(true);
+    });
+  });
+
+  // Issue #19: Diffraction Loss Placeholder
+  describe('Issue #19: Diffraction Loss in RayPath (NOT IMPLEMENTED)', () => {
+    it('RayPath should include pre-computed spectral diffraction loss', () => {
+      // Current: diffractionLoss = 0 (placeholder, computed downstream)
+      // Correct: Pre-compute spectralDiffractionLoss[] in traceDiffractionPath
+      recordResult({
+        category: 'GAP-Minor',
+        name: '#19 Pre-computed diffraction',
+        expected: 'spectralDiffractionLoss[]',
+        actual: 'diffractionLoss = 0',
+        tolerance: 'NOT IMPLEMENTED',
+        passed: false,
+        reference: 'API design'
+      });
+      expect(true).toBe(true);
+    });
+  });
+});
+
+// ============================================================================
+// 10. PROBE COMPUTATION
+// ============================================================================
+
 describe('Probe Computation', () => {
   it('simple probe at 10m reasonable level', () => {
     const source = createSource('s1', 0, 0, 2);

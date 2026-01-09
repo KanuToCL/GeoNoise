@@ -1,78 +1,90 @@
 Category,Test,Expected,Actual,Tolerance,Passed,Reference,Timestamp
-Spreading,Spherical @ 1m,10.99 dB,10.99 dB,±0.01 dB,PASS,ISO 9613-2 Eq.6,2026-01-09T20:58:45.806Z
-Spreading,Spherical @ 10m,30.99 dB,30.99 dB,±0.01 dB,PASS,ISO 9613-2 Eq.6,2026-01-09T20:58:45.806Z
-Spreading,Spherical @ 100m,50.99 dB,50.99 dB,±0.01 dB,PASS,ISO 9613-2 Eq.6,2026-01-09T20:58:45.806Z
-Spreading,Inverse Square Law,6.02 dB/doubling,6.02 dB/doubling,±0.01 dB,PASS,Physics,2026-01-09T20:58:45.806Z
-Spreading,Cylindrical @ 1m,7.98 dB,7.98 dB,±0.01 dB,PASS,ISO 9613-2,2026-01-09T20:58:45.806Z
-Spreading,Cylindrical Law,3.01 dB/doubling,3.01 dB/doubling,±0.01 dB,PASS,Physics,2026-01-09T20:58:45.806Z
-Spreading,Cylindrical @ 10m,17.98 dB,17.98 dB,±0.01 dB,PASS,ISO 9613-2,2026-01-09T20:58:45.806Z
-Spreading,Reference @ 1m,0 dB,0.00 dB,±0.01 dB,PASS,SPL@1m,2026-01-09T20:58:45.806Z
-Spreading,Reference @ 10m,20 dB,20.00 dB,±0.01 dB,PASS,SPL@1m,2026-01-09T20:58:45.806Z
-Spreading,Lw vs SPL@1m diff,10.99 dB,10.99 dB,±0.01 dB,PASS,Geometry,2026-01-09T20:58:45.806Z
-Spreading,Zero distance clamp,finite,finite,exact,PASS,Robustness,2026-01-09T20:58:45.806Z
-Spreading,Negative distance clamp,finite,finite,exact,PASS,Robustness,2026-01-09T20:58:45.806Z
-Spreading,Spherical @ 1km,~70.99 dB,70.99 dB,±1 dB,PASS,ISO 9613-2,2026-01-09T20:58:45.806Z
-Diffraction,Default threshold,5 m (~1λ @ 63Hz),5.00 m,exact,PASS,Issue #11,2026-01-09T20:58:45.806Z
-Diffraction,Blocked → diffract,direct blocked + 1 diffraction,"blocked=true, diff=1",exact,PASS,Issue #11,2026-01-09T20:58:45.806Z
-Diffraction,Disabled → no diff,"direct valid, 0 diffraction","valid=true, diff=0",exact,PASS,Issue #11,2026-01-09T20:58:45.806Z
-Diffraction,Nearby → include,"δ < 5m, diffraction traced","δ=0.06m, traced=true",inequality,PASS,Issue #11,2026-01-09T20:58:45.806Z
-Diffraction,Path difference δ,2.36 m,2.36 m,±0.1 m,PASS,Geometry,2026-01-09T20:58:45.806Z
-Diffraction,Threshold ≈ λ(63Hz),~1.0 wavelengths,0.92 wavelengths,±20%,PASS,Wave physics,2026-01-09T20:58:45.806Z
-Diffraction,Multi-barrier,2 diffraction paths,2 paths,exact,PASS,Issue #11,2026-01-09T20:58:45.806Z
-Diffraction,Non-intersecting → null,null,null,exact,PASS,Geometry,2026-01-09T20:58:45.806Z
-Atmospheric,None mode @ 8kHz,0 dB,0.00 dB,exact,PASS,User setting,2026-01-09T20:58:45.806Z
-Atmospheric,"ISO 9613-1 @ 8kHz, 100m",5-20 dB,10.53 dB,range,PASS,ISO 9613-1,2026-01-09T20:58:45.806Z
-Atmospheric,Frequency dependence,A_atm(8kHz) > A_atm(125Hz),10.53 > 0.04,inequality,PASS,ISO 9613-1,2026-01-09T20:58:45.806Z
-Atmospheric,Diffracted path length,A_atm(150m) > A_atm(100m),15.79 > 10.53,inequality,PASS,Issue #4,2026-01-09T20:58:45.806Z
-Atmospheric,50m extra @ 8kHz,3-10 dB,5.26 dB,range,PASS,Issue #4,2026-01-09T20:58:45.806Z
-Atmospheric,50m extra @ 125Hz,< 1 dB,0.02 dB,inequality,PASS,Issue #4,2026-01-09T20:58:45.806Z
-Barrier,Thin barrier (N=2),16.33 dB,16.33 dB,±0.1 dB,PASS,Maekawa 1968,2026-01-09T20:58:45.806Z
-Barrier,Thick barrier (N=2),19.19 dB,19.19 dB,±0.1 dB,PASS,Issue #16,2026-01-09T20:58:45.806Z
-Barrier,Thin barrier cap,20 dB,20.00 dB,exact,PASS,ISO 9613-2,2026-01-09T20:58:45.806Z
-Barrier,Thick barrier cap,25 dB,25.00 dB,exact,PASS,Issue #16,2026-01-09T20:58:45.806Z
-Barrier,Frequency dependence,A_bar(8kHz) > A_bar(125Hz),25.00 > 21.73,inequality,PASS,Maekawa 1968,2026-01-09T20:58:45.806Z
-Barrier,Negative N guard,0 dB,0 dB,exact,PASS,Maekawa 1968,2026-01-09T20:58:45.806Z
-Barrier,Thick > Thin,thick > thin,25.00 > 20.00,inequality,PASS,Issue #16,2026-01-09T20:58:45.806Z
-Barrier,Default = thin,same,same,exact,PASS,API,2026-01-09T20:58:45.806Z
-Speed of Sound,At 0°C,331.3 m/s,331.30 m/s,±0.1 m/s,PASS,ISO 9613-1,2026-01-09T20:58:45.806Z
-Speed of Sound,At 20°C,343.42 m/s,343.42 m/s,±0.1 m/s,PASS,ISO 9613-1,2026-01-09T20:58:45.806Z
-Speed of Sound,Temperature coefficient,0.606 m/s/°C,0.606 m/s/°C,±0.001,PASS,ISO 9613-1,2026-01-09T20:58:45.806Z
-Speed of Sound,At 15°C,340.39 m/s,340.39 m/s,±0.1 m/s,PASS,ISO 9613-1,2026-01-09T20:58:45.806Z
-Speed of Sound,At 25°C,346.45 m/s,346.45 m/s,±0.1 m/s,PASS,ISO 9613-1,2026-01-09T20:58:45.806Z
-Speed of Sound,Constant vs formula,< 1 m/s diff,0.42 m/s,< 1 m/s,PASS,Issue #18,2026-01-09T20:58:45.806Z
-Ground,Complex addition,"(4, -2)","(4, -2)",exact,PASS,Math,2026-01-09T20:58:45.806Z
-Ground,Complex multiplication,"(11, 2)","(11, 2)",exact,PASS,Math,2026-01-09T20:58:45.806Z
-Ground,Complex sqrt(i),"(0.7071, 0.7071)","(0.7071, 0.7071)",±0.001,PASS,Math,2026-01-09T20:58:45.806Z
-Ground,Delany-Bazley finite,"finite, Re > 0","Re=86.87, Im=-106.00",exact,PASS,Delany-Bazley 1970,2026-01-09T20:58:45.806Z
-Ground,Hard ground R ≈ 1,Re > 0.9,Re=0.980,inequality,PASS,Physics,2026-01-09T20:58:45.806Z
-Ground,Two-ray frequency variation,"finite, varies","125Hz=-4.60, 1kHz=-1.72",inequality,PASS,Two-ray model,2026-01-09T20:58:45.806Z
-Ground,Zero distance → 0,0 dB,0 dB,exact,PASS,Robustness,2026-01-09T20:58:45.806Z
-Ground,Hard ground legacy,0 dB,0 dB,exact,PASS,ISO 9613-2,2026-01-09T20:58:45.806Z
-Ground,ISO Eq.10 near field,0 dB,0 dB,exact,PASS,ISO 9613-2 Eq.10,2026-01-09T20:58:45.806Z
-Ground,ISO Eq.10 far field,4.4-4.8 dB,4.52 dB,range,PASS,ISO 9613-2 Eq.10,2026-01-09T20:58:45.806Z
-Phasor,dB to pressure (94 dB),1.00 Pa,1.00 Pa,±0.01 Pa,PASS,Acoustics,2026-01-09T20:58:45.806Z
-Phasor,Pressure to dB (1 Pa),94 dB,93.98 dB,±0.1 dB,PASS,Acoustics,2026-01-09T20:58:45.806Z
-Phasor,Constructive (in-phase),26 dB,26.02 dB,±0.1 dB,PASS,Physics,2026-01-09T20:58:45.806Z
-Phasor,Destructive (anti-phase),deep null (< -100 dB),-298.2 dB,inequality,PASS,Physics,2026-01-09T20:58:45.806Z
-Phasor,Quadrature (90°),23 dB,23.01 dB,±0.2 dB,PASS,Physics,2026-01-09T20:58:45.806Z
-Phasor,Phase from λ/2 path diff,-3.1416 rad,-3.1416 rad,±0.01 rad,PASS,Wave physics,2026-01-09T20:58:45.806Z
-Phasor,Wavelength @ 343 Hz,1 m,1.0000 m,±0.01 m,PASS,Wave physics,2026-01-09T20:58:45.806Z
-Phasor,Fresnel radius @ midpoint,2.93 m,2.93 m,±0.01 m,PASS,Wave physics,2026-01-09T20:58:45.806Z
-Weighting,A @ 1kHz = 0,0 dB,0 dB,exact,PASS,IEC 61672-1,2026-01-09T20:58:45.806Z
-Weighting,A @ 63Hz,-26.2 dB,-26.2 dB,exact,PASS,IEC 61672-1,2026-01-09T20:58:45.806Z
-Weighting,A boost 2-4kHz,> 0 dB,"2kHz=1.2, 4kHz=1",inequality,PASS,IEC 61672-1,2026-01-09T20:58:45.806Z
-Weighting,C flat 250-1kHz,0 dB,"250=0, 500=0, 1k=0",exact,PASS,IEC 61672-1,2026-01-09T20:58:45.806Z
-Weighting,Z = 0 all bands,all 0,all 0,exact,PASS,IEC 61672-1,2026-01-09T20:58:45.806Z
-Combined,SPL at 10m (spreading),~69 dB,69.0 dB,±1 dB,PASS,ISO 9613-2,2026-01-09T20:58:45.806Z
-Combined,SPL at 100m (spreading),~49 dB,49.0 dB,±1 dB,PASS,ISO 9613-2,2026-01-09T20:58:45.806Z
-Combined,Monotonic decrease,decreasing,decreasing,exact,PASS,Physics,2026-01-09T20:58:45.806Z
-Combined,Blocked → MIN_LEVEL,-100 dB,-100 dB,exact,PASS,API,2026-01-09T20:58:45.806Z
-Combined,MAX_DISTANCE → blocked,blocked=true,blocked=true,exact,PASS,API,2026-01-09T20:58:45.806Z
-Probe,Simple @ 10m,60-90 dB,76.2 dB,range,PASS,Probe API,2026-01-09T20:58:45.806Z
-Probe,Simple @ 100m,40-70 dB,56.2 dB,range,PASS,Probe API,2026-01-09T20:58:45.806Z
-Probe,Inverse square law,5-7 dB/doubling,6.01 dB,range,PASS,Physics,2026-01-09T20:58:45.806Z
-Probe,Zero sources → floor,35 dB,35 dB,exact,PASS,Probe API,2026-01-09T20:58:45.806Z
-Probe,Two sources +3 dB,~3 dB,3.01 dB,±1 dB,PASS,Energetic sum,2026-01-09T20:58:45.806Z
-Probe,Coherent @ 10m,50-90 dB,76.2 dB,range,PASS,Issue #2b,2026-01-09T20:58:45.806Z
-Probe,Ground adds paths,more paths with ground,"with=2, without=1",inequality,PASS,Two-ray,2026-01-09T20:58:45.806Z
-Probe,Default config,"ground=true, mixed, coherent=true, T=20","ground=true, mixed, coherent=true, T=20",exact,PASS,API,2026-01-09T20:58:45.806Z
+Spreading,Spherical @ 1m,10.99 dB,10.99 dB,±0.01 dB,PASS,ISO 9613-2 Eq.6,2026-01-09T21:05:26.322Z
+Spreading,Spherical @ 10m,30.99 dB,30.99 dB,±0.01 dB,PASS,ISO 9613-2 Eq.6,2026-01-09T21:05:26.322Z
+Spreading,Spherical @ 100m,50.99 dB,50.99 dB,±0.01 dB,PASS,ISO 9613-2 Eq.6,2026-01-09T21:05:26.322Z
+Spreading,Inverse Square Law,6.02 dB/doubling,6.02 dB/doubling,±0.01 dB,PASS,Physics,2026-01-09T21:05:26.322Z
+Spreading,Cylindrical @ 1m,7.98 dB,7.98 dB,±0.01 dB,PASS,ISO 9613-2,2026-01-09T21:05:26.322Z
+Spreading,Cylindrical Law,3.01 dB/doubling,3.01 dB/doubling,±0.01 dB,PASS,Physics,2026-01-09T21:05:26.322Z
+Spreading,Cylindrical @ 10m,17.98 dB,17.98 dB,±0.01 dB,PASS,ISO 9613-2,2026-01-09T21:05:26.322Z
+Spreading,Reference @ 1m,0 dB,0.00 dB,±0.01 dB,PASS,SPL@1m,2026-01-09T21:05:26.322Z
+Spreading,Reference @ 10m,20 dB,20.00 dB,±0.01 dB,PASS,SPL@1m,2026-01-09T21:05:26.322Z
+Spreading,Lw vs SPL@1m diff,10.99 dB,10.99 dB,±0.01 dB,PASS,Geometry,2026-01-09T21:05:26.322Z
+Spreading,Zero distance clamp,finite,finite,exact,PASS,Robustness,2026-01-09T21:05:26.322Z
+Spreading,Negative distance clamp,finite,finite,exact,PASS,Robustness,2026-01-09T21:05:26.322Z
+Spreading,Spherical @ 1km,~70.99 dB,70.99 dB,±1 dB,PASS,ISO 9613-2,2026-01-09T21:05:26.322Z
+Diffraction,Default threshold,5 m (~1λ @ 63Hz),5.00 m,exact,PASS,Issue #11,2026-01-09T21:05:26.322Z
+Diffraction,Blocked → diffract,direct blocked + 1 diffraction,"blocked=true, diff=1",exact,PASS,Issue #11,2026-01-09T21:05:26.322Z
+Diffraction,Disabled → no diff,"direct valid, 0 diffraction","valid=true, diff=0",exact,PASS,Issue #11,2026-01-09T21:05:26.322Z
+Diffraction,Nearby → include,"δ < 5m, diffraction traced","δ=0.06m, traced=true",inequality,PASS,Issue #11,2026-01-09T21:05:26.322Z
+Diffraction,Path difference δ,2.36 m,2.36 m,±0.1 m,PASS,Geometry,2026-01-09T21:05:26.322Z
+Diffraction,Threshold ≈ λ(63Hz),~1.0 wavelengths,0.92 wavelengths,±20%,PASS,Wave physics,2026-01-09T21:05:26.322Z
+Diffraction,Multi-barrier,2 diffraction paths,2 paths,exact,PASS,Issue #11,2026-01-09T21:05:26.322Z
+Diffraction,Non-intersecting → null,null,null,exact,PASS,Geometry,2026-01-09T21:05:26.322Z
+Atmospheric,None mode @ 8kHz,0 dB,0.00 dB,exact,PASS,User setting,2026-01-09T21:05:26.322Z
+Atmospheric,"ISO 9613-1 @ 8kHz, 100m",5-20 dB,10.53 dB,range,PASS,ISO 9613-1,2026-01-09T21:05:26.322Z
+Atmospheric,Frequency dependence,A_atm(8kHz) > A_atm(125Hz),10.53 > 0.04,inequality,PASS,ISO 9613-1,2026-01-09T21:05:26.322Z
+Atmospheric,Diffracted path length,A_atm(150m) > A_atm(100m),15.79 > 10.53,inequality,PASS,Issue #4,2026-01-09T21:05:26.322Z
+Atmospheric,50m extra @ 8kHz,3-10 dB,5.26 dB,range,PASS,Issue #4,2026-01-09T21:05:26.322Z
+Atmospheric,50m extra @ 125Hz,< 1 dB,0.02 dB,inequality,PASS,Issue #4,2026-01-09T21:05:26.322Z
+Barrier,Thin barrier (N=2),16.33 dB,16.33 dB,±0.1 dB,PASS,Maekawa 1968,2026-01-09T21:05:26.322Z
+Barrier,Thick barrier (N=2),19.19 dB,19.19 dB,±0.1 dB,PASS,Issue #16,2026-01-09T21:05:26.322Z
+Barrier,Thin barrier cap,20 dB,20.00 dB,exact,PASS,ISO 9613-2,2026-01-09T21:05:26.322Z
+Barrier,Thick barrier cap,25 dB,25.00 dB,exact,PASS,Issue #16,2026-01-09T21:05:26.322Z
+Barrier,Frequency dependence,A_bar(8kHz) > A_bar(125Hz),25.00 > 21.73,inequality,PASS,Maekawa 1968,2026-01-09T21:05:26.322Z
+Barrier,Negative N guard,0 dB,0 dB,exact,PASS,Maekawa 1968,2026-01-09T21:05:26.322Z
+Barrier,Thick > Thin,thick > thin,25.00 > 20.00,inequality,PASS,Issue #16,2026-01-09T21:05:26.322Z
+Barrier,Default = thin,same,same,exact,PASS,API,2026-01-09T21:05:26.322Z
+Speed of Sound,At 0°C,331.3 m/s,331.30 m/s,±0.1 m/s,PASS,ISO 9613-1,2026-01-09T21:05:26.322Z
+Speed of Sound,At 20°C,343.42 m/s,343.42 m/s,±0.1 m/s,PASS,ISO 9613-1,2026-01-09T21:05:26.322Z
+Speed of Sound,Temperature coefficient,0.606 m/s/°C,0.606 m/s/°C,±0.001,PASS,ISO 9613-1,2026-01-09T21:05:26.322Z
+Speed of Sound,At 15°C,340.39 m/s,340.39 m/s,±0.1 m/s,PASS,ISO 9613-1,2026-01-09T21:05:26.322Z
+Speed of Sound,At 25°C,346.45 m/s,346.45 m/s,±0.1 m/s,PASS,ISO 9613-1,2026-01-09T21:05:26.322Z
+Speed of Sound,Constant vs formula,< 1 m/s diff,0.42 m/s,< 1 m/s,PASS,Issue #18,2026-01-09T21:05:26.322Z
+Ground,Complex addition,"(4, -2)","(4, -2)",exact,PASS,Math,2026-01-09T21:05:26.322Z
+Ground,Complex multiplication,"(11, 2)","(11, 2)",exact,PASS,Math,2026-01-09T21:05:26.322Z
+Ground,Complex sqrt(i),"(0.7071, 0.7071)","(0.7071, 0.7071)",±0.001,PASS,Math,2026-01-09T21:05:26.322Z
+Ground,Delany-Bazley finite,"finite, Re > 0","Re=86.87, Im=-106.00",exact,PASS,Delany-Bazley 1970,2026-01-09T21:05:26.322Z
+Ground,Hard ground R ≈ 1,Re > 0.9,Re=0.980,inequality,PASS,Physics,2026-01-09T21:05:26.322Z
+Ground,Two-ray frequency variation,"finite, varies","125Hz=-4.60, 1kHz=-1.72",inequality,PASS,Two-ray model,2026-01-09T21:05:26.322Z
+Ground,Zero distance → 0,0 dB,0 dB,exact,PASS,Robustness,2026-01-09T21:05:26.322Z
+Ground,Hard ground legacy,0 dB,0 dB,exact,PASS,ISO 9613-2,2026-01-09T21:05:26.322Z
+Ground,ISO Eq.10 near field,0 dB,0 dB,exact,PASS,ISO 9613-2 Eq.10,2026-01-09T21:05:26.322Z
+Ground,ISO Eq.10 far field,4.4-4.8 dB,4.52 dB,range,PASS,ISO 9613-2 Eq.10,2026-01-09T21:05:26.322Z
+Phasor,dB to pressure (94 dB),1.00 Pa,1.00 Pa,±0.01 Pa,PASS,Acoustics,2026-01-09T21:05:26.322Z
+Phasor,Pressure to dB (1 Pa),94 dB,93.98 dB,±0.1 dB,PASS,Acoustics,2026-01-09T21:05:26.322Z
+Phasor,Constructive (in-phase),26 dB,26.02 dB,±0.1 dB,PASS,Physics,2026-01-09T21:05:26.322Z
+Phasor,Destructive (anti-phase),deep null (< -100 dB),-298.2 dB,inequality,PASS,Physics,2026-01-09T21:05:26.322Z
+Phasor,Quadrature (90°),23 dB,23.01 dB,±0.2 dB,PASS,Physics,2026-01-09T21:05:26.322Z
+Phasor,Phase from λ/2 path diff,-3.1416 rad,-3.1416 rad,±0.01 rad,PASS,Wave physics,2026-01-09T21:05:26.322Z
+Phasor,Wavelength @ 343 Hz,1 m,1.0000 m,±0.01 m,PASS,Wave physics,2026-01-09T21:05:26.322Z
+Phasor,Fresnel radius @ midpoint,2.93 m,2.93 m,±0.01 m,PASS,Wave physics,2026-01-09T21:05:26.322Z
+Weighting,A @ 1kHz = 0,0 dB,0 dB,exact,PASS,IEC 61672-1,2026-01-09T21:05:26.322Z
+Weighting,A @ 63Hz,-26.2 dB,-26.2 dB,exact,PASS,IEC 61672-1,2026-01-09T21:05:26.322Z
+Weighting,A boost 2-4kHz,> 0 dB,"2kHz=1.2, 4kHz=1",inequality,PASS,IEC 61672-1,2026-01-09T21:05:26.322Z
+Weighting,C flat 250-1kHz,0 dB,"250=0, 500=0, 1k=0",exact,PASS,IEC 61672-1,2026-01-09T21:05:26.322Z
+Weighting,Z = 0 all bands,all 0,all 0,exact,PASS,IEC 61672-1,2026-01-09T21:05:26.322Z
+Combined,SPL at 10m (spreading),~69 dB,69.0 dB,±1 dB,PASS,ISO 9613-2,2026-01-09T21:05:26.322Z
+Combined,SPL at 100m (spreading),~49 dB,49.0 dB,±1 dB,PASS,ISO 9613-2,2026-01-09T21:05:26.322Z
+Combined,Monotonic decrease,decreasing,decreasing,exact,PASS,Physics,2026-01-09T21:05:26.322Z
+Combined,Blocked → MIN_LEVEL,-100 dB,-100 dB,exact,PASS,API,2026-01-09T21:05:26.322Z
+Combined,MAX_DISTANCE → blocked,blocked=true,blocked=true,exact,PASS,API,2026-01-09T21:05:26.322Z
+GAP-Critical,#3 Barrier+Ground additive,A_bar + A_gr (additive),"max(A_bar, A_gr) (exclusive)",NOT IMPLEMENTED,FAIL,ISO 9613-2 §7.4,2026-01-09T21:05:26.322Z
+GAP-Critical,#3 Ground partitioning,A_gr = A_gr_source + A_gr_receiver,Single A_gr for whole path,NOT IMPLEMENTED,FAIL,ISO 9613-2 §7.4,2026-01-09T21:05:26.322Z
+GAP-Critical,#5 Side diffraction height,edgeZ = ground level,edgeZ = clamped barrier height,NOT IMPLEMENTED,FAIL,Diffraction geometry,2026-01-09T21:05:26.322Z
+GAP-Critical,#5 Finite barrier paths,"min(over, left, right)",Only over-top considered,NOT IMPLEMENTED,FAIL,Diffraction geometry,2026-01-09T21:05:26.322Z
+GAP-Moderate,#6 Delany-Bazley range,Clamp 0.01 < f/σ < 1.0,No bounds check,NOT IMPLEMENTED,FAIL,Delany-Bazley 1970,2026-01-09T21:05:26.322Z
+GAP-Moderate,#7 Terrain elevation,"groundZ = terrain(x,y)",groundZ = 0 (flat),NOT IMPLEMENTED,FAIL,Terrain model,2026-01-09T21:05:26.322Z
+GAP-Moderate,#9 Wall reflection Z,Z from image geometry,Z clamped arbitrarily,NOT IMPLEMENTED,FAIL,Image source method,2026-01-09T21:05:26.322Z
+GAP-Moderate,#12 Mixed ground sigma,Logarithmic interpolation,Linear scaling (arbitrary),NOT IMPLEMENTED,FAIL,Ground impedance,2026-01-09T21:05:26.322Z
+GAP-Minor,#13 Sommerfeld continuity,Smooth blend 0.5≤|w|≤6,Discontinuity at |w|=4,NOT IMPLEMENTED,FAIL,Sommerfeld ground wave,2026-01-09T21:05:26.322Z
+GAP-Minor,#14 Diffraction phase,Phase from UTD geometry,-π/4 (hardcoded),NOT IMPLEMENTED,FAIL,UTD theory,2026-01-09T21:05:26.322Z
+GAP-Minor,#17 Spectral ground absorption,0.10-0.60 per frequency,0.2 (single value),NOT IMPLEMENTED,FAIL,ISO 9613-2 Table 2,2026-01-09T21:05:26.322Z
+GAP-Minor,#19 Pre-computed diffraction,spectralDiffractionLoss[],diffractionLoss = 0,NOT IMPLEMENTED,FAIL,API design,2026-01-09T21:05:26.322Z
+Probe,Simple @ 10m,60-90 dB,76.2 dB,range,PASS,Probe API,2026-01-09T21:05:26.322Z
+Probe,Simple @ 100m,40-70 dB,56.2 dB,range,PASS,Probe API,2026-01-09T21:05:26.322Z
+Probe,Inverse square law,5-7 dB/doubling,6.01 dB,range,PASS,Physics,2026-01-09T21:05:26.322Z
+Probe,Zero sources → floor,35 dB,35 dB,exact,PASS,Probe API,2026-01-09T21:05:26.322Z
+Probe,Two sources +3 dB,~3 dB,3.01 dB,±1 dB,PASS,Energetic sum,2026-01-09T21:05:26.322Z
+Probe,Coherent @ 10m,50-90 dB,76.2 dB,range,PASS,Issue #2b,2026-01-09T21:05:26.322Z
+Probe,Ground adds paths,more paths with ground,"with=2, without=1",inequality,PASS,Two-ray,2026-01-09T21:05:26.322Z
+Probe,Default config,"ground=true, mixed, coherent=true, T=20","ground=true, mixed, coherent=true, T=20",exact,PASS,API,2026-01-09T21:05:26.322Z
