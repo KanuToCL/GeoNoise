@@ -1,10 +1,45 @@
 # Physics Engine Audit
 
-> **Audit Date:** 2025-01-08
-> **Status:** Action items pending
+> **Audit Date:** 2025-01-08 (Updated: 2025-01-09)
+> **Status:** 5 resolved, 15 pending
 > **Auditor:** Physics review session
 
 This document tracks identified issues in the GeoNoise physics engine, organized by severity. Each issue includes the current formulation, current code implementation, and proposed fix.
+
+---
+
+## Quick Status Summary
+
+### ✅ Resolved (5)
+- **#1** Spreading Loss Formula Constant Ambiguity — *Fixed with exact constants + documentation*
+- **#2** Two-Ray Ground Model Sign Inconsistency — *Resolved by design (see [Calculation Profile Presets](./ROADMAP.md#calculation-profile-presets))*
+- **#2b** computeProbeCoherent Double-Counts Direct Path — *Fixed: paths now processed uniformly*
+- **#4** Atmospheric Absorption Uses Direct Distance — *Fixed: now uses actualPathLength for diffracted paths*
+- **#5 (probeWorker)** Simplified Atmospheric Absorption in probeWorker — *Fixed: now respects UI model selection*
+
+### 🔴 Critical - Pending (2)
+- **#3** Barrier + Ground Effect Interaction Physically Incorrect
+- **#5** Side Diffraction Geometry Oversimplified
+
+### 🟠 Moderate - Pending (6)
+- **#6** Delany-Bazley Extrapolation Outside Valid Range
+- **#7** Ground Reflection Assumes Flat Ground (z=0)
+- **#8** Maekawa Negative N Threshold Documentation
+- **#9** Wall Reflection Height Geometry Incorrect
+- **#10** "Simple" Atmospheric Absorption Model Incorrectly Formulated
+- **#11** Diffraction Only Traced When Direct Path Blocked
+- ~~**#12** Mixed Ground Sigma Calculation Arbitrary~~ *(counted in 6, remove from list)*
+
+### 🟡 Minor - Pending (7)
+- **#13** Sommerfeld Correction Discontinuity at |w|=4
+- **#14** Hardcoded Diffraction Phase Shift
+- **#15** Incoherent Source Summation Only *(by design)*
+- **#16** Same Formula for Thin/Thick Barriers
+- **#17** Ground Absorption Not Spectral
+- **#18** Speed of Sound Constant vs Formula Mismatch
+- **#19** Diffraction Loss = 0 in Ray Tracing Result
+
+---
 
 ---
 
@@ -14,23 +49,11 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 - [x] **Status:** Resolved
 - **Location:** `packages/engine/src/propagation/index.ts:69-74`
 - **Impact:** ±11 dB error potential
-- **Fixed:** Added comprehensive documentation explaining the Lw convention, used exact mathematical constants (`10 * Math.log10(4 * Math.PI)` instead of rounded 11), and added `spreadingLossFromReference()` for SPL@1m sources
+- **Fixed:** Added comprehensive documentation explaining the Lw convention, used exact mathematical constants, and added `spreadingLossFromReference()` for SPL@1m sources
 
-#### Current Formulation (Math)
-The code uses:
-```
-A_div = 20·log₁₀(r) + 11    (spherical, point source)
-A_div = 10·log₁₀(r) + 8     (cylindrical, line source)
-```
-
-This is the ISO 9613-2 formula which assumes **sound power level (Lw)** input:
-```
-Lp = Lw - 10·log₁₀(4πr²) = Lw - 20·log₁₀(r) - 10·log₁₀(4π)
-   = Lw - 20·log₁₀(r) - 10.99 ≈ Lw - 20·log₁₀(r) - 11
-```
-
-#### Current Code Implementation
+#### Before (Problematic Code)
 ```typescript
+// Rounded constants without documentation
 export function spreadingLoss(
   distance: number,
   type: 'spherical' | 'cylindrical' = 'spherical'
@@ -40,50 +63,65 @@ export function spreadingLoss(
   }
 
   if (type === 'spherical') {
-    return 20 * Math.log10(distance) + 11;
+    return 20 * Math.log10(distance) + 11;  // Rounded constant
   } else {
-    return 10 * Math.log10(distance) + 8;
+    return 10 * Math.log10(distance) + 8;   // Rounded constant
   }
 }
 ```
 
-#### Proposed Implementation
+#### After (Fixed Code)
 ```typescript
+// Exact mathematical constants
+const SPHERICAL_CONSTANT = 10 * Math.log10(4 * Math.PI); // ≈ 10.99 dB
+const CYLINDRICAL_CONSTANT = 10 * Math.log10(2 * Math.PI); // ≈ 7.98 dB
+
 /**
- * Calculate geometric spreading loss
+ * Calculate geometric spreading loss (divergence attenuation)
  *
- * IMPORTANT: This assumes source levels are specified as Sound Power Level (Lw).
- * If sources are specified as SPL at 1m reference, use spreadingLossFromReference().
+ * IMPORTANT: Source Level Convention
+ * ----------------------------------
+ * This function assumes source levels are specified as Sound Power Level (Lw)
+ * in dB re 1 pW, which is the standard convention in ISO 9613-2.
  *
- * @param distance - Distance in meters
- * @param type - 'spherical' (point source) or 'cylindrical' (line source)
- * @param sourceType - 'power' for Lw input, 'spl_1m' for SPL at 1m reference
+ * For spherical spreading (point source):
+ *   A_div = 20·log₁₀(r) + 10·log₁₀(4π) ≈ 20·log₁₀(r) + 11
+ *
+ * If sources are specified as SPL at 1m reference instead of Lw, use
+ * spreadingLossFromReference() which omits the geometric constant.
  */
 export function spreadingLoss(
   distance: number,
-  type: 'spherical' | 'cylindrical' = 'spherical',
-  sourceType: 'power' | 'spl_1m' = 'power'
+  type: 'spherical' | 'cylindrical' = 'spherical'
 ): number {
   if (distance < MIN_DISTANCE) {
     distance = MIN_DISTANCE;
   }
 
-  if (sourceType === 'spl_1m') {
-    // Source level is SPL at 1m reference - simple distance decay
-    if (type === 'spherical') {
-      return 20 * Math.log10(distance);  // No +11 constant
-    } else {
-      return 10 * Math.log10(distance);  // No +8 constant
-    }
+  if (type === 'spherical') {
+    // Point source: A_div = 20·log₁₀(r) + 10·log₁₀(4π)
+    return 20 * Math.log10(distance) + SPHERICAL_CONSTANT;
+  } else {
+    // Line source: A_div = 10·log₁₀(r) + 10·log₁₀(2π)
+    return 10 * Math.log10(distance) + CYLINDRICAL_CONSTANT;
+  }
+}
+
+/**
+ * Calculate spreading loss for sources specified as SPL at 1m reference
+ */
+export function spreadingLossFromReference(
+  distance: number,
+  type: 'spherical' | 'cylindrical' = 'spherical'
+): number {
+  if (distance < MIN_DISTANCE) {
+    distance = MIN_DISTANCE;
   }
 
-  // Source level is Sound Power Level (Lw) - ISO 9613-2 formula
   if (type === 'spherical') {
-    // A_div = 20·log₁₀(r) + 10·log₁₀(4π) ≈ 20·log₁₀(r) + 10.99
-    return 20 * Math.log10(distance) + 10 * Math.log10(4 * Math.PI);
+    return 20 * Math.log10(distance);  // No geometric constant
   } else {
-    // Cylindrical: A_div = 10·log₁₀(r) + 10·log₁₀(2π) ≈ 10·log₁₀(r) + 7.98
-    return 10 * Math.log10(distance) + 10 * Math.log10(2 * Math.PI);
+    return 10 * Math.log10(distance);
   }
 }
 ```
@@ -91,9 +129,13 @@ export function spreadingLoss(
 ---
 
 ### 2. Two-Ray Ground Model Sign Inconsistency
-- [ ] **Status:** Open
+- [x] **Status:** Resolved (by design - see Calculation Profile Presets)
 - **Location:** `packages/engine/src/propagation/ground.ts:109`
-- **Impact:** Inconsistent results between ground models
+- **Impact:** Different behavior between ground models (intentional)
+- **Resolution:** The two models serve different purposes:
+  - **Two-ray phasor model:** Physically accurate, allows negative A_gr (constructive interference boost)
+  - **Legacy ISO 9613-2 Eq.10:** Engineering approximation, clamps to ≥0 (no boost)
+  - See [ROADMAP.md - Calculation Profile Presets](./ROADMAP.md#calculation-profile-presets) for the planned profile system that lets users choose between ISO-compliant and physically-accurate modes
 
 #### Current Formulation (Math)
 Two-ray interference model computes the ratio of combined field to free-field:
@@ -172,17 +214,8 @@ export function agrTwoRayDb(
 - **Related to:** Issue #2 (Two-Ray Ground Model)
 - **Fixed:** Used Option B - removed `computeGroundReflectionPhasor`, now all paths (direct, ground, wall, diffraction) are processed uniformly through `computeSourcePhasors` and coherent summation handles interference naturally
 
-#### Description
-When `groundReflection = true`, the `computeProbeCoherent` function double-counts the direct path:
-
-1. `computeGroundReflectionPhasor` uses `agrTwoRayDb` which computes the **combined interference** between direct and ground-reflected paths
-2. But then this phasor is **added to** `pathPhasors` which **still includes the standalone direct path**
-3. Result: direct path is counted twice with different phases, causing incorrect interference
-
-#### Current Code Implementation
+#### Before (Problematic Code)
 ```typescript
-// In computeProbeCoherent:
-
 // Handle ground reflection specially using the accurate two-ray model
 let groundPhasor: SpectralPhasor | null = null;
 if (config.groundReflection && source.position.z > 0 && probePosition.z > 0) {
@@ -199,54 +232,27 @@ const pathPhasors = computeSourcePhasors(source, probePosition, nonGroundPaths, 
 const allPhasors = groundPhasor ? [...pathPhasors, groundPhasor] : pathPhasors;
 ```
 
-#### Mathematical Analysis
-With two-ray model, `agrTwoRayDb` returns:
-```
-A_gr = -20·log₁₀(|1 + Γ·(r₁/r₂)·e^(jφ)|)
-```
-
-This ratio already represents the **combined effect** of direct + ground reflected.
-
-When we compute:
+#### After (Fixed Code)
 ```typescript
-const level = sourceLevel - directAtten - agrDb;
-```
+/**
+ * Issue #2b Fix (Option B):
+ * Process ALL paths (including ground) through the same phasor computation.
+ * Each path contributes an independent phasor with its own pressure and phase.
+ * The coherent summation naturally handles interference between:
+ * - Direct path (phase from direct distance)
+ * - Ground path (phase from reflected distance + reflection phase shift)
+ * - Wall reflections (phase from reflected distance + surface phase shift)
+ * - Diffracted paths (phase from diffracted distance + diffraction phase shift)
+ *
+ * This approach:
+ * 1. Avoids double-counting the direct path (previous bug)
+ * 2. Enables future second-order reflections (ground+wall, wall+ground)
+ * 3. Is physically correct: p_total = |Σ p_i · e^(jφ_i)|
+ */
+const pathPhasors = computeSourcePhasors(source, probePosition, paths, config);
 
-We get the level **after** two-ray interference. Adding this phasor to a standalone direct path phasor creates:
-```
-Total = (Direct phasor) + (Two-ray combined phasor)
-      = p·e^(jφ₁) + p'·e^(jφ₂)
-```
-
-Where `p'` already accounts for direct+ground, so we're effectively adding:
-```
-= p·e^(jφ₁) + [p_direct + p_ground]·e^(jφ₂)
-= 2×Direct + Ground  (with phase complications)
-```
-
-#### Observed Behavior
-- Test input: 100 dB source at 10m distance
-- Expected: ~70 dB (100 - 20·log₁₀(10) - 11)
-- Actual: -146 dB (essentially P_MIN)
-
-The extreme low value comes from destructive interference when the direct path phasor cancels with the two-ray phasor.
-
-#### Proposed Fix
-Option A: Filter out direct path when using two-ray ground model:
-```typescript
-// Compute phasors for paths EXCEPT direct (two-ray handles it)
-const nonDirectNonGroundPaths = paths.filter(p =>
-  p.type !== 'ground' && (groundPhasor ? p.type !== 'direct' : true)
-);
-const pathPhasors = computeSourcePhasors(source, probePosition, nonDirectNonGroundPaths, config);
-```
-
-Option B: Compute ground reflection as separate phasor (not using two-ray):
-```typescript
-// Trace ground path as standalone phasor, let coherent sum handle interference
-const groundPath = traceGroundPath(source, receiver, ...);
-const groundPhasor = computePathPhasor(groundPath, ...);  // Just ground, not combined
-// Then sum: direct + ground coherently
+// Sum phasors (coherent or energetic)
+const sourceSpectrum = sumSourceSpectralPhasors(pathPhasors, config.coherentSummation);
 ```
 
 ---
@@ -365,40 +371,93 @@ function calculateGroundEffectRegion(
 ---
 
 ### 4. Atmospheric Absorption Uses Direct Distance, Not Actual Path
-- [ ] **Status:** Open
-- **Location:** `packages/engine/src/propagation/index.ts:260`
-- **Impact:** 1+ dB error at high frequencies
+- [x] **Status:** Resolved
+- **Location:** `packages/engine/src/propagation/index.ts:260`, `packages/engine/src/compute/index.ts:295`
+- **Impact:** Fixed 1+ dB error at high frequencies for diffracted paths
+- **Fixed:** `computeBarrierPathDiff` now returns `actualPathLength`, and `calculatePropagation` uses it for atmospheric absorption
 
-#### Current Formulation (Math)
-Current (incorrect):
-```
-A_atm = α(f) × d_direct
-```
+#### Before (Problematic Code)
 
-Correct:
-```
-A_atm = α(f) × d_actual
-
-where for diffracted path:
-  d_actual = |S→B| + |B→R|  (source to barrier + barrier to receiver)
-
-For reflected path:
-  d_actual = |S→G| + |G→R|  (source to ground point + ground point to receiver)
-```
-
-At 16 kHz, α ≈ 0.34 dB/m. For 10m extra path length → 3.4 dB error.
-
-#### Current Code Implementation
+**compute/index.ts - No actualPathLength returned:**
 ```typescript
-// Uses direct distance for atmospheric absorption
-const Aatm = totalAtmosphericAbsorption(distance, frequency, config, meteo);
-// 'distance' is always the direct S→R distance
+function computeBarrierPathDiff(
+  source: Point3D,
+  receiver: Point3D,
+  geometry: BarrierGeometry,
+  sideDiffractionMode: 'off' | 'auto' | 'on' = 'auto'
+): { blocked: boolean; pathDifference: number } {
+  // ...
+  if (maxDelta === null) {
+    return { blocked: false, pathDifference: 0 };
+  }
+  return { blocked: true, pathDifference: maxDelta };
+}
 ```
 
-#### Proposed Implementation
+**propagation/index.ts - Always used direct distance:**
 ```typescript
 export function calculatePropagation(
-  distance: number,          // Direct distance (for reference)
+  distance: number,
+  sourceHeight: number,
+  receiverHeight: number,
+  config: PropagationConfig,
+  meteo: Meteo,
+  barrierPathDiff = 0,
+  barrierBlocked = false,
+  frequency = 1000
+): PropagationResult {
+  // ...
+  // Atmospheric absorption (applied along the direct distance)
+  const Aatm = totalAtmosphericAbsorption(distance, frequency, config, meteo);
+  // ↑ 'distance' is always the direct S→R distance, even for diffracted paths!
+```
+
+#### After (Fixed Code)
+
+**compute/index.ts - Now returns actualPathLength:**
+```typescript
+/** Result of barrier path difference calculation */
+type BarrierPathResult = {
+  /** Whether the direct path is blocked by a barrier */
+  blocked: boolean;
+  /** Path difference (delta) in meters for Maekawa formula */
+  pathDifference: number;
+  /** Actual path length sound travels (for atmospheric absorption) */
+  actualPathLength: number;
+};
+
+function computeBarrierPathDiff(
+  source: Point3D,
+  receiver: Point3D,
+  geometry: BarrierGeometry,
+  sideDiffractionMode: 'off' | 'auto' | 'on' = 'auto'
+): BarrierPathResult {
+  const s2 = { x: source.x, y: source.y };
+  const r2 = { x: receiver.x, y: receiver.y };
+  const direct2D = distance2D(s2, r2);
+  const direct3D = Math.hypot(direct2D, source.z - receiver.z);
+
+  if (!geometry.barrierSegments.length && !geometry.buildings.length) {
+    return { blocked: false, pathDifference: 0, actualPathLength: direct3D };
+  }
+
+  // ... barrier intersection logic ...
+
+  if (maxDelta === null) {
+    return { blocked: false, pathDifference: 0, actualPathLength: direct3D };
+  }
+
+  // Actual path length = direct distance + path difference (the detour over/around the barrier)
+  const actualPathLength = direct3D + maxDelta;
+
+  return { blocked: true, pathDifference: maxDelta, actualPathLength };
+}
+```
+
+**propagation/index.ts - Now uses actualPathLength when provided:**
+```typescript
+export function calculatePropagation(
+  distance: number,
   sourceHeight: number,
   receiverHeight: number,
   config: PropagationConfig,
@@ -406,46 +465,24 @@ export function calculatePropagation(
   barrierPathDiff = 0,
   barrierBlocked = false,
   frequency = 1000,
-  actualPathLength?: number  // NEW: actual sound travel distance
+  actualPathLength?: number  // NEW PARAMETER
 ): PropagationResult {
-  if (distance < MIN_DISTANCE) distance = MIN_DISTANCE;
-  if (distance > (config.maxDistance ?? MAX_DISTANCE)) {
-    return { /* blocked result */ };
-  }
-
-  // Spreading loss still uses direct distance (geometric reference)
-  const Adiv = spreadingLoss(distance, config.spreading);
-
-  // Atmospheric absorption uses ACTUAL path length
-  // For diffracted paths: actualPathLength = A + B (over barrier)
-  // For direct paths: actualPathLength = distance
+  // ...
+  // Issue #4 Fix: Atmospheric absorption uses the ACTUAL path length sound travels.
+  // For diffracted paths, this is longer than direct distance (sound goes over/around barrier).
+  // If actualPathLength is not provided, fall back to direct distance (unblocked paths).
   const pathForAbsorption = actualPathLength ?? distance;
   const Aatm = totalAtmosphericAbsorption(pathForAbsorption, frequency, config, meteo);
-
-  // ... rest of calculation
-}
-
-// Update barrier computation to provide actual path length
-function computeBarrierPathDiff(
-  source: Point3D, receiver: Point3D, geometry: BarrierGeometry,
-  sideDiffractionMode: 'off' | 'auto' | 'on' = 'auto'
-): { blocked: boolean; pathDifference: number; actualPathLength: number } {
-  // ... existing intersection logic ...
-
-  // Calculate actual path length (A + B)
-  const pathA = Math.hypot(distSI, segment.height - source.z);
-  const pathB = Math.hypot(distIR, segment.height - receiver.z);
-  const actualPathLength = pathA + pathB;
-  const direct3D = distance3D(source, receiver);
-  const pathDifference = actualPathLength - direct3D;
-
-  return {
-    blocked: true,
-    pathDifference,
-    actualPathLength  // NEW: return this for atmospheric absorption
-  };
-}
 ```
+
+#### Mathematical Impact
+
+| Frequency | α (dB/m) | 10m extra path | 50m extra path |
+|-----------|----------|----------------|----------------|
+| 1000 Hz   | 0.004    | 0.04 dB        | 0.2 dB         |
+| 4000 Hz   | 0.033    | 0.33 dB        | 1.6 dB         |
+| 8000 Hz   | 0.117    | **1.2 dB**     | **5.9 dB**     |
+| 16000 Hz  | 0.340    | **3.4 dB**     | **17 dB**      |
 
 ---
 
@@ -1532,34 +1569,35 @@ interface RayPathWithSpectralLoss extends RayPath {
 
 ## 📊 SUMMARY
 
-| Severity | Count | Status |
-|----------|-------|--------|
-| 🔴 Critical | 5 | 2 resolved |
-| 🟠 Moderate | 7 | 0 resolved |
-| 🟡 Minor | 7 | 0 resolved |
-| **Total** | **19** | **2 resolved** |
+| Severity | Total | Resolved | Pending |
+|----------|-------|----------|---------|
+| 🔴 Critical | 6 | 4 | 2 |
+| 🟠 Moderate | 7 | 1 | 6 |
+| 🟡 Minor | 7 | 0 | 7 |
+| **Total** | **20** | **5** | **15** |
 
 ---
 
 ## 🎯 RECOMMENDED ATTACK ORDER
 
 ### Phase 1: Critical Fixes (Accuracy)
-1. **Issue #4** - Atmospheric absorption path length (easiest critical fix)
-2. **Issue #1** - Document source level convention
-3. **Issue #2** - Ground model sign consistency
+1. ~~**Issue #1** - Spreading loss formula~~ ✅ Resolved
+2. ~~**Issue #2** - Ground model sign consistency~~ ✅ Resolved (by design)
+3. ~~**Issue #2b** - Double-counting direct path~~ ✅ Resolved
+4. ~~**Issue #4** - Atmospheric absorption path length~~ ✅ Resolved
 
 ### Phase 2: Critical Fixes (Geometry)
-4. **Issue #3** - Barrier+ground partitioning (complex)
-5. **Issue #5** - Side diffraction geometry
+5. **Issue #3** - Barrier+ground partitioning (next priority)
+6. **Issue #5** - Side diffraction geometry
 
 ### Phase 3: Moderate Fixes
-6. **Issue #10** - Replace simple atmospheric model
-7. **Issue #6** - Delany-Bazley bounds
-8. **Issue #9** - Wall reflection geometry
-9. **Issue #16** - Thick barrier formula
+7. **Issue #10** - Replace simple atmospheric model
+8. **Issue #6** - Delany-Bazley bounds
+9. **Issue #9** - Wall reflection geometry
+10. **Issue #16** - Thick barrier formula
 
 ### Phase 4: Polish
-10. Remaining minor issues as time permits
+11. Remaining minor issues as time permits
 
 ---
 

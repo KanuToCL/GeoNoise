@@ -336,27 +336,40 @@ function computeBuildingDelta(
   return pathUp + pathRoof + pathDown - direct3D;
 }
 
+/** Result of barrier path difference calculation */
+type BarrierPathResult = {
+  /** Whether the direct path is blocked by a barrier */
+  blocked: boolean;
+  /** Path difference (delta) in meters for Maekawa formula */
+  pathDifference: number;
+  /** Actual path length sound travels (for atmospheric absorption) */
+  actualPathLength: number;
+};
+
 // Compute barrier path difference for a source->receiver path.
 // Step A: check 2D intersection between SR and each obstacle segment.
 // Step B (barriers): use a single "top edge" point at the intersection with height hb.
 // Step C (buildings): use entry/exit points to traverse across the roof.
 // Step D: choose the largest delta across intersecting obstacles (strongest screen effect).
 // The caller uses `blocked` to swap ground effect out and apply barrier attenuation instead.
+//
+// Issue #4 Fix: Now also returns actualPathLength for atmospheric absorption calculation.
+// For diffracted paths, actualPathLength = direct3D + pathDifference (the over-barrier path).
 function computeBarrierPathDiff(
   source: Point3D,
   receiver: Point3D,
   geometry: BarrierGeometry,
   sideDiffractionMode: 'off' | 'auto' | 'on' = 'auto'
-): { blocked: boolean; pathDifference: number } {
-  if (!geometry.barrierSegments.length && !geometry.buildings.length) {
-    return { blocked: false, pathDifference: 0 };
-  }
-
+): BarrierPathResult {
   // Keep intersection math in 2D (plan view), but keep heights for the 3D distance terms.
   const s2 = { x: source.x, y: source.y };
   const r2 = { x: receiver.x, y: receiver.y };
   const direct2D = distance2D(s2, r2);
   const direct3D = Math.hypot(direct2D, source.z - receiver.z);
+
+  if (!geometry.barrierSegments.length && !geometry.buildings.length) {
+    return { blocked: false, pathDifference: 0, actualPathLength: direct3D };
+  }
 
   let maxDelta: number | null = null;
 
@@ -374,10 +387,13 @@ function computeBarrierPathDiff(
   }
 
   if (maxDelta === null) {
-    return { blocked: false, pathDifference: 0 };
+    return { blocked: false, pathDifference: 0, actualPathLength: direct3D };
   }
 
-  return { blocked: true, pathDifference: maxDelta };
+  // Actual path length = direct distance + path difference (the detour over/around the barrier)
+  const actualPathLength = direct3D + maxDelta;
+
+  return { blocked: true, pathDifference: maxDelta, actualPathLength };
 }
 
 /** CPU Engine implementation */
@@ -418,7 +434,7 @@ export class CPUEngine implements Engine {
         // `blocked` toggles which attenuation terms are applied in calculatePropagation().
         const barrier = barrierGeometry
           ? computeBarrierPathDiff(src.position, recv.position, barrierGeometry, propConfig.barrierSideDiffraction ?? 'auto')
-          : { blocked: false, pathDifference: 0 };
+          : { blocked: false, pathDifference: 0, actualPathLength: dist };
 
         // Calculate per-band propagation
         const bandedProp = calculateBandedPropagation(
@@ -428,7 +444,8 @@ export class CPUEngine implements Engine {
           propConfig,
           meteo,
           barrier.pathDifference,
-          barrier.blocked
+          barrier.blocked,
+          barrier.actualPathLength
         );
 
         // Apply per-band attenuation to source spectrum
@@ -543,11 +560,11 @@ export class CPUEngine implements Engine {
         // Barrier logic is applied per source->sample path.
         const barrier = barrierGeometry
           ? computeBarrierPathDiff(src.position, pt, barrierGeometry, propConfig.barrierSideDiffraction ?? 'auto')
-          : { blocked: false, pathDifference: 0 };
+          : { blocked: false, pathDifference: 0, actualPathLength: dist };
 
         const bandedProp = calculateBandedPropagation(
           dist, src.position.z, pt.z, propConfig, meteo,
-          barrier.pathDifference, barrier.blocked
+          barrier.pathDifference, barrier.blocked, barrier.actualPathLength
         );
 
         // Apply per-band attenuation
@@ -624,11 +641,11 @@ export class CPUEngine implements Engine {
         // Barrier logic is applied per source->grid-point path.
         const barrier = barrierGeometry
           ? computeBarrierPathDiff(src.position, pt, barrierGeometry, propConfig.barrierSideDiffraction ?? 'auto')
-          : { blocked: false, pathDifference: 0 };
+          : { blocked: false, pathDifference: 0, actualPathLength: dist };
 
         const bandedProp = calculateBandedPropagation(
           dist, src.position.z, pt.z, propConfig, meteo,
-          barrier.pathDifference, barrier.blocked
+          barrier.pathDifference, barrier.blocked, barrier.actualPathLength
         );
 
         // Apply per-band attenuation

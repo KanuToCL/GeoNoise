@@ -7,14 +7,15 @@ This document contains planned features and enhancements for GeoNoise. For compl
 ## Table of Contents
 
 1. [Status Summary](#status-summary)
-2. [Physics Audit - Bug Fixes](#physics-audit---bug-fixes)
-3. [High Priority - In Progress](#high-priority---in-progress)
-4. [Planned This Cycle](#planned-this-cycle)
-5. [Future Enhancements](#future-enhancements)
-6. [Barrier Side Diffraction Toggle](#barrier-side-diffraction-toggle)
-7. [Configurable Diffraction Models](#configurable-diffraction-models)
-8. [Wall Reflections for Diffracted Paths](#wall-reflections-for-diffracted-paths)
-9. [Phase 1 Remaining Tasks](#phase-1-remaining-tasks)
+2. [Calculation Profile Presets](#calculation-profile-presets)
+3. [Physics Audit - Bug Fixes](#physics-audit---bug-fixes)
+4. [High Priority - In Progress](#high-priority---in-progress)
+5. [Planned This Cycle](#planned-this-cycle)
+6. [Future Enhancements](#future-enhancements)
+7. [Barrier Side Diffraction Toggle](#barrier-side-diffraction-toggle)
+8. [Configurable Diffraction Models](#configurable-diffraction-models)
+9. [Wall Reflections for Diffracted Paths](#wall-reflections-for-diffracted-paths)
+10. [Phase 1 Remaining Tasks](#phase-1-remaining-tasks)
 
 ---
 
@@ -38,6 +39,138 @@ This document contains planned features and enhancements for GeoNoise. For compl
 ## ✅ Recently Implemented
 
 - **[Select Box Multi-Selection Tool](./FEATURE_SELECT_BOX.md)** - Rectangular marquee selection of multiple elements for batch operations (delete, duplicate). Ctrl+click drag to draw select box, shift+click for additive selection.
+
+---
+
+## Calculation Profile Presets
+
+> **Status:** 📋 Planned
+> **Priority:** High
+> **Target:** v0.5.0
+
+### Rationale
+
+GeoNoise currently offers many physics settings (ground model, atmospheric absorption, barrier diffraction, etc.) that users must configure individually. This creates two problems:
+
+1. **For engineers needing ISO compliance:** They must manually ensure all settings match ISO 9613-2 requirements
+2. **For users wanting accuracy:** They may not know which combination of settings produces physically correct results
+3. **For power users:** Custom configurations may unknowingly mix incompatible models
+
+A **profile-based system** solves this by offering validated presets while preserving full customization.
+
+### Proposed Profiles
+
+#### 1. ISO 9613-2 Compliant
+For regulatory compliance, environmental impact assessments, and engineering reports.
+
+| Setting | Value | Rationale |
+|---------|-------|-----------|
+| Ground Model | `iso9613-eq10` | ISO 9613-2 Eq. 10 empirical formula |
+| Ground Effect | Clamped ≥ 0 | ISO does not model constructive interference |
+| Atmospheric Absorption | `iso9613-1` | Full ISO 9613-1 calculation |
+| Barrier Model | `iso9613-2` | ISO compliant diffraction |
+| Barrier + Ground | `max(Abar, Agr)` | ISO 9613-2 Section 7.4 |
+| Side Diffraction | `off` | ISO assumes infinite barriers |
+| Max Reflections | 0 | Conservative (no reflections) |
+| Source Level Convention | Sound Power Level (Lw) | ISO standard |
+
+#### 2. Physically Accurate
+For research, detailed analysis, and scenarios where interference effects matter.
+
+| Setting | Value | Rationale |
+|---------|-------|-----------|
+| Ground Model | `twoRayPhasor` | Full wave interference model |
+| Ground Effect | Allows negative (boost) | Physically correct interference |
+| Atmospheric Absorption | `iso9613-1` | Most accurate available |
+| Barrier Model | `maekawa` | Well-validated diffraction model |
+| Barrier + Ground | Additive (partitioned) | Correct physics |
+| Side Diffraction | `auto` | Include for short barriers |
+| Max Reflections | 1 | First-order reflections |
+| Coherent Summation | Enabled | Capture interference patterns |
+| Source Level Convention | Configurable | Support both Lw and SPL@1m |
+
+#### 3. Custom
+User has full control. Profile dropdown auto-switches to "Custom" when any setting deviates from a preset.
+
+### UI Design
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Calculation Profile                                    │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ ▼ Physically Accurate                           │   │
+│  │   ○ ISO 9613-2 Compliant                        │   │
+│  │   ● Physically Accurate                         │   │
+│  │   ○ Custom                                      │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ⓘ Using two-ray phasor ground model with coherent     │
+│    summation. Ground interference effects are modeled.  │
+│                                                         │
+│  ▸ Advanced Settings                                    │
+│    (Expanding this shows individual settings and        │
+│     auto-switches profile to "Custom" if changed)       │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Settings Affected by Profile
+
+| Category | Setting | ISO Profile | Accurate Profile |
+|----------|---------|-------------|------------------|
+| **Ground** | Model | `iso9613-eq10` | `twoRayPhasor` |
+| | Allow boost | No | Yes |
+| | Type | User choice | User choice |
+| **Atmosphere** | Model | `iso9613-1` | `iso9613-1` |
+| | Use actual path length | No (direct) | Yes (diffracted) |
+| **Barriers** | Model | `iso9613-2` | `maekawa` |
+| | Side diffraction | Off | Auto |
+| | Thick barrier formula | N=20, cap 20dB | N=40, cap 25dB |
+| **Barrier+Ground** | Interaction | `max(Abar, Agr)` | Additive |
+| **Propagation** | Coherent summation | No | Yes |
+| | Max reflections | 0 | 1 |
+| **Sources** | Level convention | Lw (power) | Configurable |
+
+### Implementation Plan
+
+#### Phase 1: Core Profile System
+- [ ] Define `CalculationProfile` type in schema
+- [ ] Create `ISO_9613_PROFILE` and `ACCURATE_PROFILE` constants
+- [ ] Add `applyProfile(profile)` function that sets all config values
+- [ ] Add profile dropdown to Settings panel
+
+#### Phase 2: Auto-Detection
+- [ ] Implement `detectProfile(config)` that returns matching profile or 'custom'
+- [ ] Auto-switch dropdown to "Custom" when user changes any setting
+- [ ] Show info tooltip explaining current profile behavior
+
+#### Phase 3: Profile Persistence
+- [ ] Save selected profile in scene JSON
+- [ ] Restore profile on scene load
+- [ ] Handle profile migration for older scenes
+
+#### Phase 4: Documentation
+- [ ] Add profile descriptions to PHYSICS_REFERENCE.md
+- [ ] Create comparison table showing expected differences
+- [ ] Add "Which profile should I use?" guidance
+
+### Technical Notes
+
+1. **Profile is a shortcut, not a constraint:** User can always override individual settings (which switches to Custom)
+
+2. **Backward compatibility:** Existing scenes without a profile field default to behavior matching their current settings
+
+3. **Validation on save:** When exporting for regulatory purposes, warn if profile is not ISO-compliant
+
+4. **Future profiles:** Could add more profiles later (e.g., "CNOSSOS-EU", "FHWA TNM", "Nord2000")
+
+### Related Issues from Physics Audit
+
+This feature addresses the root cause of Issue #2 (Two-Ray Ground Model Sign Inconsistency):
+- ISO profile: Uses legacy model with `max(0, Agr)` - compliant with standard
+- Accurate profile: Uses two-ray model with negative values allowed - physically correct
+- Both behaviors are intentional and correct for their respective use cases
+
+---
 
 ## 🔮 Future Enhancements
 - Configurable diffraction model selection (Maekawa / Kurze-Anderson / ISO 9613-2)

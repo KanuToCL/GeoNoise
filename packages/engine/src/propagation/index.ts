@@ -288,6 +288,18 @@ export function barrierAttenuation(
 
 /**
  * Calculate total propagation loss for a single path
+ *
+ * @param distance - Direct source-to-receiver distance in meters
+ * @param sourceHeight - Source height above ground in meters
+ * @param receiverHeight - Receiver height above ground in meters
+ * @param config - Propagation configuration
+ * @param meteo - Meteorological conditions
+ * @param barrierPathDiff - Path difference (delta) for barrier diffraction
+ * @param barrierBlocked - Whether direct path is blocked by barrier
+ * @param frequency - Frequency in Hz (default 1000 Hz)
+ * @param actualPathLength - Actual path length sound travels (for atmospheric absorption).
+ *                           For diffracted paths this is longer than direct distance.
+ *                           If not provided, uses direct distance.
  */
 export function calculatePropagation(
   distance: number,
@@ -297,7 +309,8 @@ export function calculatePropagation(
   meteo: Meteo,
   barrierPathDiff = 0,
   barrierBlocked = false,
-  frequency = 1000
+  frequency = 1000,
+  actualPathLength?: number
 ): PropagationResult {
   // Barrier parameters:
   // - barrierBlocked: set by the geometry stage when the 2D line-of-sight crosses a barrier segment.
@@ -330,8 +343,11 @@ export function calculatePropagation(
   // Spreading loss (always referenced to the direct source-receiver distance)
   const Adiv = spreadingLoss(distance, config.spreading);
 
-  // Atmospheric absorption (applied along the direct distance; barrier insertion loss is applied separately)
-  const Aatm = totalAtmosphericAbsorption(distance, frequency, config, meteo);
+  // Issue #4 Fix: Atmospheric absorption uses the ACTUAL path length sound travels.
+  // For diffracted paths, this is longer than direct distance (sound goes over/around barrier).
+  // If actualPathLength is not provided, fall back to direct distance (unblocked paths).
+  const pathForAbsorption = actualPathLength ?? distance;
+  const Aatm = totalAtmosphericAbsorption(pathForAbsorption, frequency, config, meteo);
 
   // Ground effect (computed regardless of barrier state for QA continuity):
   // We still calculate Agr even when a barrier blocks the direct path so we can
@@ -401,6 +417,15 @@ export function calculatePropagation(
 
 /**
  * Calculate propagation for all octave bands
+ *
+ * @param distance - Direct source-to-receiver distance in meters
+ * @param sourceHeight - Source height above ground in meters
+ * @param receiverHeight - Receiver height above ground in meters
+ * @param config - Propagation configuration
+ * @param meteo - Meteorological conditions
+ * @param barrierPathDiff - Path difference (delta) for barrier diffraction
+ * @param barrierBlocked - Whether direct path is blocked by barrier
+ * @param actualPathLength - Actual path length sound travels (for atmospheric absorption)
  */
 export function calculateBandedPropagation(
   distance: number,
@@ -409,7 +434,8 @@ export function calculateBandedPropagation(
   config: PropagationConfig,
   meteo: Meteo,
   barrierPathDiff = 0,
-  barrierBlocked = false
+  barrierBlocked = false,
+  actualPathLength?: number
 ): BandedPropagationResult {
   const bands = new Map<number, PropagationResult>();
 
@@ -422,7 +448,8 @@ export function calculateBandedPropagation(
       meteo,
       barrierPathDiff,
       barrierBlocked,
-      freq
+      freq,
+      actualPathLength
     );
     bands.set(freq, result);
   }
@@ -436,7 +463,8 @@ export function calculateBandedPropagation(
     meteo,
     barrierPathDiff,
     barrierBlocked,
-    1000
+    1000,
+    actualPathLength
   );
 
   return { bands, overall };
