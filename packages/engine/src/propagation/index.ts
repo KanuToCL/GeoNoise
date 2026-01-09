@@ -54,9 +54,48 @@ export interface BandedPropagationResult {
 // ============================================================================
 
 /**
- * Calculate geometric spreading loss
- * @param distance - Distance in meters
- * @param type - 'spherical' (point source) or 'cylindrical' (line source)
+ * Geometric spreading loss constants (exact values from ISO 9613-2)
+ *
+ * For point sources (spherical spreading):
+ *   A_div = 20·log₁₀(r) + 10·log₁₀(4π)
+ *   where 10·log₁₀(4π) ≈ 10.99 dB (often rounded to 11 dB)
+ *
+ * For line sources (cylindrical spreading):
+ *   A_div = 10·log₁₀(r) + 10·log₁₀(2π)
+ *   where 10·log₁₀(2π) ≈ 7.98 dB (often rounded to 8 dB)
+ *
+ * Using exact constants for maximum accuracy.
+ */
+const SPHERICAL_CONSTANT = 10 * Math.log10(4 * Math.PI); // ≈ 10.99 dB
+const CYLINDRICAL_CONSTANT = 10 * Math.log10(2 * Math.PI); // ≈ 7.98 dB
+
+/**
+ * Calculate geometric spreading loss (divergence attenuation)
+ *
+ * IMPORTANT: Source Level Convention
+ * ----------------------------------
+ * This function assumes source levels are specified as Sound Power Level (Lw)
+ * in dB re 1 pW, which is the standard convention in ISO 9613-2.
+ *
+ * The formula converts from Lw to SPL at distance r:
+ *   SPL = Lw - A_div
+ *
+ * For spherical spreading (point source):
+ *   A_div = 20·log₁₀(r) + 10·log₁₀(4π) ≈ 20·log₁₀(r) + 11
+ *
+ * For cylindrical spreading (line source):
+ *   A_div = 10·log₁₀(r) + 10·log₁₀(2π) ≈ 10·log₁₀(r) + 8
+ *
+ * If sources are specified as SPL at 1m reference instead of Lw, use
+ * spreadingLossFromReference() which omits the geometric constant.
+ *
+ * @param distance - Distance from source to receiver in meters
+ * @param type - 'spherical' for point sources (inverse square law)
+ *               'cylindrical' for infinite line sources
+ * @returns Attenuation in dB (always positive for r > 1)
+ *
+ * @see ISO 9613-2:1996 Section 6.2 - Geometrical divergence
+ * @see PHYSICS_REFERENCE.md Section 1 - Propagation Model
  */
 export function spreadingLoss(
   distance: number,
@@ -67,11 +106,46 @@ export function spreadingLoss(
   }
 
   if (type === 'spherical') {
-    // 20 * log10(r) + 11 for point source (inverse square law)
-    return 20 * Math.log10(distance) + 11;
+    // Point source: A_div = 20·log₁₀(r) + 10·log₁₀(4π)
+    return 20 * Math.log10(distance) + SPHERICAL_CONSTANT;
   } else {
-    // 10 * log10(r) + 8 for line source (cylindrical spreading)
-    return 10 * Math.log10(distance) + 8;
+    // Line source: A_div = 10·log₁₀(r) + 10·log₁₀(2π)
+    return 10 * Math.log10(distance) + CYLINDRICAL_CONSTANT;
+  }
+}
+
+/**
+ * Calculate spreading loss for sources specified as SPL at 1m reference
+ *
+ * Use this function when source levels are given as SPL measured at 1m
+ * from the source (common in equipment datasheets) rather than as
+ * Sound Power Level (Lw).
+ *
+ * For spherical spreading:
+ *   SPL(r) = SPL(1m) - 20·log₁₀(r)
+ *   So A_div = 20·log₁₀(r) (no geometric constant)
+ *
+ * For cylindrical spreading:
+ *   SPL(r) = SPL(1m) - 10·log₁₀(r)
+ *
+ * @param distance - Distance from source in meters
+ * @param type - 'spherical' or 'cylindrical'
+ * @returns Attenuation in dB relative to 1m reference
+ */
+export function spreadingLossFromReference(
+  distance: number,
+  type: 'spherical' | 'cylindrical' = 'spherical'
+): number {
+  if (distance < MIN_DISTANCE) {
+    distance = MIN_DISTANCE;
+  }
+
+  if (type === 'spherical') {
+    // Simple inverse square law from 1m reference
+    return 20 * Math.log10(distance);
+  } else {
+    // Cylindrical spreading from 1m reference
+    return 10 * Math.log10(distance);
   }
 }
 

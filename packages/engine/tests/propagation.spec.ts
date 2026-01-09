@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { agrIsoEq10Db, calculatePropagation, calculateSPL, groundEffect } from '../src/propagation/index.js';
+import {
+  agrIsoEq10Db,
+  calculatePropagation,
+  calculateSPL,
+  groundEffect,
+  spreadingLoss,
+  spreadingLossFromReference,
+} from '../src/propagation/index.js';
 import { GroundType } from '@geonoise/core';
 import { getDefaultEngineConfig } from '../src/api/index.js';
 import { CPUEngine } from '../src/compute/index.js';
@@ -27,6 +34,140 @@ function createScene(sourceCount: number) {
   } as any);
   return scene;
 }
+
+// ============================================================================
+// Test Suite: Spreading Loss (Issue #1 Fix)
+// ============================================================================
+
+describe('Spreading Loss - Issue #1 Fix', () => {
+  // Mathematical constants for verification
+  const EXACT_SPHERICAL = 10 * Math.log10(4 * Math.PI); // ≈ 10.99 dB
+  const EXACT_CYLINDRICAL = 10 * Math.log10(2 * Math.PI); // ≈ 7.98 dB
+
+  describe('spreadingLoss (Lw-based, ISO 9613-2)', () => {
+    it('uses exact 4π constant for spherical spreading', () => {
+      // At 1m: A_div = 20*log10(1) + 10*log10(4π) = 0 + 10.99 = 10.99 dB
+      const loss = spreadingLoss(1, 'spherical');
+      expect(loss).toBeCloseTo(EXACT_SPHERICAL, 10); // High precision match
+      expect(loss).toBeCloseTo(10.99, 2); // Approximately 11 dB
+    });
+
+    it('uses exact 2π constant for cylindrical spreading', () => {
+      // At 1m: A_div = 10*log10(1) + 10*log10(2π) = 0 + 7.98 = 7.98 dB
+      const loss = spreadingLoss(1, 'cylindrical');
+      expect(loss).toBeCloseTo(EXACT_CYLINDRICAL, 10);
+      expect(loss).toBeCloseTo(7.98, 2);
+    });
+
+    it('calculates correct spherical spreading at 10m', () => {
+      // At 10m: A_div = 20*log10(10) + 10*log10(4π) = 20 + 10.99 = 30.99 dB
+      const loss = spreadingLoss(10, 'spherical');
+      const expected = 20 * Math.log10(10) + EXACT_SPHERICAL;
+      expect(loss).toBeCloseTo(expected, 10);
+      expect(loss).toBeCloseTo(30.99, 1);
+    });
+
+    it('calculates correct cylindrical spreading at 10m', () => {
+      // At 10m: A_div = 10*log10(10) + 10*log10(2π) = 10 + 7.98 = 17.98 dB
+      const loss = spreadingLoss(10, 'cylindrical');
+      const expected = 10 * Math.log10(10) + EXACT_CYLINDRICAL;
+      expect(loss).toBeCloseTo(expected, 10);
+      expect(loss).toBeCloseTo(17.98, 1);
+    });
+
+    it('follows inverse square law: +6 dB per distance doubling', () => {
+      const at10m = spreadingLoss(10, 'spherical');
+      const at20m = spreadingLoss(20, 'spherical');
+      const at40m = spreadingLoss(40, 'spherical');
+
+      // Spherical: 20*log10(2) ≈ 6.02 dB increase per doubling
+      expect(at20m - at10m).toBeCloseTo(6.02, 1);
+      expect(at40m - at20m).toBeCloseTo(6.02, 1);
+    });
+
+    it('follows cylindrical spreading: +3 dB per distance doubling', () => {
+      const at10m = spreadingLoss(10, 'cylindrical');
+      const at20m = spreadingLoss(20, 'cylindrical');
+      const at40m = spreadingLoss(40, 'cylindrical');
+
+      // Cylindrical: 10*log10(2) ≈ 3.01 dB increase per doubling
+      expect(at20m - at10m).toBeCloseTo(3.01, 1);
+      expect(at40m - at20m).toBeCloseTo(3.01, 1);
+    });
+
+    it('clamps very small distances to MIN_DISTANCE', () => {
+      // Should not produce NaN or Infinity for tiny distances
+      const tiny = spreadingLoss(0.001, 'spherical');
+      const zero = spreadingLoss(0, 'spherical');
+      const negative = spreadingLoss(-5, 'spherical');
+
+      expect(Number.isFinite(tiny)).toBe(true);
+      expect(Number.isFinite(zero)).toBe(true);
+      expect(Number.isFinite(negative)).toBe(true);
+
+      // All should clamp to same MIN_DISTANCE result
+      expect(zero).toBe(negative);
+    });
+  });
+
+  describe('spreadingLossFromReference (SPL@1m based)', () => {
+    it('returns 0 dB at 1m reference distance', () => {
+      // At 1m reference: no additional loss
+      const loss = spreadingLossFromReference(1, 'spherical');
+      expect(loss).toBeCloseTo(0, 10);
+    });
+
+    it('calculates correct spherical loss at 10m from 1m reference', () => {
+      // At 10m: 20*log10(10) = 20 dB loss from 1m reference
+      const loss = spreadingLossFromReference(10, 'spherical');
+      expect(loss).toBeCloseTo(20, 10);
+    });
+
+    it('calculates correct cylindrical loss at 10m from 1m reference', () => {
+      // At 10m: 10*log10(10) = 10 dB loss from 1m reference
+      const loss = spreadingLossFromReference(10, 'cylindrical');
+      expect(loss).toBeCloseTo(10, 10);
+    });
+
+    it('difference between Lw and SPL@1m formulas equals geometric constant', () => {
+      // The difference should be exactly 10*log10(4π) for spherical
+      const lwBased = spreadingLoss(10, 'spherical');
+      const refBased = spreadingLossFromReference(10, 'spherical');
+
+      expect(lwBased - refBased).toBeCloseTo(EXACT_SPHERICAL, 10);
+    });
+  });
+
+  describe('SPL calculation with spreading loss', () => {
+    it('100 dB Lw source at 10m gives ~69 dB SPL', () => {
+      // SPL = Lw - A_div = 100 - 30.99 ≈ 69 dB
+      const Lw = 100;
+      const distance = 10;
+      const Adiv = spreadingLoss(distance, 'spherical');
+      const SPL = Lw - Adiv;
+
+      expect(SPL).toBeCloseTo(69, 0); // Within 1 dB
+      expect(SPL).toBeGreaterThan(68);
+      expect(SPL).toBeLessThan(70);
+    });
+
+    it('100 dB Lw source at 100m gives ~49 dB SPL', () => {
+      // SPL = Lw - A_div = 100 - (40 + 10.99) ≈ 49 dB
+      const Lw = 100;
+      const distance = 100;
+      const Adiv = spreadingLoss(distance, 'spherical');
+      const SPL = Lw - Adiv;
+
+      expect(SPL).toBeCloseTo(49, 0);
+      expect(SPL).toBeGreaterThan(48);
+      expect(SPL).toBeLessThan(50);
+    });
+  });
+});
+
+// ============================================================================
+// Test Suite: Propagation v1 behavior (existing tests)
+// ============================================================================
 
 describe('Propagation v1 behavior', () => {
   it('monotonic decrease with distance under default config', () => {

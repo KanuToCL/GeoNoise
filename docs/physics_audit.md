@@ -11,9 +11,10 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 ## 🔴 CRITICAL ISSUES
 
 ### 1. Spreading Loss Formula Constant Ambiguity
-- [ ] **Status:** Open
+- [x] **Status:** Resolved
 - **Location:** `packages/engine/src/propagation/index.ts:69-74`
 - **Impact:** ±11 dB error potential
+- **Fixed:** Added comprehensive documentation explaining the Lw convention, used exact mathematical constants (`10 * Math.log10(4 * Math.PI)` instead of rounded 11), and added `spreadingLossFromReference()` for SPL@1m sources
 
 #### Current Formulation (Math)
 The code uses:
@@ -1533,10 +1534,10 @@ interface RayPathWithSpectralLoss extends RayPath {
 
 | Severity | Count | Status |
 |----------|-------|--------|
-| 🔴 Critical | 5 | 0 resolved |
+| 🔴 Critical | 5 | 2 resolved |
 | 🟠 Moderate | 7 | 0 resolved |
 | 🟡 Minor | 7 | 0 resolved |
-| **Total** | **19** | **0 resolved** |
+| **Total** | **19** | **2 resolved** |
 
 ---
 
