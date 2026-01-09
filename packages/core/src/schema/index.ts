@@ -263,6 +263,18 @@ export const MeteoSchema = z.object({
  */
 export const BarrierSideDiffractionSchema = z.enum(['off', 'auto', 'on']);
 
+/**
+ * Mixed ground sigma interpolation model.
+ * Controls how flow resistivity is interpolated for mixed ground types.
+ *
+ * - 'iso9613': ISO 9613-2 compliant linear G-factor interpolation
+ *              Uses area-weighted average: σ = σ_soft when G=1, σ → ∞ when G=0
+ * - 'logarithmic': Physically accurate logarithmic interpolation
+ *                  log(σ) = G·log(σ_soft) + (1-G)·log(σ_hard)
+ *                  More realistic for impedance calculations
+ */
+export const GroundMixedSigmaModelSchema = z.enum(['iso9613', 'logarithmic']);
+
 /** Propagation model configuration */
 export const PropagationConfigSchema = z.object({
   spreading: z.enum(['spherical', 'cylindrical']).default('spherical'),
@@ -272,6 +284,14 @@ export const PropagationConfigSchema = z.object({
   groundType: z.enum(['hard', 'mixed', 'soft']).default('mixed'),
   groundSigmaSoft: z.number().positive().default(20000),
   groundMixedFactor: z.number().min(0).max(1).default(0.5),
+
+  /**
+   * Mixed ground sigma interpolation model.
+   * - 'iso9613': ISO 9613-2 compliant linear interpolation (default)
+   * - 'logarithmic': Physically accurate log-space interpolation (ray tracing mode)
+   */
+  groundMixedSigmaModel: GroundMixedSigmaModelSchema.default('iso9613'),
+
   maxReflections: z.number().int().min(0).max(3).default(0),
   maxDistance: z.number().positive().default(2000), // meters
   includeBarriers: z.boolean().default(true),

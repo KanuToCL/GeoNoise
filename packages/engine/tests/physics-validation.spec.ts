@@ -53,6 +53,7 @@ import {
   agrTwoRayDb,
   delanyBazleyNormalizedImpedance,
   reflectionCoeff,
+  getEffectiveSigma,
 } from '../src/propagation/ground.js';
 import {
   computeProbeSimple,
@@ -2337,27 +2338,181 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
         actual: 'Z clamped arbitrarily',
         tolerance: 'NOT IMPLEMENTED',
         passed: false,
-        reference: 'Image source method'
+      reference: 'Image source method'
       });
       expect(true).toBe(true);
     });
   });
 
-  // Issue #12: Mixed Ground Sigma
-  describe('Issue #12: Mixed Ground Interpolation (NOT IMPLEMENTED)', () => {
-    it('mixed ground should use logarithmic sigma interpolation', () => {
-      // Current: σ = σ_soft × (1 + 9×(1-G))  ← Arbitrary
-      // Correct: log(σ) = G×log(σ_soft) + (1-G)×log(σ_hard)
+  // Issue #12: Mixed Ground Sigma - NOW IMPLEMENTED
+  describe('Issue #12: Mixed Ground Interpolation (RESOLVED)', () => {
+    /**
+     * Issue #12 Fix: Mixed ground sigma interpolation
+     *
+     * Provides two physically-based models for interpolating flow resistivity:
+     * - 'iso9613': ISO 9613-2 compliant linear G-factor (σ = σ_soft / G)
+     * - 'logarithmic': Physically accurate log-space interpolation
+     *
+     * User can select via groundMixedSigmaModel config option.
+     */
+
+    it('soft ground returns sigmaSoft directly', () => {
+      const sigmaSoft = 20000;
+      const sigmaISO = getEffectiveSigma('soft', sigmaSoft, 0.5, 'iso9613');
+      const sigmaLog = getEffectiveSigma('soft', sigmaSoft, 0.5, 'logarithmic');
+
+      const passed = sigmaISO === sigmaSoft && sigmaLog === sigmaSoft;
+
       recordResult({
-        category: 'GAP-Moderate',
-        name: '#12 Mixed ground sigma',
-        expected: 'Logarithmic interpolation',
-        actual: 'Linear scaling (arbitrary)',
-        tolerance: 'NOT IMPLEMENTED',
-        passed: false,
+        category: 'Issue #12',
+        name: '#12 Soft ground = σ_soft',
+        expected: `σ = ${sigmaSoft}`,
+        actual: `ISO: ${sigmaISO}, Log: ${sigmaLog}`,
+        tolerance: 'exact',
+        passed,
         reference: 'Ground impedance'
       });
-      expect(true).toBe(true);
+
+      expect(sigmaISO).toBe(sigmaSoft);
+      expect(sigmaLog).toBe(sigmaSoft);
+    });
+
+    it('hard ground returns very high sigma', () => {
+      const sigmaSoft = 20000;
+      const sigmaISO = getEffectiveSigma('hard', sigmaSoft, 0.5, 'iso9613');
+      const sigmaLog = getEffectiveSigma('hard', sigmaSoft, 0.5, 'logarithmic');
+
+      // Should be effectively infinite (1e9)
+      const passed = sigmaISO >= 1e8 && sigmaLog >= 1e8;
+
+      recordResult({
+        category: 'Issue #12',
+        name: '#12 Hard ground = σ → ∞',
+        expected: 'σ ≥ 1e8',
+        actual: `ISO: ${sigmaISO.toExponential(1)}, Log: ${sigmaLog.toExponential(1)}`,
+        tolerance: 'inequality',
+        passed,
+        reference: 'Ground impedance'
+      });
+
+      expect(sigmaISO).toBeGreaterThanOrEqual(1e8);
+      expect(sigmaLog).toBeGreaterThanOrEqual(1e8);
+    });
+
+    it('ISO model uses linear admittance interpolation (σ = σ_soft / G)', () => {
+      const sigmaSoft = 20000;
+      const G = 0.5;
+
+      const sigma = getEffectiveSigma('mixed', sigmaSoft, G, 'iso9613');
+      const expected = sigmaSoft / G; // 40000
+
+      const passed = Math.abs(sigma - expected) < 1;
+
+      recordResult({
+        category: 'Issue #12',
+        name: '#12 ISO model (σ/G)',
+        expected: `σ = ${expected}`,
+        actual: `σ = ${sigma.toFixed(0)}`,
+        tolerance: '±1',
+        passed,
+        reference: 'ISO 9613-2'
+      });
+
+      expect(sigma).toBeCloseTo(expected, 0);
+    });
+
+    it('logarithmic model uses geometric mean', () => {
+      const sigmaSoft = 20000;
+      const sigmaHard = 1e9;
+      const G = 0.5; // 50% mix should give geometric mean
+
+      const sigma = getEffectiveSigma('mixed', sigmaSoft, G, 'logarithmic');
+      const expected = Math.sqrt(sigmaSoft * sigmaHard); // geometric mean
+
+      const passed = Math.abs(sigma - expected) / expected < 0.01;
+
+      recordResult({
+        category: 'Issue #12',
+        name: '#12 Log model (geometric mean)',
+        expected: `σ = ${expected.toExponential(2)}`,
+        actual: `σ = ${sigma.toExponential(2)}`,
+        tolerance: '±1%',
+        passed,
+        reference: 'Log interpolation'
+      });
+
+      expect(sigma).toBeCloseTo(expected, -3);
+    });
+
+    it('logarithmic model produces different result than ISO', () => {
+      const sigmaSoft = 20000;
+      const G = 0.5;
+
+      const sigmaISO = getEffectiveSigma('mixed', sigmaSoft, G, 'iso9613');
+      const sigmaLog = getEffectiveSigma('mixed', sigmaSoft, G, 'logarithmic');
+
+      // ISO: 40000, Log: ~4.47e6 (very different!)
+      const different = Math.abs(sigmaISO - sigmaLog) > 1000;
+
+      recordResult({
+        category: 'Issue #12',
+        name: '#12 Models produce different σ',
+        expected: 'Significant difference',
+        actual: `ISO: ${sigmaISO.toFixed(0)}, Log: ${sigmaLog.toExponential(2)}`,
+        tolerance: 'inequality',
+        passed: different,
+        reference: 'Model comparison'
+      });
+
+      expect(sigmaISO).not.toBeCloseTo(sigmaLog, 0);
+    });
+
+    it('G=1 gives soft ground for both models', () => {
+      const sigmaSoft = 20000;
+      const G = 1.0;
+
+      const sigmaISO = getEffectiveSigma('mixed', sigmaSoft, G, 'iso9613');
+      const sigmaLog = getEffectiveSigma('mixed', sigmaSoft, G, 'logarithmic');
+
+      // Allow tiny floating point differences
+      const passed = Math.abs(sigmaISO - sigmaSoft) < 1 && Math.abs(sigmaLog - sigmaSoft) < 1;
+
+      recordResult({
+        category: 'Issue #12',
+        name: '#12 G=1 gives σ_soft',
+        expected: `σ ≈ ${sigmaSoft}`,
+        actual: `ISO: ${sigmaISO.toFixed(0)}, Log: ${sigmaLog.toFixed(0)}`,
+        tolerance: '±1',
+        passed,
+        reference: 'Boundary condition'
+      });
+
+      expect(sigmaISO).toBeCloseTo(sigmaSoft, 0);
+      expect(sigmaLog).toBeCloseTo(sigmaSoft, 0);
+    });
+
+    it('G near 0 gives very high sigma for both models', () => {
+      const sigmaSoft = 20000;
+      const G = 0.01; // Very hard (G=0 would be divide by zero for ISO)
+
+      const sigmaISO = getEffectiveSigma('mixed', sigmaSoft, G, 'iso9613');
+      const sigmaLog = getEffectiveSigma('mixed', sigmaSoft, G, 'logarithmic');
+
+      // ISO: 20000/0.01 = 2e6, Log: even higher
+      const passed = sigmaISO >= 1e6 && sigmaLog >= 1e8;
+
+      recordResult({
+        category: 'Issue #12',
+        name: '#12 G≈0 gives high σ',
+        expected: 'σ >> σ_soft',
+        actual: `ISO: ${sigmaISO.toExponential(2)}, Log: ${sigmaLog.toExponential(2)}`,
+        tolerance: 'inequality',
+        passed,
+        reference: 'Boundary condition'
+      });
+
+      expect(sigmaISO).toBeGreaterThan(sigmaSoft * 10);
+      expect(sigmaLog).toBeGreaterThan(sigmaISO);
     });
   });
 });

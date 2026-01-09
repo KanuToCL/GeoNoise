@@ -14,6 +14,79 @@ import {
 } from './complex.js';
 
 export type GroundType = PropagationConfig['groundType'];
+export type GroundMixedSigmaModel = PropagationConfig['groundMixedSigmaModel'];
+
+/**
+ * Very high sigma value representing effectively rigid/hard ground.
+ * At this value, |Γ| ≈ 1 (total reflection).
+ */
+const SIGMA_HARD = 1e9;
+
+/**
+ * Calculate effective flow resistivity for mixed ground.
+ *
+ * Issue #12 Fix: Provides two physically-based interpolation methods
+ * instead of the previous arbitrary formula.
+ *
+ * @param groundType - 'hard' | 'mixed' | 'soft'
+ * @param sigmaSoft - Flow resistivity for soft ground (Pa·s/m²)
+ * @param mixedFactor - G factor (0 = hard, 1 = soft)
+ * @param model - Interpolation model: 'iso9613' | 'logarithmic'
+ * @returns Effective flow resistivity σ in Pa·s/m²
+ */
+export function getEffectiveSigma(
+  groundType: GroundType,
+  sigmaSoft: number,
+  mixedFactor: number,
+  model: GroundMixedSigmaModel = 'iso9613'
+): number {
+  // Pure soft ground
+  if (groundType === 'soft') {
+    return sigmaSoft;
+  }
+
+  // Pure hard ground
+  if (groundType === 'hard') {
+    return SIGMA_HARD;
+  }
+
+  // Mixed ground - interpolate based on model
+  const G = clamp(mixedFactor, 0, 1);
+
+  if (model === 'logarithmic') {
+    /**
+     * Logarithmic interpolation (physically accurate for impedance).
+     *
+     * Acoustic impedance scales logarithmically, so interpolating in
+     * log-space produces more realistic intermediate values.
+     *
+     * log(σ) = G·log(σ_soft) + (1-G)·log(σ_hard)
+     * σ = σ_soft^G × σ_hard^(1-G)
+     *
+     * This is the geometric mean when G = 0.5.
+     */
+    const logSigma = G * Math.log(sigmaSoft) + (1 - G) * Math.log(SIGMA_HARD);
+    return Math.exp(logSigma);
+  } else {
+    /**
+     * ISO 9613-2 linear G-factor interpolation.
+     *
+     * The ISO standard uses an area-weighted G factor where:
+     * - G = 0: Hard ground (σ → ∞)
+     * - G = 1: Soft ground (σ = σ_soft)
+     *
+     * For simplicity, we linearly interpolate 1/σ (admittance-like):
+     * 1/σ_eff = G × (1/σ_soft) + (1-G) × (1/σ_hard)
+     *
+     * Since σ_hard → ∞, the term (1-G)/σ_hard → 0, giving:
+     * σ_eff = σ_soft / G  (for G > 0)
+     *
+     * We clamp G to avoid division by zero.
+     */
+    const Gclamped = Math.max(G, 0.01); // Avoid division by zero
+    return sigmaSoft / Gclamped;
+  }
+}
 
 /**
  * Miki (1990) modification of Delany-Bazley for extended frequency range.
@@ -90,7 +163,8 @@ export function reflectionCoeff(
   sigmaSoft: number,
   mixedFactor: number,
   r2: number,
-  speedOfSound: number
+  speedOfSound: number,
+  groundMixedSigmaModel: GroundMixedSigmaModel = 'iso9613'
 ): Complex {
   let gamma: Complex;
   if (ground === 'hard') {
@@ -98,8 +172,10 @@ export function reflectionCoeff(
   } else {
     // Avoid grazing-incidence singularities in locally reacting impedance.
     const clampedCos = clamp(cosTheta, 0.05, 1);
-    const mix = clamp(mixedFactor, 0, 1);
-    const sigma = ground === 'soft' ? sigmaSoft : sigmaSoft * (1 + 9 * (1 - mix));
+
+    // Issue #12 Fix: Use proper sigma interpolation model
+    const sigma = getEffectiveSigma(ground, sigmaSoft, mixedFactor, groundMixedSigmaModel);
+
     const zeta = delanyBazleyNormalizedImpedance(fHz, sigma);
     const zetaCos = complexMul(zeta, complex(clampedCos, 0));
     const num = complexSub(zetaCos, complex(1, 0));

@@ -1,7 +1,7 @@
 # Physics Engine Audit
 
 > **Audit Date:** 2025-01-08 (Updated: 2025-01-09)
-> **Status:** 12 resolved, 8 pending
+> **Status:** 13 resolved, 7 pending
 > **Auditor:** Physics review session
 
 This document tracks identified issues in the GeoNoise physics engine, organized by severity. Each issue includes the current formulation, current code implementation, and proposed fix.
@@ -10,7 +10,7 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 
 ## Quick Status Summary
 
-### ✅ Resolved (12)
+### ✅ Resolved (13)
 - **#1** Spreading Loss Formula Constant Ambiguity — *Fixed with exact constants + documentation*
 - **#2** Two-Ray Ground Model Sign Inconsistency — *Resolved by design (see [Calculation Profile Presets](./ROADMAP.md#calculation-profile-presets))*
 - **#2b** computeProbeCoherent Double-Counts Direct Path — *Fixed: paths now processed uniformly*
@@ -21,16 +21,16 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 - **#6** Delany-Bazley Extrapolation Outside Valid Range — *Fixed: bounds checking + Miki (1990) extension*
 - **#10** "Simple" Atmospheric Absorption Model Incorrectly Formulated — *Fixed: replaced buggy formula with lookup table*
 - **#11** Diffraction Only Traced When Direct Path Blocked — *Fixed: now traces diffraction for nearby barriers even when direct path is unblocked (for coherent summation accuracy)*
+- **#12** Mixed Ground Sigma Calculation Arbitrary — *Fixed: user-selectable ISO 9613-2 or logarithmic interpolation*
 - **#16** Same Formula for Thin/Thick Barriers — *Fixed: buildings now use coefficient 40 and cap 25 dB*
 - **#18** Speed of Sound Constant vs Formula Mismatch — *Fixed: added Environmental Conditions UI for user-controlled temperature/humidity/pressure*
 
 ### 🔴 Critical - Pending (0)
 *No critical issues pending*
 
-### 🟠 Moderate - Pending (3)
+### 🟠 Moderate - Pending (2)
 - **#7** Ground Reflection Assumes Flat Ground (z=0)
 - **#9** Wall Reflection Height Geometry Incorrect
-- **#12** Mixed Ground Sigma Calculation Arbitrary
 
 ### 🟡 Minor - Pending (5)
 - **#13** Sommerfeld Correction Discontinuity at |w|=4
@@ -1110,72 +1110,74 @@ const rtConfig: RayTracingConfig = {
 ---
 
 ### 12. Mixed Ground Sigma Calculation Arbitrary
-- [ ] **Status:** Open
-- **Location:** `packages/engine/src/propagation/ground.ts:45`
-- **Impact:** Non-physical interpolation
+- [x] **Status:** Resolved
+- **Location:** `packages/engine/src/propagation/ground.ts:33-83`
+- **Impact:** Non-physical interpolation → Now user-selectable with two physical models
 
 #### Current Formulation (Math)
-Current (non-physical):
-```
-σ_mixed = σ_soft × (1 + 9×(1-G))
+The original code used an arbitrary formula without physical basis.
 
-where G = mixedFactor (0 = hard, 1 = soft)
-
-G = 0 (hard):  σ = 10 × σ_soft
-G = 1 (soft):  σ = σ_soft
-```
-
-ISO 9613-2 approach uses area-weighted G factor:
+ISO 9613-2 uses an area-weighted G factor:
 ```
 G = (G_s × d_s + G_m × d_m + G_r × d_r) / d_total
 
 where G = 0 for hard, G = 1 for soft
 ```
 
-#### Current Code Implementation
-```typescript
-const sigma = ground === 'soft' ? sigmaSoft : sigmaSoft * (1 + 9 * (1 - mix));
+For impedance calculations, logarithmic interpolation is more physically accurate:
+```
+log(σ) = G·log(σ_soft) + (1-G)·log(σ_hard)
+σ = σ_soft^G × σ_hard^(1-G)
 ```
 
-#### Proposed Implementation
+#### After (Fixed Code)
 ```typescript
 /**
- * Get effective flow resistivity for mixed ground.
+ * Mixed ground sigma interpolation model.
+ * Controls how flow resistivity is interpolated for mixed ground types.
  *
- * Uses logarithmic interpolation between soft and hard limits,
- * which better represents the physical behavior.
+ * - 'iso9613': ISO 9613-2 compliant linear G-factor interpolation
+ *              σ_eff = σ_soft / G  (for G > 0)
+ * - 'logarithmic': Physically accurate logarithmic interpolation
+ *                  log(σ) = G·log(σ_soft) + (1-G)·log(σ_hard)
+ *                  More realistic for impedance calculations
  */
-function getEffectiveSigma(
+export type GroundMixedSigmaModel = 'iso9613' | 'logarithmic';
+
+const SIGMA_HARD = 1e9;
+
+export function getEffectiveSigma(
   groundType: GroundType,
   sigmaSoft: number,
-  mixedFactor: number
+  mixedFactor: number,
+  model: GroundMixedSigmaModel = 'iso9613'
 ): number {
-  if (groundType === 'soft') {
-    return sigmaSoft;
-  }
+  if (groundType === 'soft') return sigmaSoft;
+  if (groundType === 'hard') return SIGMA_HARD;
 
-  if (groundType === 'hard') {
-    // Hard ground: effectively infinite resistivity
-    // Use a very large value that gives |Γ| ≈ 1
-    return 1e9;
-  }
-
-  // Mixed ground: logarithmic interpolation
-  // G = 0 (hard) → σ → ∞
-  // G = 1 (soft) → σ = σ_soft
-  const sigmaHard = 1e9;
   const G = clamp(mixedFactor, 0, 1);
 
-  // Logarithmic interpolation: log(σ) = G·log(σ_soft) + (1-G)·log(σ_hard)
-  const logSigma = G * Math.log(sigmaSoft) + (1 - G) * Math.log(sigmaHard);
-
-  return Math.exp(logSigma);
+  if (model === 'logarithmic') {
+    // Geometric interpolation (physically accurate)
+    const logSigma = G * Math.log(sigmaSoft) + (1 - G) * Math.log(SIGMA_HARD);
+    return Math.exp(logSigma);
+  } else {
+    // ISO 9613-2 linear admittance interpolation
+    // σ_eff = σ_soft / G
+    const Gclamped = Math.max(G, 0.01);
+    return sigmaSoft / Gclamped;
+  }
 }
-
-// Usage in reflectionCoeff:
-const sigma = getEffectiveSigma(ground, sigmaSoft, mixedFactor);
-const zeta = delanyBazleyNormalizedImpedance(fHz, sigma);
 ```
+
+**Config schema (core/src/schema/index.ts):**
+```typescript
+groundMixedSigmaModel: z.enum(['iso9613', 'logarithmic']).default('iso9613')
+```
+
+**Profile usage:**
+- ISO-compliant profile: `groundMixedSigmaModel: 'iso9613'`
+- Ray tracing accuracy profile: `groundMixedSigmaModel: 'logarithmic'`
 
 ---
 
@@ -1623,9 +1625,9 @@ interface RayPathWithSpectralLoss extends RayPath {
 | Severity | Total | Resolved | Pending |
 |----------|-------|----------|---------||
 | 🔴 Critical | 6 | 6 | 0 |
-| 🟠 Moderate | 7 | 2 | 5 |
+| 🟠 Moderate | 7 | 3 | 4 |
 | 🟡 Minor | 7 | 4 | 3 |
-| **Total** | **20** | **12** | **8** |
+| **Total** | **20** | **13** | **7** |
 
 ---
 
