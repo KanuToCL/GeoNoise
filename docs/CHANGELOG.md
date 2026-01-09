@@ -6,6 +6,37 @@ This document contains the implementation history of completed features. For pla
 
 ## 2026-01-09
 
+### Environmental Conditions Settings
+
+**Status:** ✅ Implemented (v0.4.7)
+
+Added user-controllable environmental conditions that affect acoustic propagation calculations. This resolves **Physics Audit Issue #18** (Speed of Sound Constant vs Formula Mismatch).
+
+#### Features
+
+- **Temperature** (°C): -10 to 40, default 20°C
+- **Relative Humidity** (%): 10 to 100, default 50%
+- **Atmospheric Pressure** (kPa): 95 to 108, default 101.325 kPa (sea level)
+- **Derived Speed of Sound** display: calculated as `c = 331.3 + 0.606 × T`
+
+#### How It Works
+
+Environmental values are passed to the probe worker and noise map calculations, affecting:
+- Atmospheric absorption (temperature and humidity dependent)
+- Wavelength-dependent calculations via speed of sound
+
+When any environmental value changes, the scene recalculates automatically.
+
+#### Technical Details
+
+- Added Environmental Conditions section to settings popover (`index.html`)
+- Added `meteoState` object to store user values (`main.ts`)
+- Added `calculateSpeedOfSound()`, `updateSpeedOfSoundDisplay()`, `getMeteoConfig()` helper functions
+- Event handlers with validation and clamping for all three inputs
+- Updated `buildProbeRequest()` to use `getMeteoConfig()` instead of hardcoded values
+
+---
+
 ### Noise Map Live Recalculation
 
 **Status:** ✅ Implemented (v0.4.6)

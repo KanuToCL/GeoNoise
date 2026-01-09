@@ -545,6 +545,12 @@ const propagationGroundHelp = document.querySelector('#propagationGroundHelp') a
 const propagationGroundModelHelp = document.querySelector('#propagationGroundModelHelp') as HTMLDivElement | null;
 const propagationBarrierSideDiffraction = document.querySelector('#propagationBarrierSideDiffraction') as HTMLSelectElement | null;
 
+// Environmental Conditions (meteo) controls
+const meteoTemperature = document.querySelector('#meteoTemperature') as HTMLInputElement | null;
+const meteoHumidity = document.querySelector('#meteoHumidity') as HTMLInputElement | null;
+const meteoPressure = document.querySelector('#meteoPressure') as HTMLInputElement | null;
+const derivedSpeedOfSound = document.querySelector('#derivedSpeedOfSound') as HTMLDivElement | null;
+
 const layerSources = document.querySelector('#layerSources') as HTMLInputElement | null;
 const layerReceivers = document.querySelector('#layerReceivers') as HTMLInputElement | null;
 const layerPanels = document.querySelector('#layerPanels') as HTMLInputElement | null;
@@ -782,6 +788,34 @@ function getPropagationConfig(): PropagationConfig {
 
 function updatePropagationConfig(next: Partial<PropagationConfig>) {
   engineConfig = { ...engineConfig, propagation: { ...getPropagationConfig(), ...next } };
+}
+
+// Environmental conditions state (meteo)
+const meteoState = {
+  temperature: 20,   // °C
+  humidity: 50,      // %
+  pressure: 101.325, // kPa
+};
+
+/** Calculate speed of sound from temperature (simplified formula: c = 331.3 + 0.606 * T) */
+function calculateSpeedOfSound(temperatureC: number): number {
+  return 331.3 + 0.606 * temperatureC;
+}
+
+/** Update the speed of sound display based on current meteo state */
+function updateSpeedOfSoundDisplay() {
+  if (!derivedSpeedOfSound) return;
+  const speed = calculateSpeedOfSound(meteoState.temperature);
+  derivedSpeedOfSound.textContent = `${speed.toFixed(1)} m/s`;
+}
+
+/** Get current meteo config for engine requests */
+function getMeteoConfig() {
+  return {
+    temperature: meteoState.temperature,
+    humidity: meteoState.humidity,
+    pressure: meteoState.pressure,
+  };
 }
 
 function niceDistance(value: number): number {
@@ -2415,9 +2449,7 @@ function buildProbeRequest(probe: Probe): ProbeRequest {
       groundType: getPropagationConfig().groundType ?? 'mixed',
       groundMixedFactor: getPropagationConfig().groundMixedFactor ?? 0.5,
       atmosphericAbsorption: getPropagationConfig().atmosphericAbsorption ?? 'simple',
-      temperature: 20,
-      humidity: 50,
-      pressure: 101.325,
+      ...getMeteoConfig(),
     },
   };
 }
@@ -7344,6 +7376,47 @@ function wirePropagationControls() {
     markDirty();
     computeScene();
   });
+
+  // Environmental conditions (meteo) controls
+  meteoTemperature?.addEventListener('change', () => {
+    const next = Number(meteoTemperature.value);
+    if (!Number.isFinite(next)) {
+      meteoTemperature.value = String(meteoState.temperature);
+      return;
+    }
+    meteoState.temperature = Math.max(-10, Math.min(40, next));
+    meteoTemperature.value = String(meteoState.temperature);
+    updateSpeedOfSoundDisplay();
+    markDirty();
+    computeScene();
+  });
+
+  meteoHumidity?.addEventListener('change', () => {
+    const next = Number(meteoHumidity.value);
+    if (!Number.isFinite(next)) {
+      meteoHumidity.value = String(meteoState.humidity);
+      return;
+    }
+    meteoState.humidity = Math.max(10, Math.min(100, next));
+    meteoHumidity.value = String(meteoState.humidity);
+    markDirty();
+    computeScene();
+  });
+
+  meteoPressure?.addEventListener('change', () => {
+    const next = Number(meteoPressure.value);
+    if (!Number.isFinite(next)) {
+      meteoPressure.value = String(meteoState.pressure);
+      return;
+    }
+    meteoState.pressure = Math.max(95, Math.min(108, next));
+    meteoPressure.value = String(meteoState.pressure.toFixed(3));
+    markDirty();
+    computeScene();
+  });
+
+  // Initialize speed of sound display
+  updateSpeedOfSoundDisplay();
 }
 
 function init() {

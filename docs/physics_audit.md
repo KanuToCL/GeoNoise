@@ -1,7 +1,7 @@
 # Physics Engine Audit
 
 > **Audit Date:** 2025-01-08 (Updated: 2025-01-09)
-> **Status:** 6 resolved, 14 pending
+> **Status:** 7 resolved, 13 pending
 > **Auditor:** Physics review session
 
 This document tracks identified issues in the GeoNoise physics engine, organized by severity. Each issue includes the current formulation, current code implementation, and proposed fix.
@@ -10,13 +10,14 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 
 ## Quick Status Summary
 
-### ✅ Resolved (6)
+### ✅ Resolved (7)
 - **#1** Spreading Loss Formula Constant Ambiguity — *Fixed with exact constants + documentation*
 - **#2** Two-Ray Ground Model Sign Inconsistency — *Resolved by design (see [Calculation Profile Presets](./ROADMAP.md#calculation-profile-presets))*
 - **#2b** computeProbeCoherent Double-Counts Direct Path — *Fixed: paths now processed uniformly*
 - **#4** Atmospheric Absorption Uses Direct Distance — *Fixed: now uses actualPathLength for diffracted paths*
 - **#5 (probeWorker)** Simplified Atmospheric Absorption in probeWorker — *Fixed: now respects UI model selection*
 - **#10** "Simple" Atmospheric Absorption Model Incorrectly Formulated — *Fixed: replaced buggy formula with lookup table*
+- **#18** Speed of Sound Constant vs Formula Mismatch — *Fixed: added Environmental Conditions UI for user-controlled temperature/humidity/pressure*
 
 ### 🔴 Critical - Pending (2)
 - **#3** Barrier + Ground Effect Interaction Physically Incorrect
@@ -29,13 +30,12 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 - **#9** Wall Reflection Height Geometry Incorrect
 - **#11** Diffraction Only Traced When Direct Path Blocked
 
-### 🟡 Minor - Pending (7)
+### 🟡 Minor - Pending (6)
 - **#13** Sommerfeld Correction Discontinuity at |w|=4
 - **#14** Hardcoded Diffraction Phase Shift
 - **#15** Incoherent Source Summation Only *(by design)*
 - **#16** Same Formula for Thin/Thick Barriers
 - **#17** Ground Absorption Not Spectral
-- **#18** Speed of Sound Constant vs Formula Mismatch
 - **#19** Diffraction Loss = 0 in Ray Tracing Result
 
 ---
@@ -1471,9 +1471,9 @@ function getGroundAbsorption(
 ---
 
 ### 18. Speed of Sound Constant vs Formula Mismatch
-- [ ] **Status:** Open
+- [x] **Status:** Resolved
 - **Location:** Multiple files
-- **Impact:** 0.1% difference (negligible)
+- **Impact:** 0.1% difference (negligible) → Now user-controlled
 
 #### Current Formulation (Math)
 ```
@@ -1481,30 +1481,21 @@ Constant: c = 343.0 m/s
 Formula:  c = 331.3 + 0.606·T = 331.3 + 0.606×20 = 343.42 m/s
 ```
 
-#### Current Code Implementation
-```typescript
-// constants/index.ts
-export const SPEED_OF_SOUND_20C = 343.0;
+#### Resolution
+Added **Environmental Conditions** settings panel in the UI that exposes:
+- **Temperature** (°C): -10 to 40, default 20
+- **Relative Humidity** (%): 10 to 100, default 50
+- **Atmospheric Pressure** (kPa): 95 to 108, default 101.325 (sea level)
+- **Derived Speed of Sound** display: calculated as `c = 331.3 + 0.606 × T`
 
-// units/index.ts
-export function speedOfSound(temperatureC: number = 20): number {
-  return 331.3 + 0.606 * temperatureC;  // Returns 343.42 for T=20
-}
-```
+These values are passed through to the probe worker and noise map calculations,
+affecting atmospheric absorption and wavelength-dependent calculations.
 
-#### Proposed Implementation
-```typescript
-// Option 1: Align constant with formula
-export const SPEED_OF_SOUND_20C = 331.3 + 0.606 * 20;  // 343.42
-
-// Option 2: Use rounded value consistently
-export const SPEED_OF_SOUND_20C = 343;
-
-export function speedOfSound(temperatureC: number = 20): number {
-  if (temperatureC === 20) return SPEED_OF_SOUND_20C;  // Use constant
-  return 331.3 + 0.606 * temperatureC;
-}
-```
+#### Implementation Details
+- `apps/web/index.html`: Environmental Conditions section in settings popover
+- `apps/web/src/style.css`: Styling for input-with-unit and derived-display
+- `apps/web/src/main.ts`: `meteoState` object, `calculateSpeedOfSound()`, `updateSpeedOfSoundDisplay()`, `getMeteoConfig()` functions, event handlers
+- `buildProbeRequest()`: Now uses `getMeteoConfig()` instead of hardcoded values
 
 ---
 
