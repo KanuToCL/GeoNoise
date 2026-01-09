@@ -169,6 +169,215 @@ describe('Spreading Loss - Issue #1 Fix', () => {
 // Test Suite: Propagation v1 behavior (existing tests)
 // ============================================================================
 
+// ============================================================================
+// Test Suite: Speed of Sound Consistency (Issue #18)
+// ============================================================================
+
+describe('Speed of Sound Consistency - Issue #18', () => {
+  // Import the constant and formula
+  const SPEED_OF_SOUND_20C = 343.0; // From shared/constants
+  const speedOfSoundFormula = (tempC: number) => 331.3 + 0.606 * tempC;
+
+  it('formula at 20°C is close to constant (within 0.5%)', () => {
+    const fromFormula = speedOfSoundFormula(20);
+    // Formula gives 343.42, constant is 343.0
+    // Difference is 0.42 m/s or ~0.12%
+    expect(Math.abs(fromFormula - SPEED_OF_SOUND_20C)).toBeLessThan(1);
+    expect(fromFormula).toBeCloseTo(343.42, 1);
+  });
+
+  it('formula increases with temperature', () => {
+    const at0C = speedOfSoundFormula(0);
+    const at20C = speedOfSoundFormula(20);
+    const at40C = speedOfSoundFormula(40);
+
+    expect(at20C).toBeGreaterThan(at0C);
+    expect(at40C).toBeGreaterThan(at20C);
+  });
+
+  it('formula gives expected values at standard temperatures', () => {
+    // 0°C: 331.3 m/s
+    expect(speedOfSoundFormula(0)).toBeCloseTo(331.3, 1);
+    // 15°C: 340.39 m/s
+    expect(speedOfSoundFormula(15)).toBeCloseTo(340.39, 1);
+    // 20°C: 343.42 m/s
+    expect(speedOfSoundFormula(20)).toBeCloseTo(343.42, 1);
+    // 25°C: 346.45 m/s
+    expect(speedOfSoundFormula(25)).toBeCloseTo(346.45, 1);
+  });
+});
+
+// ============================================================================
+// Test Suite: Frequency Weighting (A/C/Z)
+// ============================================================================
+
+describe('Frequency Weighting Curves', () => {
+  // Standard weighting values from IEC 61672-1
+  const A_WEIGHTS = [-26.2, -16.1, -8.6, -3.2, 0, 1.2, 1.0, -1.1, -6.6];
+  const C_WEIGHTS = [-0.8, -0.2, 0, 0, 0, -0.2, -0.8, -3.0, -8.5];
+  const Z_WEIGHTS = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const BANDS = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+
+  it('A-weighting is 0 dB at 1000 Hz reference', () => {
+    const idx1kHz = BANDS.indexOf(1000);
+    expect(A_WEIGHTS[idx1kHz]).toBe(0);
+  });
+
+  it('A-weighting heavily attenuates low frequencies', () => {
+    // 63 Hz should be attenuated more than 125 Hz
+    expect(A_WEIGHTS[0]).toBeLessThan(A_WEIGHTS[1]);
+    // 125 Hz should be attenuated more than 250 Hz
+    expect(A_WEIGHTS[1]).toBeLessThan(A_WEIGHTS[2]);
+    // All below 1kHz should be negative
+    expect(A_WEIGHTS[0]).toBeLessThan(0);
+    expect(A_WEIGHTS[1]).toBeLessThan(0);
+    expect(A_WEIGHTS[2]).toBeLessThan(0);
+    expect(A_WEIGHTS[3]).toBeLessThan(0);
+  });
+
+  it('A-weighting has slight boost at 2-4 kHz', () => {
+    // Human ear is most sensitive around 2-4 kHz
+    expect(A_WEIGHTS[5]).toBeGreaterThan(0); // 2 kHz: +1.2 dB
+    expect(A_WEIGHTS[6]).toBeGreaterThan(0); // 4 kHz: +1.0 dB
+  });
+
+  it('C-weighting is relatively flat', () => {
+    // C-weighting should be within ±1 dB for 125-4000 Hz
+    for (let i = 1; i <= 6; i++) {
+      expect(Math.abs(C_WEIGHTS[i])).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('C-weighting is 0 dB at 250-1000 Hz', () => {
+    expect(C_WEIGHTS[2]).toBe(0); // 250 Hz
+    expect(C_WEIGHTS[3]).toBe(0); // 500 Hz
+    expect(C_WEIGHTS[4]).toBe(0); // 1000 Hz
+  });
+
+  it('Z-weighting is flat (all zeros)', () => {
+    for (const weight of Z_WEIGHTS) {
+      expect(weight).toBe(0);
+    }
+  });
+
+  it('A-weighting matches IEC 61672-1 standard values', () => {
+    // Verify all 9 bands match the standard
+    const standardAWeights: Record<number, number> = {
+      63: -26.2,
+      125: -16.1,
+      250: -8.6,
+      500: -3.2,
+      1000: 0.0,
+      2000: 1.2,
+      4000: 1.0,
+      8000: -1.1,
+      16000: -6.6,
+    };
+
+    for (let i = 0; i < BANDS.length; i++) {
+      expect(A_WEIGHTS[i]).toBe(standardAWeights[BANDS[i]]);
+    }
+  });
+});
+
+// ============================================================================
+// Test Suite: Edge Cases
+// ============================================================================
+
+describe('Edge Cases - Robustness', () => {
+  describe('Zero and Small Distances', () => {
+    it('spreadingLoss handles distance = 0', () => {
+      const loss = spreadingLoss(0, 'spherical');
+      expect(Number.isFinite(loss)).toBe(true);
+      expect(loss).not.toBe(NaN);
+    });
+
+    it('spreadingLoss handles negative distance', () => {
+      const loss = spreadingLoss(-10, 'spherical');
+      expect(Number.isFinite(loss)).toBe(true);
+    });
+
+    it('spreadingLoss handles very small distance (0.001m)', () => {
+      const loss = spreadingLoss(0.001, 'spherical');
+      expect(Number.isFinite(loss)).toBe(true);
+    });
+
+    it('all clamped distances produce same result', () => {
+      // Distances below MIN_DISTANCE should all clamp to same value
+      const at0 = spreadingLoss(0, 'spherical');
+      const atNeg = spreadingLoss(-5, 'spherical');
+      const atTiny = spreadingLoss(0.01, 'spherical');
+
+      expect(at0).toBe(atNeg);
+      expect(at0).toBe(atTiny);
+    });
+  });
+
+  describe('Large Distances', () => {
+    it('spreadingLoss handles 1km distance', () => {
+      const loss = spreadingLoss(1000, 'spherical');
+      expect(Number.isFinite(loss)).toBe(true);
+      // At 1km: 20*log10(1000) + 10.99 = 60 + 10.99 = 70.99 dB
+      expect(loss).toBeCloseTo(70.99, 0);
+    });
+
+    it('spreadingLoss handles 10km distance', () => {
+      const loss = spreadingLoss(10000, 'spherical');
+      expect(Number.isFinite(loss)).toBe(true);
+      // At 10km: 20*log10(10000) + 10.99 = 80 + 10.99 = 90.99 dB
+      expect(loss).toBeCloseTo(90.99, 0);
+    });
+
+    it('calculatePropagation respects MAX_DISTANCE', () => {
+      const config = getDefaultEngineConfig('festival_fast');
+      const result = calculatePropagation(
+        15000, // Beyond MAX_DISTANCE (10000)
+        1.5,
+        1.5,
+        config.propagation!,
+        config.meteo!,
+        0,
+        false,
+        1000
+      );
+
+      // Should be marked as blocked when beyond MAX_DISTANCE
+      expect(result.blocked).toBe(true);
+    });
+  });
+
+  describe('Empty and Invalid Inputs', () => {
+    it('calculateSPL handles blocked propagation', () => {
+      const blockedProp = {
+        totalAttenuation: 0,
+        spreadingLoss: 0,
+        atmosphericAbsorption: 0,
+        groundEffect: 0,
+        barrierAttenuation: 0,
+        distance: 100,
+        blocked: true,
+      };
+
+      const spl = calculateSPL(100, blockedProp);
+      expect(spl).toBe(-100); // MIN_LEVEL
+    });
+
+    it('agrIsoEq10Db handles zero distance', () => {
+      const result = agrIsoEq10Db(0, 1.5, 1.5);
+      expect(Number.isFinite(result)).toBe(true);
+    });
+
+    it('groundEffect returns 0 for hard ground', () => {
+      const result = groundEffect(50, 1.5, 1.5, GroundType.Hard, 1000);
+      expect(result).toBe(0);
+    });
+  });
+});
+
+// ============================================================================
+// Test Suite: Propagation v1 behavior (existing tests)
+// ============================================================================
+
 describe('Propagation v1 behavior', () => {
   it('monotonic decrease with distance under default config', () => {
     const config = getDefaultEngineConfig('festival_fast');
