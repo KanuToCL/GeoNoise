@@ -2,7 +2,7 @@
 
 > **Created:** 2025-01-09
 > **Status:** Active
-> **Current Coverage:** 77 tests passing
+> **Current Coverage:** 80 tests passing (61 engine + 19 shared/backends/web)
 
 This document outlines recommended unit tests for GeoNoise, organized by priority. Tests are linked to physics audit issues where applicable.
 
@@ -13,7 +13,7 @@ This document outlines recommended unit tests for GeoNoise, organized by priorit
 | Package | Test File | Tests | Description |
 |---------|-----------|-------|-------------|
 | `packages/shared` | `phasor/index.spec.ts` | 26 | Complex arithmetic, pressure/dB conversion, phasor summation |
-| `packages/engine` | `propagation.spec.ts` | 18 | Spreading loss (Issue #1), propagation behavior |
+| `packages/engine` | `propagation.spec.ts` | 38 | Spreading loss, speed of sound, weighting curves, edge cases |
 | `packages/engine` | `probe-diffraction.spec.ts` | 11 | Probe computation (Issue #2b), simple/coherent modes |
 | `packages/engine` | `ground-two-ray.spec.ts` | 6 | Two-ray ground reflection model |
 | `packages/engine` | `panel.spec.ts` | 3 | Panel sampling and statistics |
@@ -24,7 +24,7 @@ This document outlines recommended unit tests for GeoNoise, organized by priorit
 | `packages/engine-backends` | `router.spec.ts` | 2 | Backend router |
 | `apps/web` | `export.test.ts` | 1 | CSV export schema |
 | `apps/web` | `computePreference.test.ts` | 4 | GPU/CPU preference persistence |
-| **Total** | **12 files** | **77** | |
+| **Total** | **12 files** | **96** | |
 
 ---
 
@@ -170,11 +170,12 @@ describe('Ground Absorption - Per-Band', () => {
 });
 ```
 
-### Speed of Sound Consistency (Issue #18)
+### Speed of Sound Consistency (Issue #18) ✅ IMPLEMENTED
 ```typescript
-describe('Speed of Sound', () => {
-  it('constant matches formula at 20°C');
-  it('varies correctly with temperature');
+describe('Speed of Sound Consistency - Issue #18', () => {
+  it('formula at 20°C is close to constant (within 0.5%)');
+  it('formula increases with temperature');
+  it('formula gives expected values at standard temperatures');
 });
 ```
 
@@ -243,12 +244,16 @@ describe('Panel Statistics', () => {
 });
 ```
 
-### A/C/Z Weighting
+### A/C/Z Weighting ✅ IMPLEMENTED
 ```typescript
-describe('Frequency Weighting', () => {
-  it('A-weighting matches standard curve at all bands');
-  it('C-weighting matches standard curve at all bands');
-  it('Z-weighting is flat (0 dB offset)');
+describe('Frequency Weighting Curves', () => {
+  it('A-weighting is 0 dB at 1000 Hz reference');
+  it('A-weighting heavily attenuates low frequencies');
+  it('A-weighting has slight boost at 2-4 kHz');
+  it('C-weighting is relatively flat');
+  it('C-weighting is 0 dB at 250-1000 Hz');
+  it('Z-weighting is flat (all zeros)');
+  it('A-weighting matches IEC 61672-1 standard values');
 });
 ```
 
@@ -258,11 +263,13 @@ describe('Frequency Weighting', () => {
 
 Handle unusual inputs gracefully.
 
-### Co-located Source/Receiver
+### Co-located Source/Receiver ✅ IMPLEMENTED
 ```typescript
-describe('Edge Case - Zero Distance', () => {
-  it('clamps to MIN_DISTANCE, does not crash');
-  it('produces finite, reasonable level');
+describe('Edge Cases - Robustness', () => {
+  it('spreadingLoss handles distance = 0');
+  it('spreadingLoss handles negative distance');
+  it('spreadingLoss handles very small distance (0.001m)');
+  it('all clamped distances produce same result');
 });
 ```
 
@@ -275,12 +282,12 @@ describe('Edge Case - Negative Z', () => {
 });
 ```
 
-### Very Large Distances
+### Very Large Distances ✅ IMPLEMENTED
 ```typescript
-describe('Edge Case - Large Distance', () => {
-  it('handles 10km distance without overflow');
-  it('produces finite result (not NaN/Infinity)');
-  it('respects MAX_DISTANCE cutoff');
+describe('Edge Cases - Robustness', () => {
+  it('spreadingLoss handles 1km distance');
+  it('spreadingLoss handles 10km distance');
+  it('calculatePropagation respects MAX_DISTANCE');
 });
 ```
 
@@ -338,3 +345,4 @@ npx vitest watch
 | 2025-01-09 | Added 13 spreading loss tests (Issue #1) |
 | 2025-01-09 | Added 3 coherent probe tests (Issue #2b) |
 | 2025-01-09 | Fixed cpuWorkerBackend test (missing spectrum) |
+| 2025-01-09 | Added 19 low-hanging tests: speed of sound, weighting curves, edge cases |
