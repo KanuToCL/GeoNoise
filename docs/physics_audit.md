@@ -1,7 +1,7 @@
 # Physics Engine Audit
 
 > **Audit Date:** 2025-01-08 (Updated: 2025-01-09)
-> **Status:** 10 resolved, 10 pending
+> **Status:** 12 resolved, 8 pending
 > **Auditor:** Physics review session
 
 This document tracks identified issues in the GeoNoise physics engine, organized by severity. Each issue includes the current formulation, current code implementation, and proposed fix.
@@ -10,7 +10,7 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 
 ## Quick Status Summary
 
-### ✅ Resolved (11)
+### ✅ Resolved (12)
 - **#1** Spreading Loss Formula Constant Ambiguity — *Fixed with exact constants + documentation*
 - **#2** Two-Ray Ground Model Sign Inconsistency — *Resolved by design (see [Calculation Profile Presets](./ROADMAP.md#calculation-profile-presets))*
 - **#2b** computeProbeCoherent Double-Counts Direct Path — *Fixed: paths now processed uniformly*
@@ -18,6 +18,7 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 - **#4** Atmospheric Absorption Uses Direct Distance — *Fixed: now uses actualPathLength for diffracted paths*
 - **#5** Side Diffraction Geometry Oversimplified — *Fixed: horizontal diffraction at ground level*
 - **#5 (probeWorker)** Simplified Atmospheric Absorption in probeWorker — *Fixed: now respects UI model selection*
+- **#6** Delany-Bazley Extrapolation Outside Valid Range — *Fixed: bounds checking + Miki (1990) extension*
 - **#10** "Simple" Atmospheric Absorption Model Incorrectly Formulated — *Fixed: replaced buggy formula with lookup table*
 - **#11** Diffraction Only Traced When Direct Path Blocked — *Fixed: now traces diffraction for nearby barriers even when direct path is unblocked (for coherent summation accuracy)*
 - **#16** Same Formula for Thin/Thick Barriers — *Fixed: buildings now use coefficient 40 and cap 25 dB*
@@ -26,11 +27,10 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 ### 🔴 Critical - Pending (0)
 *No critical issues pending*
 
-### 🟠 Moderate - Pending (4)
-- **#6** Delany-Bazley Extrapolation Outside Valid Range
+### 🟠 Moderate - Pending (3)
 - **#7** Ground Reflection Assumes Flat Ground (z=0)
-- **#8** Maekawa Negative N Threshold Documentation
 - **#9** Wall Reflection Height Geometry Incorrect
+- **#12** Mixed Ground Sigma Calculation Arbitrary
 
 ### 🟡 Minor - Pending (5)
 - **#13** Sommerfeld Correction Discontinuity at |w|=4
@@ -606,9 +606,9 @@ if (shouldUseSideDiffraction(segment.length, sideDiffractionMode)) {
 ## 🟠 MODERATE ISSUES
 
 ### 6. Delany-Bazley Extrapolation Outside Valid Range
-- [ ] **Status:** Open
-- **Location:** `packages/engine/src/propagation/ground.ts:19-27`
-- **Impact:** Invalid results for hard surfaces
+- [x] **Status:** Resolved
+- **Location:** `packages/engine/src/propagation/ground.ts:19-75`
+- **Impact:** Invalid results for hard surfaces → Now properly handled
 
 #### Current Formulation (Math)
 Delany-Bazley empirical model:
@@ -633,39 +633,62 @@ export function delanyBazleyNormalizedImpedance(fHz: number, sigma: number): Com
 }
 ```
 
-#### Proposed Implementation
+#### After (Fixed Code)
 ```typescript
+/**
+ * Miki (1990) modification of Delany-Bazley for extended frequency range.
+ *
+ * Miki's model extends the valid range of Delany-Bazley to higher f/σ ratios
+ * and provides more physically realistic behavior at the boundaries.
+ *
+ * Reference: Y. Miki, "Acoustical properties of porous materials - Modifications
+ * of Delany-Bazley models", J. Acoust. Soc. Jpn., 11(1), 19-24, 1990.
+ *
+ * Valid range: 0.01 < f/σ < 10.0 (much wider than Delany-Bazley)
+ */
+function mikiNormalizedImpedance(fHz: number, sigma: number): Complex {
+  const frequency = Math.max(20, fHz);
+  const resistivity = Math.max(1, sigma);
+  const ratio = frequency / resistivity;
+
+  // Miki coefficients (modified Delany-Bazley)
+  const re = 1 + 5.50 * Math.pow(ratio, -0.632);
+  const im = -8.43 * Math.pow(ratio, -0.632);
+  return complex(re, im);
+}
+
+/**
+ * Delany-Bazley normalized surface impedance model.
+ *
+ * Issue #6 Fix: Added bounds checking for the f/σ ratio.
+ *
+ * The original Delany-Bazley (1970) empirical model is only valid for:
+ *   0.01 < f/σ < 1.0
+ *
+ * Outside this range:
+ * - For f/σ < 0.01 (very hard surface): Returns high impedance (|Γ| ≈ 1)
+ * - For f/σ > 1.0 (outside valid range): Uses Miki (1990) extension
+ */
 export function delanyBazleyNormalizedImpedance(fHz: number, sigma: number): Complex {
   const frequency = Math.max(20, fHz);
   const resistivity = Math.max(1, sigma);
   const ratio = frequency / resistivity;
 
-  // Check validity range
+  // Issue #6 Fix: Check validity range
+
+  // Below valid range (very hard surface): high impedance → |Γ| ≈ 1
   if (ratio < 0.01) {
-    // Very hard surface: return hard ground impedance (infinite)
-    // Approximate with very large real impedance
-    return complex(1000, 0);  // Effectively |Γ| ≈ 1
+    return complex(100, 0);
   }
 
+  // Above valid range: use Miki (1990) extension
   if (ratio > 1.0) {
-    // Outside valid range: use Miki modification or clamp
-    // Miki (1990) extends validity to higher ratios
-    return mikiNormalizedImpedance(frequency, resistivity);
+    return mikiNormalizedImpedance(fHz, sigma);
   }
 
-  // Within valid range: use standard Delany-Bazley
+  // Within valid range (0.01 ≤ f/σ ≤ 1.0): use standard Delany-Bazley
   const re = 1 + 9.08 * Math.pow(ratio, -0.75);
   const im = -11.9 * Math.pow(ratio, -0.73);
-  return complex(re, im);
-}
-
-/**
- * Miki (1990) modification of Delany-Bazley for extended frequency range
- */
-function mikiNormalizedImpedance(fHz: number, sigma: number): Complex {
-  const ratio = fHz / sigma;
-  const re = 1 + 5.50 * Math.pow(ratio, -0.632);
-  const im = -8.43 * Math.pow(ratio, -0.632);
   return complex(re, im);
 }
 ```
@@ -1600,9 +1623,9 @@ interface RayPathWithSpectralLoss extends RayPath {
 | Severity | Total | Resolved | Pending |
 |----------|-------|----------|---------||
 | 🔴 Critical | 6 | 6 | 0 |
-| 🟠 Moderate | 7 | 1 | 6 |
+| 🟠 Moderate | 7 | 2 | 5 |
 | 🟡 Minor | 7 | 4 | 3 |
-| **Total** | **20** | **11** | **9** |
+| **Total** | **20** | **12** | **8** |
 
 ---
 

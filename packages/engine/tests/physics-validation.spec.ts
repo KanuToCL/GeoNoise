@@ -2149,21 +2149,161 @@ describe('KNOWN GAPS - Critical Physics Issues', () => {
 });
 
 describe('KNOWN GAPS - Moderate Physics Issues', () => {
-  // Issue #6: Delany-Bazley Extrapolation
-  describe('Issue #6: Delany-Bazley Range (NOT IMPLEMENTED)', () => {
-    it('should clamp f/σ ratio to valid range 0.01-1.0', () => {
-      // Current: No bounds check on ratio
-      // Correct: Clamp or use Miki extension for out-of-range
+  // Issue #6: Delany-Bazley Extrapolation - NOW IMPLEMENTED
+  describe('Issue #6: Delany-Bazley Range (RESOLVED)', () => {
+    /**
+     * Issue #6 Fix: Delany-Bazley range bounds checking
+     *
+     * The original Delany-Bazley (1970) empirical model is valid for:
+     *   0.01 < f/σ < 1.0
+     *
+     * Outside this range:
+     * - f/σ < 0.01 (very hard surface): Returns high impedance (Re >> 1)
+     * - f/σ > 1.0 (outside valid range): Uses Miki (1990) extension
+     */
+
+    it('should return high impedance for very low f/σ ratio (hard surface)', () => {
+      // Very hard surface: high σ = 200,000, low frequency = 125 Hz
+      // f/σ = 125/200000 = 0.000625 < 0.01
+      const sigma = 200000;
+      const frequency = 125;
+      const ratio = frequency / sigma;
+
+      const impedance = delanyBazleyNormalizedImpedance(frequency, sigma);
+
+      // Should return high impedance (approximating rigid surface)
+      const hasHighRealPart = impedance.re > 50;
+      const hasLowImagPart = Math.abs(impedance.im) < 10;
+      const passed = hasHighRealPart && hasLowImagPart && ratio < 0.01;
+
       recordResult({
-        category: 'GAP-Moderate',
-        name: '#6 Delany-Bazley range',
-        expected: 'Clamp 0.01 < f/σ < 1.0',
-        actual: 'No bounds check',
-        tolerance: 'NOT IMPLEMENTED',
-        passed: false,
+        category: 'Issue #6',
+        name: '#6 Low f/σ ratio (hard surface)',
+        expected: `f/σ < 0.01 → high impedance (Re > 50)`,
+        actual: `f/σ=${ratio.toFixed(6)}, ζ=(${impedance.re.toFixed(1)}, ${impedance.im.toFixed(1)})`,
+        tolerance: 'inequality',
+        passed,
+        reference: 'Delany-Bazley 1970, Issue #6'
+      });
+
+      expect(ratio).toBeLessThan(0.01);
+      expect(impedance.re).toBeGreaterThan(50);
+    });
+
+    it('should use Miki extension for high f/σ ratio', () => {
+      // High f/σ: low σ = 5000, high frequency = 8000 Hz
+      // f/σ = 8000/5000 = 1.6 > 1.0
+      const sigma = 5000;
+      const frequency = 8000;
+      const ratio = frequency / sigma;
+
+      const impedance = delanyBazleyNormalizedImpedance(frequency, sigma);
+
+      // Miki formula: Re = 1 + 5.50 * (f/σ)^-0.632
+      // For ratio=1.6: Re = 1 + 5.50 * 1.6^-0.632 ≈ 1 + 5.50 * 0.715 ≈ 4.93
+      const expectedRe = 1 + 5.50 * Math.pow(ratio, -0.632);
+      const expectedIm = -8.43 * Math.pow(ratio, -0.632);
+
+      const passed = Math.abs(impedance.re - expectedRe) < 0.1 && ratio > 1.0;
+
+      recordResult({
+        category: 'Issue #6',
+        name: '#6 High f/σ ratio (Miki extension)',
+        expected: `f/σ > 1.0 → Miki: Re≈${expectedRe.toFixed(2)}`,
+        actual: `f/σ=${ratio.toFixed(2)}, ζ=(${impedance.re.toFixed(2)}, ${impedance.im.toFixed(2)})`,
+        tolerance: '±0.1',
+        passed,
+        reference: 'Miki 1990, Issue #6'
+      });
+
+      expect(ratio).toBeGreaterThan(1.0);
+      expect(impedance.re).toBeCloseTo(expectedRe, 1);
+      expect(impedance.im).toBeCloseTo(expectedIm, 1);
+    });
+
+    it('should use standard Delany-Bazley within valid range', () => {
+      // Within valid range: σ = 20000, f = 1000 Hz
+      // f/σ = 1000/20000 = 0.05 (within 0.01 < f/σ < 1.0)
+      const sigma = 20000;
+      const frequency = 1000;
+      const ratio = frequency / sigma;
+
+      const impedance = delanyBazleyNormalizedImpedance(frequency, sigma);
+
+      // Delany-Bazley formula: Re = 1 + 9.08 * (f/σ)^-0.75
+      // For ratio=0.05: Re = 1 + 9.08 * 0.05^-0.75 ≈ 1 + 9.08 * 11.18 ≈ 102.5
+      const expectedRe = 1 + 9.08 * Math.pow(ratio, -0.75);
+      const expectedIm = -11.9 * Math.pow(ratio, -0.73);
+
+      const withinRange = ratio > 0.01 && ratio < 1.0;
+      const passed = withinRange && Math.abs(impedance.re - expectedRe) < 1;
+
+      recordResult({
+        category: 'Issue #6',
+        name: '#6 Valid range (standard D-B)',
+        expected: `0.01 < f/σ < 1.0 → standard D-B`,
+        actual: `f/σ=${ratio.toFixed(3)}, ζ=(${impedance.re.toFixed(1)}, ${impedance.im.toFixed(1)})`,
+        tolerance: '±1',
+        passed,
         reference: 'Delany-Bazley 1970'
       });
-      expect(true).toBe(true);
+
+      expect(ratio).toBeGreaterThan(0.01);
+      expect(ratio).toBeLessThan(1.0);
+      expect(impedance.re).toBeCloseTo(expectedRe, 0);
+    });
+
+    it('impedance should be finite for all valid inputs', () => {
+      // Test edge cases to ensure no NaN/Infinity
+      const testCases = [
+        { f: 63, sigma: 1000000 },   // Very hard (ratio = 0.000063)
+        { f: 16000, sigma: 1000 },   // Very soft (ratio = 16)
+        { f: 1000, sigma: 20000 },   // Typical soft ground
+        { f: 500, sigma: 50000 },    // Typical mixed ground
+      ];
+
+      let allFinite = true;
+      const results: string[] = [];
+
+      for (const { f, sigma } of testCases) {
+        const z = delanyBazleyNormalizedImpedance(f, sigma);
+        const isFinite = Number.isFinite(z.re) && Number.isFinite(z.im);
+        if (!isFinite) allFinite = false;
+        results.push(`f/σ=${(f/sigma).toFixed(4)}: ${isFinite ? 'OK' : 'FAIL'}`);
+      }
+
+      recordResult({
+        category: 'Issue #6',
+        name: '#6 Finite for all inputs',
+        expected: 'All impedances finite',
+        actual: results.join(', '),
+        tolerance: 'exact',
+        passed: allFinite,
+        reference: 'Robustness'
+      });
+
+      expect(allFinite).toBe(true);
+    });
+
+    it('reflection coefficient should approach 1 for very hard surfaces', () => {
+      // For very hard surfaces (high impedance), |Γ| → 1
+      const gamma = reflectionCoeff(1000, 0.5, 'soft', 500000, 0.5, 10, 343);
+      const gammaMag = Math.sqrt(gamma.re * gamma.re + gamma.im * gamma.im);
+
+      // With very high sigma (500000), surface is effectively rigid
+      const passed = gammaMag > 0.9;
+
+      recordResult({
+        category: 'Issue #6',
+        name: '#6 Hard surface |Γ| ≈ 1',
+        expected: '|Γ| > 0.9',
+        actual: `|Γ| = ${gammaMag.toFixed(3)}`,
+        tolerance: 'inequality',
+        passed,
+        reference: 'Physics'
+      });
+
+      expect(gammaMag).toBeGreaterThan(0.9);
     });
   });
 

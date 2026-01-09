@@ -15,12 +15,69 @@ import {
 
 export type GroundType = PropagationConfig['groundType'];
 
-// Delany–Bazley coefficients (not Miki-modified).
+/**
+ * Miki (1990) modification of Delany-Bazley for extended frequency range.
+ *
+ * Miki's model extends the valid range of Delany-Bazley to higher f/σ ratios
+ * and provides more physically realistic behavior at the boundaries.
+ *
+ * Reference: Y. Miki, "Acoustical properties of porous materials - Modifications
+ * of Delany-Bazley models", J. Acoust. Soc. Jpn., 11(1), 19-24, 1990.
+ *
+ * Valid range: 0.01 < f/σ < 10.0 (much wider than Delany-Bazley)
+ */
+function mikiNormalizedImpedance(fHz: number, sigma: number): Complex {
+  const frequency = Math.max(20, fHz);
+  const resistivity = Math.max(1, sigma);
+  const ratio = frequency / resistivity;
+
+  // Miki coefficients (modified Delany-Bazley)
+  const re = 1 + 5.50 * Math.pow(ratio, -0.632);
+  const im = -8.43 * Math.pow(ratio, -0.632);
+  return complex(re, im);
+}
+
+/**
+ * Delany-Bazley normalized surface impedance model.
+ *
+ * Issue #6 Fix: Added bounds checking for the f/σ ratio.
+ *
+ * The original Delany-Bazley (1970) empirical model is only valid for:
+ *   0.01 < f/σ < 1.0
+ *
+ * Outside this range:
+ * - For f/σ < 0.01 (very hard surface): Returns high impedance (|Γ| ≈ 1)
+ * - For f/σ > 1.0 (outside valid range): Uses Miki (1990) extension
+ *
+ * Reference: M.E. Delany and E.N. Bazley, "Acoustical properties of fibrous
+ * absorbent materials", Applied Acoustics 3, 105-116, 1970.
+ *
+ * @param fHz - Frequency in Hz
+ * @param sigma - Flow resistivity in Pa·s/m² (rayls/m)
+ * @returns Complex normalized impedance ζ = Z / (ρc)
+ */
 export function delanyBazleyNormalizedImpedance(fHz: number, sigma: number): Complex {
   const frequency = Math.max(20, fHz);
   const resistivity = Math.max(1, sigma);
   const ratio = frequency / resistivity;
 
+  // Issue #6 Fix: Check validity range
+
+  // Below valid range (very hard surface): high impedance → |Γ| ≈ 1
+  // This approximates a rigid surface where almost all sound is reflected
+  if (ratio < 0.01) {
+    // Return very high impedance (real >> 1, imaginary ≈ 0)
+    // At the limit, Γ = (ζcosθ - 1)/(ζcosθ + 1) → 1 as ζ → ∞
+    return complex(100, 0);
+  }
+
+  // Above valid range: use Miki (1990) extension
+  // Miki's model is valid up to f/σ ≈ 10.0 and provides smoother behavior
+  if (ratio > 1.0) {
+    return mikiNormalizedImpedance(fHz, sigma);
+  }
+
+  // Within valid range (0.01 ≤ f/σ ≤ 1.0): use standard Delany-Bazley
   const re = 1 + 9.08 * Math.pow(ratio, -0.75);
   const im = -11.9 * Math.pow(ratio, -0.73);
   return complex(re, im);
