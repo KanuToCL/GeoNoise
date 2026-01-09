@@ -24,6 +24,8 @@
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:physics": "vitest run tests/physics-validation.spec.ts",
+    "test:physics-report": "PHYSICS_REPORT=true vitest run tests/physics-validation.spec.ts",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
