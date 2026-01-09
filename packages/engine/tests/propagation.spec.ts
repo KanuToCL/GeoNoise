@@ -170,6 +170,167 @@ describe('Spreading Loss - Issue #1 Fix', () => {
 // ============================================================================
 
 // ============================================================================
+// Test Suite: Atmospheric Absorption Path Length (Issue #4 Fix)
+// ============================================================================
+
+describe('Atmospheric Absorption Path Length - Issue #4 Fix', () => {
+  // Issue #4: Atmospheric absorption was using direct distance for diffracted paths,
+  // but sound traveling over/around a barrier travels a LONGER path.
+  // The fix adds an optional actualPathLength parameter to calculatePropagation.
+
+  describe('calculatePropagation uses actualPathLength for atmospheric absorption', () => {
+    it('uses direct distance when actualPathLength is not provided', () => {
+      const config = getDefaultEngineConfig('festival_fast');
+      const propConfig = { ...config.propagation!, atmosphericAbsorption: 'iso9613' as const };
+      const meteo = config.meteo!;
+
+      // 100m direct path, high frequency (8kHz) for measurable absorption
+      const result = calculatePropagation(100, 1.5, 1.5, propConfig, meteo, 0, false, 8000);
+
+      // At 8kHz, α ≈ 0.117 dB/m → 100m ≈ 11.7 dB absorption
+      expect(result.atmosphericAbsorption).toBeGreaterThan(5);
+      expect(result.atmosphericAbsorption).toBeLessThan(20);
+    });
+
+    it('uses actualPathLength when provided (diffracted path)', () => {
+      const config = getDefaultEngineConfig('festival_fast');
+      const propConfig = { ...config.propagation!, atmosphericAbsorption: 'iso9613' as const };
+      const meteo = config.meteo!;
+
+      // Direct distance 100m, but actual path 150m (50m detour over barrier)
+      const directDistance = 100;
+      const actualPathLength = 150;
+
+      const result = calculatePropagation(
+        directDistance,
+        1.5,
+        1.5,
+        propConfig,
+        meteo,
+        50, // pathDiff
+        true, // blocked
+        8000, // high frequency
+        actualPathLength
+      );
+
+      // Absorption should be based on 150m, not 100m
+      // At 8kHz, α ≈ 0.117 dB/m → 150m ≈ 17.5 dB absorption
+      expect(result.atmosphericAbsorption).toBeGreaterThan(10);
+    });
+
+    it('actualPathLength produces higher absorption than direct distance', () => {
+      const config = getDefaultEngineConfig('festival_fast');
+      const propConfig = { ...config.propagation!, atmosphericAbsorption: 'iso9613' as const };
+      const meteo = config.meteo!;
+
+      const directDistance = 100;
+      const actualPathLength = 150;
+
+      // Unblocked path using direct distance
+      const unblocked = calculatePropagation(
+        directDistance,
+        1.5,
+        1.5,
+        propConfig,
+        meteo,
+        0,
+        false,
+        8000 // high frequency for measurable difference
+      );
+
+      // Blocked path using actual path length
+      const blocked = calculatePropagation(
+        directDistance,
+        1.5,
+        1.5,
+        propConfig,
+        meteo,
+        50, // pathDiff
+        true,
+        8000,
+        actualPathLength
+      );
+
+      // Blocked path should have MORE atmospheric absorption due to longer path
+      expect(blocked.atmosphericAbsorption).toBeGreaterThan(unblocked.atmosphericAbsorption);
+    });
+
+    it('difference is significant at high frequencies', () => {
+      const config = getDefaultEngineConfig('festival_fast');
+      const propConfig = { ...config.propagation!, atmosphericAbsorption: 'iso9613' as const };
+      const meteo = config.meteo!;
+
+      const directDistance = 100;
+      const extraPath = 50; // 50m detour
+      const actualPathLength = directDistance + extraPath;
+
+      // At 8kHz: α ≈ 0.117 dB/m → extra 50m ≈ 5.85 dB more absorption
+      const withDirect = calculatePropagation(
+        directDistance, 1.5, 1.5, propConfig, meteo, 0, false, 8000
+      );
+      const withActual = calculatePropagation(
+        directDistance, 1.5, 1.5, propConfig, meteo, extraPath, true, 8000, actualPathLength
+      );
+
+      const absorptionDiff = withActual.atmosphericAbsorption - withDirect.atmosphericAbsorption;
+
+      // Should be roughly 50m × 0.117 dB/m ≈ 5.85 dB difference
+      expect(absorptionDiff).toBeGreaterThan(3);
+      expect(absorptionDiff).toBeLessThan(10);
+    });
+
+    it('difference is minimal at low frequencies', () => {
+      const config = getDefaultEngineConfig('festival_fast');
+      const propConfig = { ...config.propagation!, atmosphericAbsorption: 'iso9613' as const };
+      const meteo = config.meteo!;
+
+      const directDistance = 100;
+      const actualPathLength = 150;
+
+      // At 125 Hz: α ≈ 0.0003 dB/m → extra 50m ≈ 0.015 dB
+      const withDirect = calculatePropagation(
+        directDistance, 1.5, 1.5, propConfig, meteo, 0, false, 125
+      );
+      const withActual = calculatePropagation(
+        directDistance, 1.5, 1.5, propConfig, meteo, 50, true, 125, actualPathLength
+      );
+
+      const absorptionDiff = withActual.atmosphericAbsorption - withDirect.atmosphericAbsorption;
+
+      // Should be very small at low frequencies (< 1 dB)
+      expect(absorptionDiff).toBeLessThan(1);
+    });
+  });
+
+  describe('spreading loss still uses direct distance', () => {
+    it('spreading loss is based on direct distance, not actual path', () => {
+      const config = getDefaultEngineConfig('festival_fast');
+      const propConfig = config.propagation!;
+      const meteo = config.meteo!;
+
+      const directDistance = 100;
+      const actualPathLength = 150;
+
+      const result = calculatePropagation(
+        directDistance,
+        1.5,
+        1.5,
+        propConfig,
+        meteo,
+        50,
+        true,
+        1000,
+        actualPathLength
+      );
+
+      // Spreading loss should be based on 100m (direct distance)
+      // At 100m: 20*log10(100) + 10.99 = 40 + 10.99 = 50.99 dB
+      expect(result.spreadingLoss).toBeCloseTo(50.99, 0);
+    });
+  });
+});
+
+// ============================================================================
 // Test Suite: Speed of Sound Consistency (Issue #18)
 // ============================================================================
 
