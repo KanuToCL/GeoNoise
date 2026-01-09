@@ -599,6 +599,69 @@ describe('Barrier Attenuation - Issue #16 Fix', () => {
 });
 
 // ============================================================================
+// Test Suite: Atmospheric Absorption None Option
+// ============================================================================
+
+describe('Atmospheric Absorption None Option', () => {
+  it('returns zero atmospheric absorption when mode is none', () => {
+    const config = getDefaultEngineConfig('festival_fast');
+    const propConfig = { ...config.propagation!, atmosphericAbsorption: 'none' as const };
+    const meteo = config.meteo!;
+
+    // High frequency at long distance - would normally have significant absorption
+    const result = calculatePropagation(
+      500,  // 500m distance
+      1.5,
+      1.5,
+      propConfig,
+      meteo,
+      0,
+      false,
+      8000  // 8kHz - normally ~0.117 dB/m
+    );
+
+    // With 'none', atmospheric absorption should be 0
+    expect(result.atmosphericAbsorption).toBe(0);
+  });
+
+  it('none mode produces lower total attenuation than iso9613', () => {
+    const config = getDefaultEngineConfig('festival_fast');
+    const meteo = config.meteo!;
+
+    const noneResult = calculatePropagation(
+      200, 1.5, 1.5,
+      { ...config.propagation!, atmosphericAbsorption: 'none' as const },
+      meteo, 0, false, 8000
+    );
+
+    const isoResult = calculatePropagation(
+      200, 1.5, 1.5,
+      { ...config.propagation!, atmosphericAbsorption: 'iso9613' as const },
+      meteo, 0, false, 8000
+    );
+
+    // ISO 9613 should have MORE total attenuation due to atmospheric absorption
+    expect(isoResult.totalAttenuation).toBeGreaterThan(noneResult.totalAttenuation);
+    expect(noneResult.atmosphericAbsorption).toBe(0);
+    expect(isoResult.atmosphericAbsorption).toBeGreaterThan(0);
+  });
+
+  it('none mode still includes spreading loss', () => {
+    const config = getDefaultEngineConfig('festival_fast');
+    const propConfig = { ...config.propagation!, atmosphericAbsorption: 'none' as const };
+    const meteo = config.meteo!;
+
+    const result = calculatePropagation(100, 1.5, 1.5, propConfig, meteo, 0, false, 1000);
+
+    // Spreading loss should still be present
+    // At 100m: 20*log10(100) + 10.99 ≈ 50.99 dB
+    expect(result.spreadingLoss).toBeGreaterThan(50);
+    expect(result.spreadingLoss).toBeLessThan(52);
+    expect(result.atmosphericAbsorption).toBe(0);
+  });
+});
+
+// ============================================================================
 // Test Suite: Frequency Weighting (A/C/Z)
 // ============================================================================
 
