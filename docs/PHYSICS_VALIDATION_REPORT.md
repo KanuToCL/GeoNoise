@@ -12,6 +12,12 @@ This report validates the acoustic propagation engine against known physical val
 | Spreading | Spherical @ 10m | 30.99 dB | 30.99 dB | ±0.01 dB | ✅ | ISO 9613-2 Eq.6 |
 | Spreading | Spherical @ 100m | 50.99 dB | 50.99 dB | ±0.01 dB | ✅ | ISO 9613-2 Eq.6 |
 | Spreading | Inverse Square Law | 6.02 dB/doubling | 6.02 dB/doubling | ±0.01 dB | ✅ | Physics |
+| Diffraction | Default threshold | 5 m (~1λ @ 63Hz) | 5.00 m | exact | ✅ | Issue #11 |
+| Diffraction | Blocked → diffract | direct blocked + 1 diffraction | blocked=true, diff=1 | exact | ✅ | Issue #11 |
+| Diffraction | Disabled → no diff | direct valid, 0 diffraction | valid=true, diff=0 | exact | ✅ | Issue #11 |
+| Diffraction | Nearby → include | δ < 5m, diffraction traced | δ=0.06m, traced=true | inequality | ✅ | Issue #11 |
+| Diffraction | Path difference δ | 2.36 m | 2.36 m | ±0.1 m | ✅ | Geometry |
+| Diffraction | Threshold ≈ λ(63Hz) | ~1.0 wavelengths | 0.92 wavelengths | ±20% | ✅ | Wave physics |
 | Atmospheric | None mode @ 8kHz | 0 dB | 0.00 dB | exact | ✅ | User setting |
 | Atmospheric | ISO 9613-1 @ 8kHz, 100m | 5-20 dB | 10.53 dB | range | ✅ | ISO 9613-1 |
 | Atmospheric | Frequency dependence | A_atm(8kHz) > A_atm(125Hz) | 10.53 > 0.04 | inequality | ✅ | ISO 9613-1 |
@@ -38,7 +44,7 @@ This report validates the acoustic propagation engine against known physical val
 
 ## Summary
 
-**27/27 tests passed** ✅
+**33/33 tests passed** ✅
 
 ## How to Run
 
@@ -53,8 +59,9 @@ PHYSICS_REPORT=true npx vitest run tests/physics-validation.spec.ts
 ## Categories Tested
 
 1. **Spreading Loss** (4 tests) - Geometric divergence per ISO 9613-2
-2. **Atmospheric Absorption** (3 tests) - Air absorption per ISO 9613-1
-3. **Barrier Diffraction** (6 tests) - Maekawa formula for thin and thick barriers
-4. **Speed of Sound** (3 tests) - Temperature-dependent sound speed
-5. **Combined Propagation** (3 tests) - End-to-end SPL calculations
-6. **Phasor Arithmetic** (8 tests) - Coherent summation, interference, phase calculations
+2. **Diffraction Ray Tracing** (6 tests) - Issue #11 fix for coherent summation
+3. **Atmospheric Absorption** (3 tests) - Air absorption per ISO 9613-1
+4. **Barrier Diffraction** (6 tests) - Maekawa formula for thin and thick barriers
+5. **Speed of Sound** (3 tests) - Temperature-dependent sound speed
+6. **Combined Propagation** (3 tests) - End-to-end SPL calculations
+7. **Phasor Arithmetic** (8 tests) - Coherent summation, interference, phase calculations

@@ -24,6 +24,14 @@ import {
   fresnelRadius,
   type Phasor,
 } from '@geonoise/shared';
+import {
+  traceAllPaths,
+  traceDiffractionPath,
+  DEFAULT_RAYTRACING_CONFIG,
+  type ReflectingSurface,
+  type RayTracingConfig,
+} from '../src/raytracing/index.js';
+import type { Point3D } from '@geonoise/core/coords';
 
 // ============================================================================
 // Test Result Collector for Report Generation
@@ -146,6 +154,203 @@ describe('Spreading Loss - ISO 9613-2', () => {
     });
 
     expect(actual).toBeCloseTo(expected, 2);
+  });
+});
+
+// ============================================================================
+// Diffraction Ray Tracing - Issue #11
+// ============================================================================
+
+describe('Diffraction Ray Tracing - Issue #11', () => {
+  const c = 343; // speed of sound m/s
+
+  /**
+   * Create a barrier surface for testing
+   */
+  function createBarrier(
+    p1: { x: number; y: number },
+    p2: { x: number; y: number },
+    height: number
+  ): ReflectingSurface {
+    return {
+      segment: { p1, p2 },
+      height,
+      surfaceType: 'hard',
+      absorption: 0,
+      id: 'test-barrier',
+    };
+  }
+
+  it('default config has maxDiffractionDeltaForUnblockedPath = 5.0m', () => {
+    const actual = DEFAULT_RAYTRACING_CONFIG.maxDiffractionDeltaForUnblockedPath;
+    const expected = 5.0;
+    const lambda63Hz = c / 63; // ~5.44m
+    const passed = Math.abs(actual - expected) < 0.01;
+
+    recordResult({
+      category: 'Diffraction',
+      name: 'Default threshold',
+      expected: `${expected} m (~1λ @ 63Hz)`,
+      actual: `${actual.toFixed(2)} m`,
+      tolerance: 'exact',
+      passed,
+      reference: 'Issue #11'
+    });
+
+    expect(actual).toBe(expected);
+  });
+
+  it('diffraction traced when direct path blocked', () => {
+    const source: Point3D = { x: 0, y: 0, z: 2 };
+    const receiver: Point3D = { x: 20, y: 0, z: 1.5 };
+    const barrier = createBarrier({ x: 10, y: -5 }, { x: 10, y: 5 }, 4);
+
+    const config: RayTracingConfig = {
+      ...DEFAULT_RAYTRACING_CONFIG,
+      includeGround: false,
+      maxDiffractionDeltaForUnblockedPath: 0, // Disable new feature
+    };
+
+    const paths = traceAllPaths(source, receiver, [], [barrier], config);
+    const directPath = paths.find(p => p.type === 'direct');
+    const diffPaths = paths.filter(p => p.type === 'diffracted');
+
+    const directBlocked = directPath && !directPath.valid;
+    const diffracted = diffPaths.length === 1;
+    const passed = directBlocked && diffracted;
+
+    recordResult({
+      category: 'Diffraction',
+      name: 'Blocked → diffract',
+      expected: 'direct blocked + 1 diffraction',
+      actual: `blocked=${directBlocked}, diff=${diffPaths.length}`,
+      tolerance: 'exact',
+      passed,
+      reference: 'Issue #11'
+    });
+
+    expect(directPath!.valid).toBe(false);
+    expect(diffPaths.length).toBe(1);
+  });
+
+  it('no diffraction when disabled and direct unblocked', () => {
+    const source: Point3D = { x: 0, y: 0, z: 2 };
+    const receiver: Point3D = { x: 20, y: 0, z: 1.5 };
+    // Barrier to the side - doesn't block direct path
+    const barrier = createBarrier({ x: 10, y: 5 }, { x: 10, y: 10 }, 4);
+
+    const config: RayTracingConfig = {
+      ...DEFAULT_RAYTRACING_CONFIG,
+      includeGround: false,
+      maxDiffractionDeltaForUnblockedPath: 0, // Disabled
+    };
+
+    const paths = traceAllPaths(source, receiver, [], [barrier], config);
+    const directPath = paths.find(p => p.type === 'direct');
+    const diffPaths = paths.filter(p => p.type === 'diffracted');
+
+    const directValid = directPath?.valid;
+    const noDiffraction = diffPaths.length === 0;
+    const passed = directValid === true && noDiffraction;
+
+    recordResult({
+      category: 'Diffraction',
+      name: 'Disabled → no diff',
+      expected: 'direct valid, 0 diffraction',
+      actual: `valid=${directValid}, diff=${diffPaths.length}`,
+      tolerance: 'exact',
+      passed,
+      reference: 'Issue #11'
+    });
+
+    expect(directPath!.valid).toBe(true);
+    expect(diffPaths.length).toBe(0);
+  });
+
+  it('diffraction traced for nearby barrier (δ < threshold)', () => {
+    const source: Point3D = { x: 0, y: 0, z: 2 };
+    const receiver: Point3D = { x: 20, y: 0, z: 1.5 };
+    // Low barrier - will have small path difference
+    const barrier = createBarrier({ x: 10, y: -5 }, { x: 10, y: 5 }, 2.5);
+
+    const config: RayTracingConfig = {
+      ...DEFAULT_RAYTRACING_CONFIG,
+      includeGround: false,
+      maxDiffractionDeltaForUnblockedPath: 5.0, // Enabled
+    };
+
+    const paths = traceAllPaths(source, receiver, [], [barrier], config);
+    const diffPaths = paths.filter(p => p.type === 'diffracted');
+
+    const hasDiffraction = diffPaths.length > 0;
+    const pathDiff = diffPaths[0]?.pathDifference ?? 999;
+    const withinThreshold = pathDiff < 5.0;
+    const passed = hasDiffraction && withinThreshold;
+
+    recordResult({
+      category: 'Diffraction',
+      name: 'Nearby → include',
+      expected: 'δ < 5m, diffraction traced',
+      actual: `δ=${pathDiff.toFixed(2)}m, traced=${hasDiffraction}`,
+      tolerance: 'inequality',
+      passed,
+      reference: 'Issue #11'
+    });
+
+    expect(diffPaths.length).toBeGreaterThan(0);
+    expect(pathDiff).toBeLessThan(5.0);
+  });
+
+  it('path difference geometry is correct', () => {
+    const source: Point3D = { x: 0, y: 0, z: 0 };
+    const receiver: Point3D = { x: 20, y: 0, z: 0 };
+    const barrierHeight = 5;
+    const barrier = createBarrier({ x: 10, y: -5 }, { x: 10, y: 5 }, barrierHeight);
+
+    const diffPath = traceDiffractionPath(source, receiver, barrier, []);
+
+    // Expected: S(0,0,0) → B(10,0,5) → R(20,0,0)
+    // Path A = sqrt(10² + 5²) = sqrt(125) ≈ 11.18m
+    // Path B = sqrt(10² + 5²) = sqrt(125) ≈ 11.18m
+    // Total = 22.36m, Direct = 20m, δ = 2.36m
+    const expectedPathA = Math.sqrt(100 + 25);
+    const expectedTotal = 2 * expectedPathA;
+    const expectedDiff = expectedTotal - 20;
+
+    const actualDiff = diffPath?.pathDifference ?? 0;
+    const passed = Math.abs(actualDiff - expectedDiff) < 0.1;
+
+    recordResult({
+      category: 'Diffraction',
+      name: 'Path difference δ',
+      expected: `${expectedDiff.toFixed(2)} m`,
+      actual: `${actualDiff.toFixed(2)} m`,
+      tolerance: '±0.1 m',
+      passed,
+      reference: 'Geometry'
+    });
+
+    expect(actualDiff).toBeCloseTo(expectedDiff, 1);
+  });
+
+  it('threshold ~1 wavelength at 63 Hz', () => {
+    const lambda63Hz = c / 63;
+    const threshold = DEFAULT_RAYTRACING_CONFIG.maxDiffractionDeltaForUnblockedPath;
+    const ratio = threshold / lambda63Hz;
+    const passed = ratio > 0.8 && ratio < 1.2; // Within 20% of 1 wavelength
+
+    recordResult({
+      category: 'Diffraction',
+      name: 'Threshold ≈ λ(63Hz)',
+      expected: `~1.0 wavelengths`,
+      actual: `${ratio.toFixed(2)} wavelengths`,
+      tolerance: '±20%',
+      passed,
+      reference: 'Wave physics'
+    });
+
+    expect(ratio).toBeGreaterThan(0.8);
+    expect(ratio).toBeLessThan(1.2);
   });
 });
 
