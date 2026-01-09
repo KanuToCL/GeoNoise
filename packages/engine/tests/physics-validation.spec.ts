@@ -1,7 +1,7 @@
 /**
  * Physics Validation Test Suite
  *
- * This file contains physics-critical tests that validate the acoustic
+ * This file contains ALL physics-critical tests that validate the acoustic
  * propagation model against known values and standards.
  *
  * Run with: npx vitest run tests/physics-validation.spec.ts
@@ -9,11 +9,19 @@
  */
 
 import { describe, it, expect, afterAll } from 'vitest';
+import { writeFileSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import {
+  agrIsoEq10Db,
   barrierAttenuation,
   calculatePropagation,
+  calculateSPL,
+  groundEffect,
   spreadingLoss,
+  spreadingLossFromReference,
 } from '../src/propagation/index.js';
+import { GroundType } from '@geonoise/core';
 import { getDefaultEngineConfig } from '../src/api/index.js';
 import {
   sumPhasorsCoherent,
@@ -22,7 +30,9 @@ import {
   phaseFromPathDifference,
   wavelength,
   fresnelRadius,
+  createFlatSpectrum,
   type Phasor,
+  type Spectrum9,
 } from '@geonoise/shared';
 import {
   traceAllPaths,
@@ -31,6 +41,24 @@ import {
   type ReflectingSurface,
   type RayTracingConfig,
 } from '../src/raytracing/index.js';
+import {
+  complex,
+  complexAbs,
+  complexAdd,
+  complexDiv,
+  complexMul,
+  complexSqrt,
+} from '../src/propagation/complex.js';
+import {
+  agrTwoRayDb,
+  delanyBazleyNormalizedImpedance,
+  reflectionCoeff,
+} from '../src/propagation/ground.js';
+import {
+  computeProbeSimple,
+  computeProbeCoherent,
+  DEFAULT_PROBE_CONFIG,
+} from '../src/probeCompute/index.js';
 import type { Point3D } from '@geonoise/core/coords';
 
 // ============================================================================
@@ -53,30 +81,99 @@ function recordResult(result: PhysicsTestResult) {
   testResults.push(result);
 }
 
-// Generate markdown report after all tests
+// Helper to escape CSV values
+function escapeCSV(value: string): string {
+  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+// Generate CSV report after all tests
 afterAll(() => {
-  if (process.env.PHYSICS_REPORT === 'true') {
-    console.log('\n');
-    console.log('# Physics Validation Report');
-    console.log(`Generated: ${new Date().toISOString()}`);
-    console.log('');
-    console.log('| Category | Test | Expected | Actual | Tolerance | Status | Reference |');
-    console.log('|----------|------|----------|--------|-----------|--------|-----------|');
+  if (testResults.length === 0) return;
 
-    for (const r of testResults) {
-      const status = r.passed ? '✅' : '❌';
-      console.log(`| ${r.category} | ${r.name} | ${r.expected} | ${r.actual} | ${r.tolerance} | ${status} | ${r.reference || ''} |`);
-    }
+  // Always write the CSV file
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const outputDir = join(__dirname, '..', '..', '..', 'docs');
+  const csvPath = join(outputDir, 'physics-validation-results.csv');
 
-    const passed = testResults.filter(r => r.passed).length;
-    const total = testResults.length;
-    console.log('');
-    console.log(`**Summary:** ${passed}/${total} tests passed`);
+  // CSV header
+  const header = 'Category,Test,Expected,Actual,Tolerance,Passed,Reference,Timestamp';
+  const timestamp = new Date().toISOString();
+
+  // CSV rows
+  const rows = testResults.map(r => {
+    return [
+      escapeCSV(r.category),
+      escapeCSV(r.name),
+      escapeCSV(r.expected),
+      escapeCSV(r.actual),
+      escapeCSV(r.tolerance),
+      r.passed ? 'PASS' : 'FAIL',
+      escapeCSV(r.reference || ''),
+      timestamp
+    ].join(',');
+  });
+
+  const csvContent = [header, ...rows].join('\n');
+
+  try {
+    mkdirSync(outputDir, { recursive: true });
+    writeFileSync(csvPath, csvContent, 'utf-8');
+    console.log(`\n📊 Physics validation results written to: ${csvPath}`);
+    console.log(`   ${testResults.filter(r => r.passed).length}/${testResults.length} tests passed`);
+  } catch (err) {
+    console.error('Failed to write CSV report:', err);
   }
 });
 
 // ============================================================================
-// Spreading Loss (Geometric Divergence)
+// Test Helpers
+// ============================================================================
+
+/** Create a point source at given position with flat 100 dB spectrum */
+function createSource(id: string, x: number, y: number, z = 2): {
+  id: string;
+  position: Point3D;
+  spectrum: Spectrum9;
+} {
+  return {
+    id,
+    position: { x, y, z },
+    spectrum: createFlatSpectrum(100) as Spectrum9,
+  };
+}
+
+/** Get A-weighted overall level from spectrum */
+function getAWeightedLevel(spectrum: Spectrum9): number {
+  const aWeights = [-26.2, -16.1, -8.6, -3.2, 0, 1.2, 1.0, -1.1, -6.6];
+  let energy = 0;
+  for (let i = 0; i < 9; i++) {
+    const weighted = spectrum[i] + aWeights[i];
+    energy += Math.pow(10, weighted / 10);
+  }
+  return 10 * Math.log10(energy);
+}
+
+/** Create a barrier surface for testing */
+function createBarrier(
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+  height: number
+): ReflectingSurface {
+  return {
+    segment: { p1, p2 },
+    height,
+    surfaceType: 'hard',
+    absorption: 0,
+    id: 'test-barrier',
+  };
+}
+
+// ============================================================================
+// 1. SPREADING LOSS (Geometric Divergence)
 // ============================================================================
 
 describe('Spreading Loss - ISO 9613-2', () => {
@@ -194,36 +291,144 @@ describe('Spreading Loss - ISO 9613-2', () => {
 
     expect(actual).toBeCloseTo(expected, 2);
   });
+
+  it('cylindrical spreading at 10m', () => {
+    const actual = spreadingLoss(10, 'cylindrical');
+    const expected = 10 * Math.log10(10) + EXACT_2PI;
+    const passed = Math.abs(actual - expected) < 0.01;
+
+    recordResult({
+      category: 'Spreading',
+      name: 'Cylindrical @ 10m',
+      expected: `${expected.toFixed(2)} dB`,
+      actual: `${actual.toFixed(2)} dB`,
+      tolerance: '±0.01 dB',
+      passed,
+      reference: 'ISO 9613-2'
+    });
+
+    expect(actual).toBeCloseTo(expected, 1);
+  });
+
+  it('reference-based spreading at 1m = 0 dB', () => {
+    const actual = spreadingLossFromReference(1, 'spherical');
+    const expected = 0;
+    const passed = Math.abs(actual - expected) < 0.01;
+
+    recordResult({
+      category: 'Spreading',
+      name: 'Reference @ 1m',
+      expected: `${expected} dB`,
+      actual: `${actual.toFixed(2)} dB`,
+      tolerance: '±0.01 dB',
+      passed,
+      reference: 'SPL@1m'
+    });
+
+    expect(actual).toBeCloseTo(expected, 10);
+  });
+
+  it('reference-based spreading at 10m = 20 dB', () => {
+    const actual = spreadingLossFromReference(10, 'spherical');
+    const expected = 20;
+    const passed = Math.abs(actual - expected) < 0.01;
+
+    recordResult({
+      category: 'Spreading',
+      name: 'Reference @ 10m',
+      expected: `${expected} dB`,
+      actual: `${actual.toFixed(2)} dB`,
+      tolerance: '±0.01 dB',
+      passed,
+      reference: 'SPL@1m'
+    });
+
+    expect(actual).toBeCloseTo(expected, 10);
+  });
+
+  it('Lw vs SPL@1m difference = 10*log10(4π)', () => {
+    const lwBased = spreadingLoss(10, 'spherical');
+    const refBased = spreadingLossFromReference(10, 'spherical');
+    const actual = lwBased - refBased;
+    const expected = EXACT_4PI;
+    const passed = Math.abs(actual - expected) < 0.01;
+
+    recordResult({
+      category: 'Spreading',
+      name: 'Lw vs SPL@1m diff',
+      expected: `${expected.toFixed(2)} dB`,
+      actual: `${actual.toFixed(2)} dB`,
+      tolerance: '±0.01 dB',
+      passed,
+      reference: 'Geometry'
+    });
+
+    expect(actual).toBeCloseTo(expected, 10);
+  });
+
+  it('clamps zero distance', () => {
+    const actual = spreadingLoss(0, 'spherical');
+    const isFinite = Number.isFinite(actual);
+
+    recordResult({
+      category: 'Spreading',
+      name: 'Zero distance clamp',
+      expected: 'finite',
+      actual: isFinite ? 'finite' : 'NaN/Inf',
+      tolerance: 'exact',
+      passed: isFinite,
+      reference: 'Robustness'
+    });
+
+    expect(isFinite).toBe(true);
+  });
+
+  it('clamps negative distance', () => {
+    const actual = spreadingLoss(-10, 'spherical');
+    const isFinite = Number.isFinite(actual);
+
+    recordResult({
+      category: 'Spreading',
+      name: 'Negative distance clamp',
+      expected: 'finite',
+      actual: isFinite ? 'finite' : 'NaN/Inf',
+      tolerance: 'exact',
+      passed: isFinite,
+      reference: 'Robustness'
+    });
+
+    expect(isFinite).toBe(true);
+  });
+
+  it('handles 1km distance', () => {
+    const actual = spreadingLoss(1000, 'spherical');
+    const expected = 70.99;
+    const passed = Math.abs(actual - expected) < 1;
+
+    recordResult({
+      category: 'Spreading',
+      name: 'Spherical @ 1km',
+      expected: `~${expected} dB`,
+      actual: `${actual.toFixed(2)} dB`,
+      tolerance: '±1 dB',
+      passed,
+      reference: 'ISO 9613-2'
+    });
+
+    expect(actual).toBeCloseTo(expected, 0);
+  });
 });
 
 // ============================================================================
-// Diffraction Ray Tracing - Issue #11
+// 2. DIFFRACTION RAY TRACING - Issue #11
 // ============================================================================
 
 describe('Diffraction Ray Tracing - Issue #11', () => {
   const c = 343; // speed of sound m/s
 
-  /**
-   * Create a barrier surface for testing
-   */
-  function createBarrier(
-    p1: { x: number; y: number },
-    p2: { x: number; y: number },
-    height: number
-  ): ReflectingSurface {
-    return {
-      segment: { p1, p2 },
-      height,
-      surfaceType: 'hard',
-      absorption: 0,
-      id: 'test-barrier',
-    };
-  }
-
   it('default config has maxDiffractionDeltaForUnblockedPath = 5.0m', () => {
     const actual = DEFAULT_RAYTRACING_CONFIG.maxDiffractionDeltaForUnblockedPath;
     const expected = 5.0;
-    const lambda63Hz = c / 63; // ~5.44m
     const passed = Math.abs(actual - expected) < 0.01;
 
     recordResult({
@@ -247,7 +452,7 @@ describe('Diffraction Ray Tracing - Issue #11', () => {
     const config: RayTracingConfig = {
       ...DEFAULT_RAYTRACING_CONFIG,
       includeGround: false,
-      maxDiffractionDeltaForUnblockedPath: 0, // Disable new feature
+      maxDiffractionDeltaForUnblockedPath: 0,
     };
 
     const paths = traceAllPaths(source, receiver, [], [barrier], config);
@@ -275,13 +480,12 @@ describe('Diffraction Ray Tracing - Issue #11', () => {
   it('no diffraction when disabled and direct unblocked', () => {
     const source: Point3D = { x: 0, y: 0, z: 2 };
     const receiver: Point3D = { x: 20, y: 0, z: 1.5 };
-    // Barrier to the side - doesn't block direct path
     const barrier = createBarrier({ x: 10, y: 5 }, { x: 10, y: 10 }, 4);
 
     const config: RayTracingConfig = {
       ...DEFAULT_RAYTRACING_CONFIG,
       includeGround: false,
-      maxDiffractionDeltaForUnblockedPath: 0, // Disabled
+      maxDiffractionDeltaForUnblockedPath: 0,
     };
 
     const paths = traceAllPaths(source, receiver, [], [barrier], config);
@@ -309,13 +513,12 @@ describe('Diffraction Ray Tracing - Issue #11', () => {
   it('diffraction traced for nearby barrier (δ < threshold)', () => {
     const source: Point3D = { x: 0, y: 0, z: 2 };
     const receiver: Point3D = { x: 20, y: 0, z: 1.5 };
-    // Low barrier - will have small path difference
     const barrier = createBarrier({ x: 10, y: -5 }, { x: 10, y: 5 }, 2.5);
 
     const config: RayTracingConfig = {
       ...DEFAULT_RAYTRACING_CONFIG,
       includeGround: false,
-      maxDiffractionDeltaForUnblockedPath: 5.0, // Enabled
+      maxDiffractionDeltaForUnblockedPath: 5.0,
     };
 
     const paths = traceAllPaths(source, receiver, [], [barrier], config);
@@ -348,10 +551,6 @@ describe('Diffraction Ray Tracing - Issue #11', () => {
 
     const diffPath = traceDiffractionPath(source, receiver, barrier, []);
 
-    // Expected: S(0,0,0) → B(10,0,5) → R(20,0,0)
-    // Path A = sqrt(10² + 5²) = sqrt(125) ≈ 11.18m
-    // Path B = sqrt(10² + 5²) = sqrt(125) ≈ 11.18m
-    // Total = 22.36m, Direct = 20m, δ = 2.36m
     const expectedPathA = Math.sqrt(100 + 25);
     const expectedTotal = 2 * expectedPathA;
     const expectedDiff = expectedTotal - 20;
@@ -376,7 +575,7 @@ describe('Diffraction Ray Tracing - Issue #11', () => {
     const lambda63Hz = c / 63;
     const threshold = DEFAULT_RAYTRACING_CONFIG.maxDiffractionDeltaForUnblockedPath;
     const ratio = threshold / lambda63Hz;
-    const passed = ratio > 0.8 && ratio < 1.2; // Within 20% of 1 wavelength
+    const passed = ratio > 0.8 && ratio < 1.2;
 
     recordResult({
       category: 'Diffraction',
@@ -391,10 +590,60 @@ describe('Diffraction Ray Tracing - Issue #11', () => {
     expect(ratio).toBeGreaterThan(0.8);
     expect(ratio).toBeLessThan(1.2);
   });
+
+  it('multiple barriers generate multiple diffraction paths', () => {
+    const source: Point3D = { x: 0, y: 0, z: 2 };
+    const receiver: Point3D = { x: 30, y: 0, z: 1.5 };
+    const barrier1 = createBarrier({ x: 10, y: -5 }, { x: 10, y: 5 }, 2.5);
+    const barrier2 = createBarrier({ x: 20, y: -5 }, { x: 20, y: 5 }, 2.5);
+
+    const config: RayTracingConfig = {
+      ...DEFAULT_RAYTRACING_CONFIG,
+      includeGround: false,
+      maxDiffractionDeltaForUnblockedPath: 5.0,
+    };
+
+    const paths = traceAllPaths(source, receiver, [], [barrier1, barrier2], config);
+    const diffPaths = paths.filter(p => p.type === 'diffracted');
+    const passed = diffPaths.length === 2;
+
+    recordResult({
+      category: 'Diffraction',
+      name: 'Multi-barrier',
+      expected: '2 diffraction paths',
+      actual: `${diffPaths.length} paths`,
+      tolerance: 'exact',
+      passed,
+      reference: 'Issue #11'
+    });
+
+    expect(diffPaths.length).toBe(2);
+  });
+
+  it('null for non-intersecting barrier', () => {
+    const source: Point3D = { x: 0, y: 0, z: 2 };
+    const receiver: Point3D = { x: 20, y: 0, z: 1.5 };
+    const barrier = createBarrier({ x: 10, y: 10 }, { x: 10, y: 20 }, 4);
+
+    const diffPath = traceDiffractionPath(source, receiver, barrier, []);
+    const passed = diffPath === null;
+
+    recordResult({
+      category: 'Diffraction',
+      name: 'Non-intersecting → null',
+      expected: 'null',
+      actual: diffPath === null ? 'null' : 'path',
+      tolerance: 'exact',
+      passed,
+      reference: 'Geometry'
+    });
+
+    expect(diffPath).toBeNull();
+  });
 });
 
 // ============================================================================
-// Atmospheric Absorption
+// 3. ATMOSPHERIC ABSORPTION
 // ============================================================================
 
 describe('Atmospheric Absorption - ISO 9613-1', () => {
@@ -425,7 +674,6 @@ describe('Atmospheric Absorption - ISO 9613-1', () => {
     const propConfig = { ...config.propagation!, atmosphericAbsorption: 'iso9613' as const };
     const result = calculatePropagation(100, 1.5, 1.5, propConfig, meteo, 0, false, 8000);
     const actual = result.atmosphericAbsorption;
-    // At 8kHz, α ≈ 0.117 dB/m → 100m ≈ 11.7 dB
     const expectedMin = 5;
     const expectedMax = 20;
     const passed = actual > expectedMin && actual < expectedMax;
@@ -462,17 +710,76 @@ describe('Atmospheric Absorption - ISO 9613-1', () => {
 
     expect(at8kHz).toBeGreaterThan(at125Hz);
   });
+
+  it('diffracted path uses actual path length', () => {
+    const propConfig = { ...config.propagation!, atmosphericAbsorption: 'iso9613' as const };
+    const direct = calculatePropagation(100, 1.5, 1.5, propConfig, meteo, 0, false, 8000);
+    const diffracted = calculatePropagation(100, 1.5, 1.5, propConfig, meteo, 50, true, 8000, 150);
+    const passed = diffracted.atmosphericAbsorption > direct.atmosphericAbsorption;
+
+    recordResult({
+      category: 'Atmospheric',
+      name: 'Diffracted path length',
+      expected: 'A_atm(150m) > A_atm(100m)',
+      actual: `${diffracted.atmosphericAbsorption.toFixed(2)} > ${direct.atmosphericAbsorption.toFixed(2)}`,
+      tolerance: 'inequality',
+      passed,
+      reference: 'Issue #4'
+    });
+
+    expect(diffracted.atmosphericAbsorption).toBeGreaterThan(direct.atmosphericAbsorption);
+  });
+
+  it('extra path difference at 8kHz ~6 dB for 50m', () => {
+    const propConfig = { ...config.propagation!, atmosphericAbsorption: 'iso9613' as const };
+    const direct = calculatePropagation(100, 1.5, 1.5, propConfig, meteo, 0, false, 8000);
+    const diffracted = calculatePropagation(100, 1.5, 1.5, propConfig, meteo, 50, true, 8000, 150);
+    const diff = diffracted.atmosphericAbsorption - direct.atmosphericAbsorption;
+    const passed = diff > 3 && diff < 10;
+
+    recordResult({
+      category: 'Atmospheric',
+      name: '50m extra @ 8kHz',
+      expected: '3-10 dB',
+      actual: `${diff.toFixed(2)} dB`,
+      tolerance: 'range',
+      passed,
+      reference: 'Issue #4'
+    });
+
+    expect(diff).toBeGreaterThan(3);
+    expect(diff).toBeLessThan(10);
+  });
+
+  it('minimal difference at low frequency', () => {
+    const propConfig = { ...config.propagation!, atmosphericAbsorption: 'iso9613' as const };
+    const direct = calculatePropagation(100, 1.5, 1.5, propConfig, meteo, 0, false, 125);
+    const diffracted = calculatePropagation(100, 1.5, 1.5, propConfig, meteo, 50, true, 125, 150);
+    const diff = diffracted.atmosphericAbsorption - direct.atmosphericAbsorption;
+    const passed = diff < 1;
+
+    recordResult({
+      category: 'Atmospheric',
+      name: '50m extra @ 125Hz',
+      expected: '< 1 dB',
+      actual: `${diff.toFixed(2)} dB`,
+      tolerance: 'inequality',
+      passed,
+      reference: 'Issue #4'
+    });
+
+    expect(diff).toBeLessThan(1);
+  });
 });
 
 // ============================================================================
-// Barrier Diffraction - Maekawa Formula
+// 4. BARRIER DIFFRACTION - Maekawa Formula
 // ============================================================================
 
 describe('Barrier Diffraction - Maekawa', () => {
   it('thin barrier coefficient = 20', () => {
-    // N = 2 → A_bar = 10*log10(3 + 20*2) = 16.33 dB
-    const pathDiff = 1; // meters
-    const frequency = 343; // λ = 1m → N = 2
+    const pathDiff = 1;
+    const frequency = 343;
     const lambda = 1;
     const actual = barrierAttenuation(pathDiff, frequency, lambda, 'thin');
     const expected = 10 * Math.log10(3 + 20 * 2);
@@ -492,7 +799,6 @@ describe('Barrier Diffraction - Maekawa', () => {
   });
 
   it('thick barrier coefficient = 40', () => {
-    // N = 2 → A_bar = 10*log10(3 + 40*2) = 19.19 dB
     const pathDiff = 1;
     const frequency = 343;
     const lambda = 1;
@@ -585,10 +891,51 @@ describe('Barrier Diffraction - Maekawa', () => {
 
     expect(actual).toBe(0);
   });
+
+  it('thick > thin for same geometry', () => {
+    const pathDiff = 5;
+    const frequency = 1000;
+    const lambda = 343 / frequency;
+    const thin = barrierAttenuation(pathDiff, frequency, lambda, 'thin');
+    const thick = barrierAttenuation(pathDiff, frequency, lambda, 'thick');
+    const passed = thick > thin;
+
+    recordResult({
+      category: 'Barrier',
+      name: 'Thick > Thin',
+      expected: 'thick > thin',
+      actual: `${thick.toFixed(2)} > ${thin.toFixed(2)}`,
+      tolerance: 'inequality',
+      passed,
+      reference: 'Issue #16'
+    });
+
+    expect(thick).toBeGreaterThan(thin);
+  });
+
+  it('default barrier type is thin', () => {
+    const pathDiff = 5;
+    const frequency = 1000;
+    const defaultAtten = barrierAttenuation(pathDiff, frequency);
+    const explicitThin = barrierAttenuation(pathDiff, frequency, undefined, 'thin');
+    const passed = defaultAtten === explicitThin;
+
+    recordResult({
+      category: 'Barrier',
+      name: 'Default = thin',
+      expected: 'same',
+      actual: passed ? 'same' : 'different',
+      tolerance: 'exact',
+      passed,
+      reference: 'API'
+    });
+
+    expect(defaultAtten).toBe(explicitThin);
+  });
 });
 
 // ============================================================================
-// Speed of Sound
+// 5. SPEED OF SOUND
 // ============================================================================
 
 describe('Speed of Sound', () => {
@@ -649,10 +996,522 @@ describe('Speed of Sound', () => {
 
     expect(actual).toBeCloseTo(expected, 3);
   });
+
+  it('c at 15°C = 340.4 m/s', () => {
+    const actual = speedFormula(15);
+    const expected = 340.39;
+    const passed = Math.abs(actual - expected) < 0.1;
+
+    recordResult({
+      category: 'Speed of Sound',
+      name: 'At 15°C',
+      expected: `${expected} m/s`,
+      actual: `${actual.toFixed(2)} m/s`,
+      tolerance: '±0.1 m/s',
+      passed,
+      reference: 'ISO 9613-1'
+    });
+
+    expect(actual).toBeCloseTo(expected, 1);
+  });
+
+  it('c at 25°C = 346.4 m/s', () => {
+    const actual = speedFormula(25);
+    const expected = 346.45;
+    const passed = Math.abs(actual - expected) < 0.1;
+
+    recordResult({
+      category: 'Speed of Sound',
+      name: 'At 25°C',
+      expected: `${expected} m/s`,
+      actual: `${actual.toFixed(2)} m/s`,
+      tolerance: '±0.1 m/s',
+      passed,
+      reference: 'ISO 9613-1'
+    });
+
+    expect(actual).toBeCloseTo(expected, 1);
+  });
+
+  it('constant 343 close to formula at 20°C', () => {
+    const SPEED_OF_SOUND_20C = 343.0;
+    const fromFormula = speedFormula(20);
+    const diff = Math.abs(fromFormula - SPEED_OF_SOUND_20C);
+    const passed = diff < 1;
+
+    recordResult({
+      category: 'Speed of Sound',
+      name: 'Constant vs formula',
+      expected: '< 1 m/s diff',
+      actual: `${diff.toFixed(2)} m/s`,
+      tolerance: '< 1 m/s',
+      passed,
+      reference: 'Issue #18'
+    });
+
+    expect(diff).toBeLessThan(1);
+  });
 });
 
 // ============================================================================
-// Combined Propagation
+// 6. GROUND REFLECTION - Two-Ray Model
+// ============================================================================
+
+describe('Ground Reflection - Two-Ray', () => {
+  it('complex arithmetic: addition', () => {
+    const a = complex(1, 2);
+    const b = complex(3, -4);
+    const sum = complexAdd(a, b);
+    const passed = sum.re === 4 && sum.im === -2;
+
+    recordResult({
+      category: 'Ground',
+      name: 'Complex addition',
+      expected: '(4, -2)',
+      actual: `(${sum.re}, ${sum.im})`,
+      tolerance: 'exact',
+      passed,
+      reference: 'Math'
+    });
+
+    expect(sum.re).toBe(4);
+    expect(sum.im).toBe(-2);
+  });
+
+  it('complex arithmetic: multiplication', () => {
+    const a = complex(1, 2);
+    const b = complex(3, -4);
+    const prod = complexMul(a, b);
+    const passed = prod.re === 11 && prod.im === 2;
+
+    recordResult({
+      category: 'Ground',
+      name: 'Complex multiplication',
+      expected: '(11, 2)',
+      actual: `(${prod.re}, ${prod.im})`,
+      tolerance: 'exact',
+      passed,
+      reference: 'Math'
+    });
+
+    expect(prod.re).toBe(11);
+    expect(prod.im).toBe(2);
+  });
+
+  it('complex arithmetic: sqrt(i)', () => {
+    const sqrtI = complexSqrt(complex(0, 1));
+    const passed = Math.abs(sqrtI.re - Math.SQRT1_2) < 0.001 &&
+                   Math.abs(sqrtI.im - Math.SQRT1_2) < 0.001;
+
+    recordResult({
+      category: 'Ground',
+      name: 'Complex sqrt(i)',
+      expected: `(${Math.SQRT1_2.toFixed(4)}, ${Math.SQRT1_2.toFixed(4)})`,
+      actual: `(${sqrtI.re.toFixed(4)}, ${sqrtI.im.toFixed(4)})`,
+      tolerance: '±0.001',
+      passed,
+      reference: 'Math'
+    });
+
+    expect(sqrtI.re).toBeCloseTo(Math.SQRT1_2, 6);
+    expect(sqrtI.im).toBeCloseTo(Math.SQRT1_2, 6);
+  });
+
+  it('Delany-Bazley impedance is finite', () => {
+    const zeta = delanyBazleyNormalizedImpedance(1000, 20000);
+    const passed = Number.isFinite(zeta.re) && Number.isFinite(zeta.im) && zeta.re > 0;
+
+    recordResult({
+      category: 'Ground',
+      name: 'Delany-Bazley finite',
+      expected: 'finite, Re > 0',
+      actual: `Re=${zeta.re.toFixed(2)}, Im=${zeta.im.toFixed(2)}`,
+      tolerance: 'exact',
+      passed,
+      reference: 'Delany-Bazley 1970'
+    });
+
+    expect(Number.isFinite(zeta.re)).toBe(true);
+    expect(zeta.re).toBeGreaterThan(0);
+  });
+
+  it('hard ground reflection coefficient ~1', () => {
+    const gamma = reflectionCoeff(1000, 0.5, 'hard', 20000, 0.5, 10, 343);
+    const passed = gamma.re > 0.9 && Math.abs(gamma.im) < 0.1;
+
+    recordResult({
+      category: 'Ground',
+      name: 'Hard ground R ≈ 1',
+      expected: 'Re > 0.9',
+      actual: `Re=${gamma.re.toFixed(3)}`,
+      tolerance: 'inequality',
+      passed,
+      reference: 'Physics'
+    });
+
+    expect(gamma.re).toBeGreaterThan(0.9);
+  });
+
+  it('two-ray Agr finite and varies with frequency', () => {
+    const low = agrTwoRayDb(125, 10, 1.5, 1.5, 'hard', 20000, 0.5, 343);
+    const high = agrTwoRayDb(1000, 10, 1.5, 1.5, 'hard', 20000, 0.5, 343);
+    const passed = Number.isFinite(low) && Number.isFinite(high) && Math.abs(low - high) > 0.001;
+
+    recordResult({
+      category: 'Ground',
+      name: 'Two-ray frequency variation',
+      expected: 'finite, varies',
+      actual: `125Hz=${low.toFixed(2)}, 1kHz=${high.toFixed(2)}`,
+      tolerance: 'inequality',
+      passed,
+      reference: 'Two-ray model'
+    });
+
+    expect(Number.isFinite(low)).toBe(true);
+    expect(Math.abs(low - high)).toBeGreaterThan(0.001);
+  });
+
+  it('Agr = 0 for degenerate distance', () => {
+    const actual = agrTwoRayDb(1000, 0, 1, 1, 'soft', 20000, 0.5, 343);
+    const passed = actual === 0;
+
+    recordResult({
+      category: 'Ground',
+      name: 'Zero distance → 0',
+      expected: '0 dB',
+      actual: `${actual} dB`,
+      tolerance: 'exact',
+      passed,
+      reference: 'Robustness'
+    });
+
+    expect(actual).toBe(0);
+  });
+
+  it('hard ground effect = 0 (legacy)', () => {
+    const actual = groundEffect(20, 1.5, 1.5, GroundType.Hard, 1000);
+    const passed = actual === 0;
+
+    recordResult({
+      category: 'Ground',
+      name: 'Hard ground legacy',
+      expected: '0 dB',
+      actual: `${actual} dB`,
+      tolerance: 'exact',
+      passed,
+      reference: 'ISO 9613-2'
+    });
+
+    expect(actual).toBe(0);
+  });
+
+  it('ISO Eq.10 Agr near field = 0', () => {
+    const actual = agrIsoEq10Db(0.5, 1.5, 1.5);
+    const passed = actual === 0;
+
+    recordResult({
+      category: 'Ground',
+      name: 'ISO Eq.10 near field',
+      expected: '0 dB',
+      actual: `${actual} dB`,
+      tolerance: 'exact',
+      passed,
+      reference: 'ISO 9613-2 Eq.10'
+    });
+
+    expect(actual).toBe(0);
+  });
+
+  it('ISO Eq.10 Agr far field 4-5 dB', () => {
+    const actual = agrIsoEq10Db(200, 1.5, 1.5);
+    const passed = actual > 4.4 && actual < 4.8;
+
+    recordResult({
+      category: 'Ground',
+      name: 'ISO Eq.10 far field',
+      expected: '4.4-4.8 dB',
+      actual: `${actual.toFixed(2)} dB`,
+      tolerance: 'range',
+      passed,
+      reference: 'ISO 9613-2 Eq.10'
+    });
+
+    expect(actual).toBeGreaterThan(4.4);
+    expect(actual).toBeLessThan(4.8);
+  });
+});
+
+// ============================================================================
+// 7. PHASOR ARITHMETIC - Coherent Summation
+// ============================================================================
+
+describe('Phasor Arithmetic', () => {
+  const c = 343;
+  const P_REF = 2e-5;
+
+  it('dB to pressure: 94 dB = 1 Pa', () => {
+    const actual = dBToPressure(94);
+    const expected = 1.0;
+    const passed = Math.abs(actual - expected) < 0.01;
+
+    recordResult({
+      category: 'Phasor',
+      name: 'dB to pressure (94 dB)',
+      expected: `${expected.toFixed(2)} Pa`,
+      actual: `${actual.toFixed(2)} Pa`,
+      tolerance: '±0.01 Pa',
+      passed,
+      reference: 'Acoustics'
+    });
+
+    expect(actual).toBeCloseTo(expected, 2);
+  });
+
+  it('pressure to dB: 1 Pa = 94 dB', () => {
+    const actual = pressureTodB(1.0);
+    const expected = 94;
+    const passed = Math.abs(actual - expected) < 0.1;
+
+    recordResult({
+      category: 'Phasor',
+      name: 'Pressure to dB (1 Pa)',
+      expected: `${expected} dB`,
+      actual: `${actual.toFixed(2)} dB`,
+      tolerance: '±0.1 dB',
+      passed,
+      reference: 'Acoustics'
+    });
+
+    expect(actual).toBeCloseTo(expected, 1);
+  });
+
+  it('constructive interference: 0° phase = +6 dB', () => {
+    const p1: Phasor = { pressure: P_REF * 10, phase: 0 };
+    const p2: Phasor = { pressure: P_REF * 10, phase: 0 };
+    const actual = sumPhasorsCoherent([p1, p2]);
+    const expected = 26;
+    const passed = Math.abs(actual - expected) < 0.1;
+
+    recordResult({
+      category: 'Phasor',
+      name: 'Constructive (in-phase)',
+      expected: `${expected} dB`,
+      actual: `${actual.toFixed(2)} dB`,
+      tolerance: '±0.1 dB',
+      passed,
+      reference: 'Physics'
+    });
+
+    expect(actual).toBeCloseTo(expected, 1);
+  });
+
+  it('destructive interference: 180° phase = cancellation', () => {
+    const p1: Phasor = { pressure: P_REF * 10, phase: 0 };
+    const p2: Phasor = { pressure: P_REF * 10, phase: Math.PI };
+    const actual = sumPhasorsCoherent([p1, p2]);
+    const passed = actual < -100;
+
+    recordResult({
+      category: 'Phasor',
+      name: 'Destructive (anti-phase)',
+      expected: 'deep null (< -100 dB)',
+      actual: `${actual.toFixed(1)} dB`,
+      tolerance: 'inequality',
+      passed,
+      reference: 'Physics'
+    });
+
+    expect(actual).toBeLessThan(-100);
+  });
+
+  it('90° phase shift = +3 dB', () => {
+    const p1: Phasor = { pressure: P_REF * 10, phase: 0 };
+    const p2: Phasor = { pressure: P_REF * 10, phase: Math.PI / 2 };
+    const actual = sumPhasorsCoherent([p1, p2]);
+    const expected = 23;
+    const passed = Math.abs(actual - expected) < 0.2;
+
+    recordResult({
+      category: 'Phasor',
+      name: 'Quadrature (90°)',
+      expected: `${expected} dB`,
+      actual: `${actual.toFixed(2)} dB`,
+      tolerance: '±0.2 dB',
+      passed,
+      reference: 'Physics'
+    });
+
+    expect(actual).toBeCloseTo(expected, 0);
+  });
+
+  it('phase from path difference: λ/2 = π radians', () => {
+    const freq = 1000;
+    const lambda = c / freq;
+    const pathDiff = lambda / 2;
+    const actual = phaseFromPathDifference(pathDiff, freq, c);
+    const expected = -Math.PI;
+    const passed = Math.abs(actual - expected) < 0.01;
+
+    recordResult({
+      category: 'Phasor',
+      name: 'Phase from λ/2 path diff',
+      expected: `${expected.toFixed(4)} rad`,
+      actual: `${actual.toFixed(4)} rad`,
+      tolerance: '±0.01 rad',
+      passed,
+      reference: 'Wave physics'
+    });
+
+    expect(actual).toBeCloseTo(expected, 2);
+  });
+
+  it('wavelength: 343 Hz = 1 m wavelength', () => {
+    const actual = wavelength(343, c);
+    const expected = 1.0;
+    const passed = Math.abs(actual - expected) < 0.01;
+
+    recordResult({
+      category: 'Phasor',
+      name: 'Wavelength @ 343 Hz',
+      expected: `${expected} m`,
+      actual: `${actual.toFixed(4)} m`,
+      tolerance: '±0.01 m',
+      passed,
+      reference: 'Wave physics'
+    });
+
+    expect(actual).toBeCloseTo(expected, 2);
+  });
+
+  it('Fresnel radius at midpoint', () => {
+    const d1 = 50;
+    const d2 = 50;
+    const freq = 1000;
+    const actual = fresnelRadius(d1, d2, freq, c);
+    const lambda = c / freq;
+    const expected = Math.sqrt(lambda * d1 * d2 / (d1 + d2));
+    const passed = Math.abs(actual - expected) < 0.01;
+
+    recordResult({
+      category: 'Phasor',
+      name: 'Fresnel radius @ midpoint',
+      expected: `${expected.toFixed(2)} m`,
+      actual: `${actual.toFixed(2)} m`,
+      tolerance: '±0.01 m',
+      passed,
+      reference: 'Wave physics'
+    });
+
+    expect(actual).toBeCloseTo(expected, 2);
+  });
+});
+
+// ============================================================================
+// 8. FREQUENCY WEIGHTING (A/C/Z) - IEC 61672-1
+// ============================================================================
+
+describe('Frequency Weighting - IEC 61672-1', () => {
+  const A_WEIGHTS = [-26.2, -16.1, -8.6, -3.2, 0, 1.2, 1.0, -1.1, -6.6];
+  const C_WEIGHTS = [-0.8, -0.2, 0, 0, 0, -0.2, -0.8, -3.0, -8.5];
+  const Z_WEIGHTS = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const BANDS = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+
+  it('A-weighting is 0 dB at 1000 Hz', () => {
+    const idx = BANDS.indexOf(1000);
+    const actual = A_WEIGHTS[idx];
+    const expected = 0;
+    const passed = actual === expected;
+
+    recordResult({
+      category: 'Weighting',
+      name: 'A @ 1kHz = 0',
+      expected: `${expected} dB`,
+      actual: `${actual} dB`,
+      tolerance: 'exact',
+      passed,
+      reference: 'IEC 61672-1'
+    });
+
+    expect(actual).toBe(0);
+  });
+
+  it('A-weighting attenuates 63 Hz by -26.2 dB', () => {
+    const actual = A_WEIGHTS[0];
+    const expected = -26.2;
+    const passed = actual === expected;
+
+    recordResult({
+      category: 'Weighting',
+      name: 'A @ 63Hz',
+      expected: `${expected} dB`,
+      actual: `${actual} dB`,
+      tolerance: 'exact',
+      passed,
+      reference: 'IEC 61672-1'
+    });
+
+    expect(actual).toBe(expected);
+  });
+
+  it('A-weighting boosts 2-4 kHz', () => {
+    const at2k = A_WEIGHTS[5];
+    const at4k = A_WEIGHTS[6];
+    const passed = at2k > 0 && at4k > 0;
+
+    recordResult({
+      category: 'Weighting',
+      name: 'A boost 2-4kHz',
+      expected: '> 0 dB',
+      actual: `2kHz=${at2k}, 4kHz=${at4k}`,
+      tolerance: 'inequality',
+      passed,
+      reference: 'IEC 61672-1'
+    });
+
+    expect(at2k).toBeGreaterThan(0);
+    expect(at4k).toBeGreaterThan(0);
+  });
+
+  it('C-weighting is flat mid-range', () => {
+    const at250 = C_WEIGHTS[2];
+    const at500 = C_WEIGHTS[3];
+    const at1k = C_WEIGHTS[4];
+    const passed = at250 === 0 && at500 === 0 && at1k === 0;
+
+    recordResult({
+      category: 'Weighting',
+      name: 'C flat 250-1kHz',
+      expected: '0 dB',
+      actual: `250=${at250}, 500=${at500}, 1k=${at1k}`,
+      tolerance: 'exact',
+      passed,
+      reference: 'IEC 61672-1'
+    });
+
+    expect(at250).toBe(0);
+    expect(at500).toBe(0);
+    expect(at1k).toBe(0);
+  });
+
+  it('Z-weighting is all zeros', () => {
+    const allZero = Z_WEIGHTS.every(w => w === 0);
+
+    recordResult({
+      category: 'Weighting',
+      name: 'Z = 0 all bands',
+      expected: 'all 0',
+      actual: allZero ? 'all 0' : 'not all 0',
+      tolerance: 'exact',
+      passed: allZero,
+      reference: 'IEC 61672-1'
+    });
+
+    expect(allZero).toBe(true);
+  });
+});
+
+// ============================================================================
+// 9. COMBINED PROPAGATION
 // ============================================================================
 
 describe('Combined Propagation', () => {
@@ -704,195 +1563,263 @@ describe('Combined Propagation', () => {
     expect(actual).toBeCloseTo(expected, 0);
   });
 
-  it('diffracted path uses longer distance for A_atm', () => {
-    const direct = calculatePropagation(100, 1.5, 1.5,
-      { ...propConfig, atmosphericAbsorption: 'iso9613' },
-      meteo, 0, false, 8000);
-    const diffracted = calculatePropagation(100, 1.5, 1.5,
-      { ...propConfig, atmosphericAbsorption: 'iso9613', includeBarriers: true },
-      meteo, 50, true, 8000, 150); // 50m extra path
+  it('monotonic decrease with distance', () => {
+    const distances = [5, 10, 20, 40, 80];
+    const levels = distances.map((distance) => {
+      const prop = calculatePropagation(distance, 1, 1.5, propConfig, meteo, 0, false, 1000);
+      return calculateSPL(100, prop);
+    });
 
-    const passed = diffracted.atmosphericAbsorption > direct.atmosphericAbsorption;
+    let monotonic = true;
+    for (let i = 1; i < levels.length; i++) {
+      if (levels[i] > levels[i - 1]) monotonic = false;
+    }
 
     recordResult({
       category: 'Combined',
-      name: 'Diffracted path A_atm',
-      expected: 'A_atm(150m) > A_atm(100m)',
-      actual: `${diffracted.atmosphericAbsorption.toFixed(2)} > ${direct.atmosphericAbsorption.toFixed(2)}`,
-      tolerance: 'inequality',
-      passed,
-      reference: 'Issue #4'
+      name: 'Monotonic decrease',
+      expected: 'decreasing',
+      actual: monotonic ? 'decreasing' : 'NOT decreasing',
+      tolerance: 'exact',
+      passed: monotonic,
+      reference: 'Physics'
     });
 
-    expect(diffracted.atmosphericAbsorption).toBeGreaterThan(direct.atmosphericAbsorption);
+    expect(monotonic).toBe(true);
+  });
+
+  it('blocked path returns MIN_LEVEL', () => {
+    const blockedProp = {
+      totalAttenuation: 0,
+      spreadingLoss: 0,
+      atmosphericAbsorption: 0,
+      groundEffect: 0,
+      barrierAttenuation: 0,
+      distance: 100,
+      blocked: true,
+    };
+    const actual = calculateSPL(100, blockedProp);
+    const expected = -100;
+    const passed = actual === expected;
+
+    recordResult({
+      category: 'Combined',
+      name: 'Blocked → MIN_LEVEL',
+      expected: `${expected} dB`,
+      actual: `${actual} dB`,
+      tolerance: 'exact',
+      passed,
+      reference: 'API'
+    });
+
+    expect(actual).toBe(-100);
+  });
+
+  it('MAX_DISTANCE triggers blocked', () => {
+    const result = calculatePropagation(15000, 1.5, 1.5, propConfig, meteo, 0, false, 1000);
+    const passed = result.blocked === true;
+
+    recordResult({
+      category: 'Combined',
+      name: 'MAX_DISTANCE → blocked',
+      expected: 'blocked=true',
+      actual: `blocked=${result.blocked}`,
+      tolerance: 'exact',
+      passed,
+      reference: 'API'
+    });
+
+    expect(result.blocked).toBe(true);
   });
 });
 
 // ============================================================================
-// Phasor Arithmetic - Coherent Summation
+// 10. PROBE COMPUTATION
 // ============================================================================
 
-describe('Phasor Arithmetic', () => {
-  const c = 343; // speed of sound m/s
-  const P_REF = 2e-5; // reference pressure
-
-  it('dB to pressure: 94 dB = 1 Pa', () => {
-    const actual = dBToPressure(94);
-    const expected = 1.0; // Pa
-    const passed = Math.abs(actual - expected) < 0.01;
+describe('Probe Computation', () => {
+  it('simple probe at 10m reasonable level', () => {
+    const source = createSource('s1', 0, 0, 2);
+    const probePos: Point3D = { x: 10, y: 0, z: 1.5 };
+    const spectrum = computeProbeSimple(probePos, [source]);
+    const aWeighted = getAWeightedLevel(spectrum);
+    const passed = aWeighted > 60 && aWeighted < 90;
 
     recordResult({
-      category: 'Phasor',
-      name: 'dB to pressure (94 dB)',
-      expected: `${expected.toFixed(2)} Pa`,
-      actual: `${actual.toFixed(2)} Pa`,
-      tolerance: '±0.01 Pa',
+      category: 'Probe',
+      name: 'Simple @ 10m',
+      expected: '60-90 dB',
+      actual: `${aWeighted.toFixed(1)} dB`,
+      tolerance: 'range',
       passed,
-      reference: 'Acoustics'
+      reference: 'Probe API'
     });
 
-    expect(actual).toBeCloseTo(expected, 2);
+    expect(aWeighted).toBeGreaterThan(60);
+    expect(aWeighted).toBeLessThan(90);
   });
 
-  it('pressure to dB: 1 Pa = 94 dB', () => {
-    const actual = pressureTodB(1.0);
-    const expected = 94;
-    const passed = Math.abs(actual - expected) < 0.1;
+  it('simple probe at 100m reasonable level', () => {
+    const source = createSource('s1', 0, 0, 2);
+    const probePos: Point3D = { x: 100, y: 0, z: 1.5 };
+    const spectrum = computeProbeSimple(probePos, [source]);
+    const aWeighted = getAWeightedLevel(spectrum);
+    const passed = aWeighted > 40 && aWeighted < 70;
 
     recordResult({
-      category: 'Phasor',
-      name: 'Pressure to dB (1 Pa)',
-      expected: `${expected} dB`,
-      actual: `${actual.toFixed(2)} dB`,
-      tolerance: '±0.1 dB',
+      category: 'Probe',
+      name: 'Simple @ 100m',
+      expected: '40-70 dB',
+      actual: `${aWeighted.toFixed(1)} dB`,
+      tolerance: 'range',
       passed,
-      reference: 'Acoustics'
+      reference: 'Probe API'
     });
 
-    expect(actual).toBeCloseTo(expected, 1);
+    expect(aWeighted).toBeGreaterThan(40);
+    expect(aWeighted).toBeLessThan(70);
   });
 
-  it('constructive interference: 0° phase = +6 dB', () => {
-    // Two equal-level phasors in phase → +6 dB boost
-    const p1: Phasor = { pressure: P_REF * 10, phase: 0 }; // 20 dB
-    const p2: Phasor = { pressure: P_REF * 10, phase: 0 }; // 20 dB, same phase
-    const actual = sumPhasorsCoherent([p1, p2]);
-    const expected = 26; // 20 + 6 = 26 dB
-    const passed = Math.abs(actual - expected) < 0.1;
+  it('inverse square law: ~6 dB per doubling', () => {
+    const source = createSource('s1', 0, 0, 2);
+    const at10m = computeProbeSimple({ x: 10, y: 0, z: 1.5 }, [source]);
+    const at20m = computeProbeSimple({ x: 20, y: 0, z: 1.5 }, [source]);
+    const level10m = getAWeightedLevel(at10m);
+    const level20m = getAWeightedLevel(at20m);
+    const diff = level10m - level20m;
+    const passed = diff > 5 && diff < 7;
 
     recordResult({
-      category: 'Phasor',
-      name: 'Constructive (in-phase)',
-      expected: `${expected} dB`,
-      actual: `${actual.toFixed(2)} dB`,
-      tolerance: '±0.1 dB',
+      category: 'Probe',
+      name: 'Inverse square law',
+      expected: '5-7 dB/doubling',
+      actual: `${diff.toFixed(2)} dB`,
+      tolerance: 'range',
       passed,
       reference: 'Physics'
     });
 
-    expect(actual).toBeCloseTo(expected, 1);
+    expect(diff).toBeGreaterThan(5);
+    expect(diff).toBeLessThan(7);
   });
 
-  it('destructive interference: 180° phase = cancellation', () => {
-    // Two equal-level phasors 180° out of phase → deep null
-    const p1: Phasor = { pressure: P_REF * 10, phase: 0 };
-    const p2: Phasor = { pressure: P_REF * 10, phase: Math.PI };
-    const actual = sumPhasorsCoherent([p1, p2]);
-    const passed = actual < -100; // deep null
+  it('zero sources returns ambient floor', () => {
+    const probePos: Point3D = { x: 10, y: 0, z: 1.5 };
+    const spectrum = computeProbeSimple(probePos, []);
+    const passed = spectrum[0] === 35;
 
     recordResult({
-      category: 'Phasor',
-      name: 'Destructive (anti-phase)',
-      expected: 'deep null (< -100 dB)',
-      actual: `${actual.toFixed(1)} dB`,
+      category: 'Probe',
+      name: 'Zero sources → floor',
+      expected: '35 dB',
+      actual: `${spectrum[0]} dB`,
+      tolerance: 'exact',
+      passed,
+      reference: 'Probe API'
+    });
+
+    expect(spectrum[0]).toBe(35);
+  });
+
+  it('two equal sources sum to +3 dB', () => {
+    const source1 = createSource('s1', 0, 10, 2);
+    const source2 = createSource('s2', 0, -10, 2);
+    const probePos: Point3D = { x: 10, y: 0, z: 1.5 };
+
+    const single = computeProbeSimple(probePos, [source1]);
+    const combined = computeProbeSimple(probePos, [source1, source2]);
+    const levelSingle = getAWeightedLevel(single);
+    const levelCombined = getAWeightedLevel(combined);
+    const diff = levelCombined - levelSingle;
+    const passed = Math.abs(diff - 3) < 1;
+
+    recordResult({
+      category: 'Probe',
+      name: 'Two sources +3 dB',
+      expected: '~3 dB',
+      actual: `${diff.toFixed(2)} dB`,
+      tolerance: '±1 dB',
+      passed,
+      reference: 'Energetic sum'
+    });
+
+    expect(diff).toBeGreaterThan(2);
+    expect(diff).toBeLessThan(4);
+  });
+
+  it('coherent probe produces reasonable levels', () => {
+    const source = createSource('s1', 0, 0, 2);
+    const probePos: Point3D = { x: 10, y: 0, z: 1.5 };
+    const result = computeProbeCoherent(probePos, [source], [], {
+      ...DEFAULT_PROBE_CONFIG,
+      groundReflection: false,
+      atmosphericAbsorption: false,
+    });
+    const passed = result.LAeq > 50 && result.LAeq < 90;
+
+    recordResult({
+      category: 'Probe',
+      name: 'Coherent @ 10m',
+      expected: '50-90 dB',
+      actual: `${result.LAeq.toFixed(1)} dB`,
+      tolerance: 'range',
+      passed,
+      reference: 'Issue #2b'
+    });
+
+    expect(result.LAeq).toBeGreaterThan(50);
+    expect(result.LAeq).toBeLessThan(90);
+  });
+
+  it('coherent with ground has more paths', () => {
+    const source = createSource('s1', 0, 0, 2);
+    const probePos: Point3D = { x: 20, y: 0, z: 1.5 };
+
+    const withGround = computeProbeCoherent(probePos, [source], [], {
+      ...DEFAULT_PROBE_CONFIG,
+      groundReflection: true,
+      groundType: 'hard',
+      atmosphericAbsorption: false,
+    });
+    const noGround = computeProbeCoherent(probePos, [source], [], {
+      ...DEFAULT_PROBE_CONFIG,
+      groundReflection: false,
+      atmosphericAbsorption: false,
+    });
+
+    const passed = withGround.pathCount > noGround.pathCount;
+
+    recordResult({
+      category: 'Probe',
+      name: 'Ground adds paths',
+      expected: 'more paths with ground',
+      actual: `with=${withGround.pathCount}, without=${noGround.pathCount}`,
       tolerance: 'inequality',
       passed,
-      reference: 'Physics'
+      reference: 'Two-ray'
     });
 
-    expect(actual).toBeLessThan(-100);
+    expect(withGround.pathCount).toBeGreaterThan(noGround.pathCount);
   });
 
-  it('90° phase shift = +3 dB', () => {
-    // Two equal phasors at 90° → sqrt(2) pressure → +3 dB
-    const p1: Phasor = { pressure: P_REF * 10, phase: 0 }; // 20 dB
-    const p2: Phasor = { pressure: P_REF * 10, phase: Math.PI / 2 }; // 90°
-    const actual = sumPhasorsCoherent([p1, p2]);
-    const expected = 20 + 3; // 23 dB
-    const passed = Math.abs(actual - expected) < 0.2;
+  it('DEFAULT_PROBE_CONFIG has expected values', () => {
+    const config = DEFAULT_PROBE_CONFIG;
+    const passed = config.groundReflection === true &&
+                   config.groundType === 'mixed' &&
+                   config.coherentSummation === true &&
+                   config.temperature === 20;
 
     recordResult({
-      category: 'Phasor',
-      name: 'Quadrature (90°)',
-      expected: `${expected} dB`,
-      actual: `${actual.toFixed(2)} dB`,
-      tolerance: '±0.2 dB',
+      category: 'Probe',
+      name: 'Default config',
+      expected: 'ground=true, mixed, coherent=true, T=20',
+      actual: `ground=${config.groundReflection}, ${config.groundType}, coherent=${config.coherentSummation}, T=${config.temperature}`,
+      tolerance: 'exact',
       passed,
-      reference: 'Physics'
+      reference: 'API'
     });
 
-    expect(actual).toBeCloseTo(expected, 0);
-  });
-
-  it('phase from path difference: λ/2 = π radians', () => {
-    const freq = 1000; // Hz
-    const lambda = c / freq; // ~0.343 m
-    const pathDiff = lambda / 2;
-    const actual = phaseFromPathDifference(pathDiff, freq, c);
-    const expected = -Math.PI; // negative because phase = -k*d
-    const passed = Math.abs(actual - expected) < 0.01;
-
-    recordResult({
-      category: 'Phasor',
-      name: 'Phase from λ/2 path diff',
-      expected: `${expected.toFixed(4)} rad`,
-      actual: `${actual.toFixed(4)} rad`,
-      tolerance: '±0.01 rad',
-      passed,
-      reference: 'Wave physics'
-    });
-
-    expect(actual).toBeCloseTo(expected, 2);
-  });
-
-  it('wavelength: 343 Hz = 1 m wavelength', () => {
-    const actual = wavelength(343, c);
-    const expected = 1.0;
-    const passed = Math.abs(actual - expected) < 0.01;
-
-    recordResult({
-      category: 'Phasor',
-      name: 'Wavelength @ 343 Hz',
-      expected: `${expected} m`,
-      actual: `${actual.toFixed(4)} m`,
-      tolerance: '±0.01 m',
-      passed,
-      reference: 'Wave physics'
-    });
-
-    expect(actual).toBeCloseTo(expected, 2);
-  });
-
-  it('Fresnel radius at midpoint', () => {
-    // At midpoint of 100m path, 1000 Hz: sqrt(λ*50*50/100) = sqrt(0.343*25) ≈ 2.93m
-    const d1 = 50;
-    const d2 = 50;
-    const freq = 1000;
-    const actual = fresnelRadius(d1, d2, freq, c);
-    const lambda = c / freq;
-    const expected = Math.sqrt(lambda * d1 * d2 / (d1 + d2));
-    const passed = Math.abs(actual - expected) < 0.01;
-
-    recordResult({
-      category: 'Phasor',
-      name: 'Fresnel radius @ midpoint',
-      expected: `${expected.toFixed(2)} m`,
-      actual: `${actual.toFixed(2)} m`,
-      tolerance: '±0.01 m',
-      passed,
-      reference: 'Wave physics'
-    });
-
-    expect(actual).toBeCloseTo(expected, 2);
+    expect(config.groundReflection).toBe(true);
+    expect(config.coherentSummation).toBe(true);
   });
 });
