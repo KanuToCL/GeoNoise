@@ -1,7 +1,7 @@
 # Physics Engine Audit
 
 > **Audit Date:** 2025-01-08 (Updated: 2025-01-09)
-> **Status:** 7 resolved, 13 pending
+> **Status:** 8 resolved, 12 pending
 > **Auditor:** Physics review session
 
 This document tracks identified issues in the GeoNoise physics engine, organized by severity. Each issue includes the current formulation, current code implementation, and proposed fix.
@@ -10,13 +10,14 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 
 ## Quick Status Summary
 
-### ✅ Resolved (7)
+### ✅ Resolved (8)
 - **#1** Spreading Loss Formula Constant Ambiguity — *Fixed with exact constants + documentation*
 - **#2** Two-Ray Ground Model Sign Inconsistency — *Resolved by design (see [Calculation Profile Presets](./ROADMAP.md#calculation-profile-presets))*
 - **#2b** computeProbeCoherent Double-Counts Direct Path — *Fixed: paths now processed uniformly*
 - **#4** Atmospheric Absorption Uses Direct Distance — *Fixed: now uses actualPathLength for diffracted paths*
 - **#5 (probeWorker)** Simplified Atmospheric Absorption in probeWorker — *Fixed: now respects UI model selection*
 - **#10** "Simple" Atmospheric Absorption Model Incorrectly Formulated — *Fixed: replaced buggy formula with lookup table*
+- **#16** Same Formula for Thin/Thick Barriers — *Fixed: buildings now use coefficient 40 and cap 25 dB*
 - **#18** Speed of Sound Constant vs Formula Mismatch — *Fixed: added Environmental Conditions UI for user-controlled temperature/humidity/pressure*
 
 ### 🔴 Critical - Pending (2)
@@ -30,11 +31,10 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 - **#9** Wall Reflection Height Geometry Incorrect
 - **#11** Diffraction Only Traced When Direct Path Blocked
 
-### 🟡 Minor - Pending (6)
+### 🟡 Minor - Pending (5)
 - **#13** Sommerfeld Correction Discontinuity at |w|=4
 - **#14** Hardcoded Diffraction Phase Shift
 - **#15** Incoherent Source Summation Only *(by design)*
-- **#16** Same Formula for Thin/Thick Barriers
 - **#17** Ground Absorption Not Spectral
 - **#19** Diffraction Loss = 0 in Ray Tracing Result
 
@@ -1324,9 +1324,9 @@ async computeReceivers(
 ---
 
 ### 16. Same Formula for Thin/Thick Barriers
-- [ ] **Status:** Open
-- **Location:** `packages/engine/src/compute/index.ts:314-337`
-- **Impact:** ~5 dB difference for thick barriers
+- [x] **Status:** Resolved
+- **Location:** `packages/engine/src/propagation/index.ts`, `packages/engine/src/compute/index.ts`
+- **Impact:** ~5 dB difference for thick barriers → Now correctly applied
 
 #### Current Formulation (Math)
 Thin screen (Maekawa):
@@ -1339,35 +1339,19 @@ Thick barrier/building (double diffraction):
 A_bar = 10·log₁₀(3 + 40N)    cap at 25 dB
 ```
 
-Or use Kurze-Anderson for thick barriers:
-```
-A_bar = 5 + 20·log₁₀(√(2πN) / tanh(√(2πN)))
-```
+#### Resolution
+Added `barrierType` parameter to diffraction calculation:
+- **Thin barriers (walls/screens):** coefficient 20, cap 20 dB
+- **Thick barriers (buildings):** coefficient 40, cap 25 dB
 
-#### Current Code Implementation
-```typescript
-// Same formula used for both thin barriers and buildings
-export function barrierAttenuation(pathDifference, frequency, wavelength): number {
-  const lambda = wavelength ?? 343 / frequency;
-  const N = (2 * pathDifference) / lambda;
-  if (N < -0.1) return 0;
-  const attenuation = 10 * Math.log10(3 + 20 * N);  // Always coefficient 20
-  return Math.min(attenuation, 20);  // Always cap at 20 dB
-}
-```
+The `computeBarrierPathDiff()` function now tracks whether the blocking obstacle is a thin barrier or thick building, and passes this type through to `barrierAttenuation()`.
 
-#### Proposed Implementation
+#### Implementation Details
+
+**propagation/index.ts - Updated barrierAttenuation():**
 ```typescript
 export type BarrierType = 'thin' | 'thick';
 
-/**
- * Calculate barrier insertion loss.
- *
- * @param pathDifference - δ in meters
- * @param frequency - Frequency in Hz
- * @param wavelength - λ in meters
- * @param barrierType - 'thin' for screens/walls, 'thick' for buildings
- */
 export function barrierAttenuation(
   pathDifference: number,
   frequency: number,
@@ -1379,29 +1363,49 @@ export function barrierAttenuation(
 
   if (N < -0.1) return 0;
 
-  let attenuation: number;
-  let maxAttenuation: number;
+  // Select coefficient and cap based on barrier type
+  const coefficient = barrierType === 'thick' ? 40 : 20;
+  const maxAttenuation = barrierType === 'thick' ? 25 : 20;
 
-  if (barrierType === 'thick') {
-    // Double-edge diffraction for buildings
-    // Coefficient 40 instead of 20, higher cap
-    attenuation = 10 * Math.log10(3 + 40 * N);
-    maxAttenuation = 25;
-  } else {
-    // Single thin screen
-    attenuation = 10 * Math.log10(3 + 20 * N);
-    maxAttenuation = 20;
-  }
-
+  const attenuation = 10 * Math.log10(3 + coefficient * N);
   return Math.min(attenuation, maxAttenuation);
 }
+```
 
-// Update building delta calculation to use thick barrier formula
-function computeBuildingDelta(...): number | null {
-  // ... existing calculation ...
-  // The delta is passed to barrierAttenuation with barrierType='thick'
+**compute/index.ts - Updated BarrierPathResult:**
+```typescript
+type BarrierPathResult = {
+  blocked: boolean;
+  pathDifference: number;
+  actualPathLength: number;
+  barrierType: BarrierType;  // NEW: 'thin' for walls, 'thick' for buildings
+};
+
+function computeBarrierPathDiff(...): BarrierPathResult {
+  // ...
+  // Check buildings (thick barriers)
+  for (const building of geometry.buildings) {
+    const delta = computeBuildingDelta(...);
+    if (delta !== null && (maxDelta === null || delta > maxDelta)) {
+      maxDelta = delta;
+      maxBarrierType = 'thick';  // Buildings use thick barrier formula
+    }
+  }
+  return { blocked: true, pathDifference: maxDelta, actualPathLength, barrierType: maxBarrierType };
 }
 ```
+
+#### Expected Impact
+
+For buildings with ~5m path difference:
+
+| Frequency | Old (thin, cap 20) | New (thick, cap 25) | Improvement |
+|-----------|-------------------|---------------------|-------------|
+| 63 Hz     | 18.8 dB           | 21.6 dB             | +2.8 dB     |
+| 16 kHz    | 20 dB (capped)    | 25 dB (capped)      | +5 dB       |
+
+Note: probeWorker already used correct thick barrier formula via `doubleEdgeDiffraction()`.
+This fix aligns receiver/grid calculations with probe accuracy.
 
 ---
 

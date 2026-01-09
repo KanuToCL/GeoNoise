@@ -336,6 +336,9 @@ function computeBuildingDelta(
   return pathUp + pathRoof + pathDown - direct3D;
 }
 
+/** Barrier type for diffraction calculation */
+type BarrierType = 'thin' | 'thick';
+
 /** Result of barrier path difference calculation */
 type BarrierPathResult = {
   /** Whether the direct path is blocked by a barrier */
@@ -344,6 +347,8 @@ type BarrierPathResult = {
   pathDifference: number;
   /** Actual path length sound travels (for atmospheric absorption) */
   actualPathLength: number;
+  /** Type of barrier causing the block ('thin' for walls, 'thick' for buildings) */
+  barrierType: BarrierType;
 };
 
 // Compute barrier path difference for a source->receiver path.
@@ -355,6 +360,8 @@ type BarrierPathResult = {
 //
 // Issue #4 Fix: Now also returns actualPathLength for atmospheric absorption calculation.
 // For diffracted paths, actualPathLength = direct3D + pathDifference (the over-barrier path).
+//
+// Issue #16 Fix: Now also returns barrierType to select thin vs thick diffraction formula.
 function computeBarrierPathDiff(
   source: Point3D,
   receiver: Point3D,
@@ -368,32 +375,37 @@ function computeBarrierPathDiff(
   const direct3D = Math.hypot(direct2D, source.z - receiver.z);
 
   if (!geometry.barrierSegments.length && !geometry.buildings.length) {
-    return { blocked: false, pathDifference: 0, actualPathLength: direct3D };
+    return { blocked: false, pathDifference: 0, actualPathLength: direct3D, barrierType: 'thin' };
   }
 
   let maxDelta: number | null = null;
+  let maxBarrierType: BarrierType = 'thin';
 
+  // Check thin barriers first
   const thinDelta = computeThinBarrierDelta(source, receiver, s2, r2, geometry.barrierSegments, direct3D, sideDiffractionMode);
   if (thinDelta !== null) {
     maxDelta = thinDelta;
+    maxBarrierType = 'thin';
   }
 
+  // Check buildings (thick barriers)
   for (const building of geometry.buildings) {
     const delta = computeBuildingDelta(source, receiver, s2, r2, building, direct3D);
     if (delta === null) continue;
     if (maxDelta === null || delta > maxDelta) {
       maxDelta = delta;
+      maxBarrierType = 'thick'; // Building uses thick barrier formula
     }
   }
 
   if (maxDelta === null) {
-    return { blocked: false, pathDifference: 0, actualPathLength: direct3D };
+    return { blocked: false, pathDifference: 0, actualPathLength: direct3D, barrierType: 'thin' };
   }
 
   // Actual path length = direct distance + path difference (the detour over/around the barrier)
   const actualPathLength = direct3D + maxDelta;
 
-  return { blocked: true, pathDifference: maxDelta, actualPathLength };
+  return { blocked: true, pathDifference: maxDelta, actualPathLength, barrierType: maxBarrierType };
 }
 
 /** CPU Engine implementation */
@@ -445,7 +457,8 @@ export class CPUEngine implements Engine {
           meteo,
           barrier.pathDifference,
           barrier.blocked,
-          barrier.actualPathLength
+          barrier.actualPathLength,
+          barrier.barrierType ?? 'thin'
         );
 
         // Apply per-band attenuation to source spectrum
@@ -564,7 +577,8 @@ export class CPUEngine implements Engine {
 
         const bandedProp = calculateBandedPropagation(
           dist, src.position.z, pt.z, propConfig, meteo,
-          barrier.pathDifference, barrier.blocked, barrier.actualPathLength
+          barrier.pathDifference, barrier.blocked, barrier.actualPathLength,
+          barrier.barrierType ?? 'thin'
         );
 
         // Apply per-band attenuation
@@ -645,7 +659,8 @@ export class CPUEngine implements Engine {
 
         const bandedProp = calculateBandedPropagation(
           dist, src.position.z, pt.z, propConfig, meteo,
-          barrier.pathDifference, barrier.blocked, barrier.actualPathLength
+          barrier.pathDifference, barrier.blocked, barrier.actualPathLength,
+          barrier.barrierType ?? 'thin'
         );
 
         // Apply per-band attenuation

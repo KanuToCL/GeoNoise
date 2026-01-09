@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   agrIsoEq10Db,
+  barrierAttenuation,
   calculatePropagation,
   calculateSPL,
   groundEffect,
@@ -365,6 +366,235 @@ describe('Speed of Sound Consistency - Issue #18', () => {
     expect(speedOfSoundFormula(20)).toBeCloseTo(343.42, 1);
     // 25°C: 346.45 m/s
     expect(speedOfSoundFormula(25)).toBeCloseTo(346.45, 1);
+  });
+});
+
+// ============================================================================
+// Test Suite: Thin vs Thick Barrier Attenuation (Issue #16 Fix)
+// ============================================================================
+
+describe('Barrier Attenuation - Issue #16 Fix', () => {
+  // Issue #16: Buildings should use thick barrier formula (coefficient 40, cap 25 dB)
+  // while thin barriers (walls/screens) use standard Maekawa (coefficient 20, cap 20 dB)
+
+  describe('barrierAttenuation function', () => {
+    it('thin barrier uses coefficient 20', () => {
+      // At N = 1: A_bar = 10*log10(3 + 20*1) = 10*log10(23) ≈ 13.6 dB
+      const pathDiff = 1; // meters
+      const frequency = 343; // Hz → λ = 1m → N = 2*1/1 = 2
+      const lambda = 1;
+
+      // N = 2: A_bar = 10*log10(3 + 20*2) = 10*log10(43) ≈ 16.3 dB
+      const thinAtten = barrierAttenuation(pathDiff, frequency, lambda, 'thin');
+
+      expect(thinAtten).toBeCloseTo(16.3, 1);
+    });
+
+    it('thick barrier uses coefficient 40', () => {
+      // Same geometry, but thick barrier
+      // N = 2: A_bar = 10*log10(3 + 40*2) = 10*log10(83) ≈ 19.2 dB
+      const pathDiff = 1;
+      const frequency = 343;
+      const lambda = 1;
+
+      const thickAtten = barrierAttenuation(pathDiff, frequency, lambda, 'thick');
+
+      expect(thickAtten).toBeCloseTo(19.2, 1);
+    });
+
+    it('thick barrier produces higher attenuation than thin for same geometry', () => {
+      const pathDiff = 5; // 5 meter path difference
+      const frequency = 1000; // Hz
+      const lambda = 343 / frequency; // ~0.343m
+
+      const thinAtten = barrierAttenuation(pathDiff, frequency, lambda, 'thin');
+      const thickAtten = barrierAttenuation(pathDiff, frequency, lambda, 'thick');
+
+      // Thick should always be higher (more attenuation)
+      expect(thickAtten).toBeGreaterThan(thinAtten);
+    });
+
+    it('thin barrier caps at 20 dB', () => {
+      // Very large path difference → should cap at 20 dB
+      const pathDiff = 100; // Large path difference
+      const frequency = 8000; // High frequency → large N
+
+      const thinAtten = barrierAttenuation(pathDiff, frequency, undefined, 'thin');
+
+      expect(thinAtten).toBe(20);
+    });
+
+    it('thick barrier caps at 25 dB', () => {
+      // Very large path difference → should cap at 25 dB
+      const pathDiff = 100;
+      const frequency = 8000;
+
+      const thickAtten = barrierAttenuation(pathDiff, frequency, undefined, 'thick');
+
+      expect(thickAtten).toBe(25);
+    });
+
+    it('difference between thin and thick increases with frequency', () => {
+      const pathDiff = 5;
+
+      // Low frequency: smaller difference
+      const thinLow = barrierAttenuation(pathDiff, 125, undefined, 'thin');
+      const thickLow = barrierAttenuation(pathDiff, 125, undefined, 'thick');
+      const diffLow = thickLow - thinLow;
+
+      // High frequency: larger difference (until capping)
+      const thinHigh = barrierAttenuation(pathDiff, 4000, undefined, 'thin');
+      const thickHigh = barrierAttenuation(pathDiff, 4000, undefined, 'thick');
+      const diffHigh = thickHigh - thinHigh;
+
+      // At higher frequencies, the difference should be larger
+      // (unless both are capped)
+      expect(diffHigh).toBeGreaterThanOrEqual(diffLow);
+    });
+
+    it('returns 0 for negative Fresnel number below threshold', () => {
+      // N < -0.1 → return 0
+      // pathDiff < 0 means receiver can see over the barrier
+      const pathDiff = -0.5;
+      const frequency = 1000;
+
+      const thinAtten = barrierAttenuation(pathDiff, frequency, undefined, 'thin');
+      const thickAtten = barrierAttenuation(pathDiff, frequency, undefined, 'thick');
+
+      expect(thinAtten).toBe(0);
+      expect(thickAtten).toBe(0);
+    });
+
+    it('default barrier type is thin', () => {
+      const pathDiff = 5;
+      const frequency = 1000;
+
+      const defaultAtten = barrierAttenuation(pathDiff, frequency);
+      const explicitThin = barrierAttenuation(pathDiff, frequency, undefined, 'thin');
+
+      expect(defaultAtten).toBe(explicitThin);
+    });
+  });
+
+  describe('calculatePropagation with barrier type', () => {
+    it('uses thin barrier formula when barrierType is thin', () => {
+      const config = getDefaultEngineConfig('festival_fast');
+      const propConfig = { ...config.propagation!, includeBarriers: true };
+      const meteo = config.meteo!;
+
+      const pathDiff = 5;
+      const result = calculatePropagation(
+        50,  // distance
+        1.5, // sourceHeight
+        1.5, // receiverHeight
+        propConfig,
+        meteo,
+        pathDiff,
+        true,  // blocked
+        1000,  // frequency
+        55,    // actualPathLength
+        'thin' // barrierType
+      );
+
+      // Barrier attenuation should be calculated with thin formula
+      expect(result.barrierAttenuation).toBeGreaterThan(0);
+      expect(result.barrierAttenuation).toBeLessThanOrEqual(20); // thin cap
+    });
+
+    it('uses thick barrier formula when barrierType is thick', () => {
+      const config = getDefaultEngineConfig('festival_fast');
+      const propConfig = { ...config.propagation!, includeBarriers: true };
+      const meteo = config.meteo!;
+
+      const pathDiff = 5;
+      const result = calculatePropagation(
+        50,
+        1.5,
+        1.5,
+        propConfig,
+        meteo,
+        pathDiff,
+        true,
+        1000,
+        55,
+        'thick'
+      );
+
+      // Barrier attenuation should be calculated with thick formula
+      expect(result.barrierAttenuation).toBeGreaterThan(0);
+      expect(result.barrierAttenuation).toBeLessThanOrEqual(25); // thick cap
+    });
+
+    it('thick barrier produces more attenuation in total propagation result', () => {
+      const config = getDefaultEngineConfig('festival_fast');
+      const propConfig = { ...config.propagation!, includeBarriers: true };
+      const meteo = config.meteo!;
+
+      const pathDiff = 5;
+
+      const thinResult = calculatePropagation(
+        50, 1.5, 1.5, propConfig, meteo,
+        pathDiff, true, 1000, 55, 'thin'
+      );
+
+      const thickResult = calculatePropagation(
+        50, 1.5, 1.5, propConfig, meteo,
+        pathDiff, true, 1000, 55, 'thick'
+      );
+
+      // Thick barrier should produce more total attenuation
+      expect(thickResult.barrierAttenuation).toBeGreaterThan(thinResult.barrierAttenuation);
+    });
+  });
+
+  describe('frequency-dependent building shadow', () => {
+    it('shadow depth increases with frequency for thick barriers', () => {
+      const config = getDefaultEngineConfig('festival_fast');
+      const propConfig = { ...config.propagation!, includeBarriers: true };
+      const meteo = config.meteo!;
+
+      const pathDiff = 5;
+
+      // Low frequency (63 Hz)
+      const lowFreqResult = calculatePropagation(
+        50, 1.5, 1.5, propConfig, meteo,
+        pathDiff, true, 63, 55, 'thick'
+      );
+
+      // High frequency (8000 Hz)
+      const highFreqResult = calculatePropagation(
+        50, 1.5, 1.5, propConfig, meteo,
+        pathDiff, true, 8000, 55, 'thick'
+      );
+
+      // High frequency should have more barrier attenuation
+      expect(highFreqResult.barrierAttenuation).toBeGreaterThan(lowFreqResult.barrierAttenuation);
+    });
+
+    it('building shadow difference between 63Hz and 16kHz is significant', () => {
+      const config = getDefaultEngineConfig('festival_fast');
+      const propConfig = { ...config.propagation!, includeBarriers: true };
+      const meteo = config.meteo!;
+
+      const pathDiff = 5;
+
+      const at63Hz = calculatePropagation(
+        50, 1.5, 1.5, propConfig, meteo,
+        pathDiff, true, 63, 55, 'thick'
+      );
+
+      const at16kHz = calculatePropagation(
+        50, 1.5, 1.5, propConfig, meteo,
+        pathDiff, true, 16000, 55, 'thick'
+      );
+
+      const shadowDifference = at16kHz.barrierAttenuation - at63Hz.barrierAttenuation;
+
+      // Should be at least 3 dB difference (Issue #16 improvement)
+      // With thick formula, 16kHz should hit the 25 dB cap
+      // while 63 Hz stays well below
+      expect(shadowDifference).toBeGreaterThan(3);
+    });
   });
 });
 

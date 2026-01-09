@@ -237,18 +237,24 @@ export function groundEffect(
 // Barrier Attenuation
 // ============================================================================
 
+/** Barrier type for diffraction calculation */
+export type BarrierType = 'thin' | 'thick';
+
 /**
  * Calculate barrier insertion loss using Maekawa-style screen attenuation.
+ *
  * @param pathDifference - Path length difference in meters (delta)
  * @param frequency - Frequency in Hz
- * @param wavelength - Wavelength in meters
+ * @param wavelength - Wavelength in meters (optional, computed from frequency if not provided)
+ * @param barrierType - 'thin' for screens/walls, 'thick' for buildings (double-edge diffraction)
  */
 export function barrierAttenuation(
   pathDifference: number,
   frequency: number,
-  wavelength?: number
+  wavelength?: number,
+  barrierType: BarrierType = 'thin'
 ): number {
-  // ISO 9613-2 / Kurze-Anderson / Maekawa-style single-screen approximation.
+  // ISO 9613-2 / Kurze-Anderson / Maekawa-style screen approximation.
   //
   // Inputs:
   //   - pathDifference (delta) in meters, computed as (A + B - d) where:
@@ -256,30 +262,34 @@ export function barrierAttenuation(
   //       B = distance3D(barrier-top-point, receiver)
   //       d = direct distance3D(source, receiver)
   //   - frequency in Hz
+  //   - barrierType: 'thin' or 'thick'
   //
   // Fresnel number:
   //   N = 2 * delta / lambda
   //
   // Insertion loss approximation:
-  //   Abar = 10 * log10( 3 + 20 * N )
+  //   Thin barrier (single edge):  Abar = 10 * log10(3 + 20 * N), cap 20 dB
+  //   Thick barrier (double edge): Abar = 10 * log10(3 + 40 * N), cap 25 dB
+  //
+  // The thick barrier formula uses coefficient 40 to account for double-edge
+  // diffraction (sound must diffract over entry edge AND exit edge of building).
   //
   // Clamps:
-  //   - If N < -0.1, return 0 dB (prevents non-physical negative insertion loss and keeps log argument safe).
-  //   - Cap at 20 dB to model a “single screen” limit (avoids unrealistic infinite attenuation).
-  //
-  // Note: delta is computed in the CPU engine (packages/engine/src/compute/index.ts) from 2D intersection + 3D heights.
-  // Calculate wavelength if not provided
-  const lambda = wavelength ?? 343 / frequency;
+  //   - If N < -0.1, return 0 dB (prevents non-physical negative insertion loss)
+  //   - Cap at 20 dB (thin) or 25 dB (thick) to model practical limits
 
-  // Fresnel number (dimensionless)
+  const lambda = wavelength ?? 343 / frequency;
   const N = (2 * pathDifference) / lambda;
 
   if (N < -0.1) return 0;
 
-  const attenuation = 10 * Math.log10(3 + 20 * N);
+  // Select coefficient and cap based on barrier type
+  const coefficient = barrierType === 'thick' ? 40 : 20;
+  const maxAttenuation = barrierType === 'thick' ? 25 : 20;
 
-  // Cap at single-screen limit
-  return Math.min(attenuation, 20);
+  const attenuation = 10 * Math.log10(3 + coefficient * N);
+
+  return Math.min(attenuation, maxAttenuation);
 }
 
 // ============================================================================
@@ -300,6 +310,8 @@ export function barrierAttenuation(
  * @param actualPathLength - Actual path length sound travels (for atmospheric absorption).
  *                           For diffracted paths this is longer than direct distance.
  *                           If not provided, uses direct distance.
+ * @param barrierType - Type of barrier ('thin' for walls, 'thick' for buildings).
+ *                      Issue #16: thick barriers use coefficient 40 and cap 25 dB.
  */
 export function calculatePropagation(
   distance: number,
@@ -310,7 +322,8 @@ export function calculatePropagation(
   barrierPathDiff = 0,
   barrierBlocked = false,
   frequency = 1000,
-  actualPathLength?: number
+  actualPathLength?: number,
+  barrierType: BarrierType = 'thin'
 ): PropagationResult {
   // Barrier parameters:
   // - barrierBlocked: set by the geometry stage when the 2D line-of-sight crosses a barrier segment.
@@ -385,11 +398,12 @@ export function calculatePropagation(
 
   // Barrier attenuation (enabled only when the SR line crosses a barrier).
   // Uses temperature-dependent speed of sound for lambda = c / f.
+  // Issue #16: Uses barrierType to select thin (coef 20) vs thick (coef 40) formula.
   let Abar = 0;
   if (config.includeBarriers && barrierBlocked) {
     const c = speedOfSound(meteo.temperature ?? 20);
     const lambda = c / frequency;
-    Abar = barrierAttenuation(barrierPathDiff, frequency, lambda);
+    Abar = barrierAttenuation(barrierPathDiff, frequency, lambda, barrierType);
   }
 
   // Final attenuation switch:
@@ -426,6 +440,7 @@ export function calculatePropagation(
  * @param barrierPathDiff - Path difference (delta) for barrier diffraction
  * @param barrierBlocked - Whether direct path is blocked by barrier
  * @param actualPathLength - Actual path length sound travels (for atmospheric absorption)
+ * @param barrierType - Type of barrier ('thin' for walls, 'thick' for buildings)
  */
 export function calculateBandedPropagation(
   distance: number,
@@ -435,7 +450,8 @@ export function calculateBandedPropagation(
   meteo: Meteo,
   barrierPathDiff = 0,
   barrierBlocked = false,
-  actualPathLength?: number
+  actualPathLength?: number,
+  barrierType: BarrierType = 'thin'
 ): BandedPropagationResult {
   const bands = new Map<number, PropagationResult>();
 
@@ -449,7 +465,8 @@ export function calculateBandedPropagation(
       barrierPathDiff,
       barrierBlocked,
       freq,
-      actualPathLength
+      actualPathLength,
+      barrierType
     );
     bands.set(freq, result);
   }
@@ -464,7 +481,8 @@ export function calculateBandedPropagation(
     barrierPathDiff,
     barrierBlocked,
     1000,
-    actualPathLength
+    actualPathLength,
+    barrierType
   );
 
   return { bands, overall };
