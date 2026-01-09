@@ -1,7 +1,7 @@
 # Physics Engine Audit
 
 > **Audit Date:** 2025-01-08 (Updated: 2025-01-09)
-> **Status:** 5 resolved, 15 pending
+> **Status:** 6 resolved, 14 pending
 > **Auditor:** Physics review session
 
 This document tracks identified issues in the GeoNoise physics engine, organized by severity. Each issue includes the current formulation, current code implementation, and proposed fix.
@@ -10,25 +10,24 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 
 ## Quick Status Summary
 
-### ✅ Resolved (5)
+### ✅ Resolved (6)
 - **#1** Spreading Loss Formula Constant Ambiguity — *Fixed with exact constants + documentation*
 - **#2** Two-Ray Ground Model Sign Inconsistency — *Resolved by design (see [Calculation Profile Presets](./ROADMAP.md#calculation-profile-presets))*
 - **#2b** computeProbeCoherent Double-Counts Direct Path — *Fixed: paths now processed uniformly*
 - **#4** Atmospheric Absorption Uses Direct Distance — *Fixed: now uses actualPathLength for diffracted paths*
 - **#5 (probeWorker)** Simplified Atmospheric Absorption in probeWorker — *Fixed: now respects UI model selection*
+- **#10** "Simple" Atmospheric Absorption Model Incorrectly Formulated — *Fixed: replaced buggy formula with lookup table*
 
 ### 🔴 Critical - Pending (2)
 - **#3** Barrier + Ground Effect Interaction Physically Incorrect
 - **#5** Side Diffraction Geometry Oversimplified
 
-### 🟠 Moderate - Pending (6)
+### 🟠 Moderate - Pending (5)
 - **#6** Delany-Bazley Extrapolation Outside Valid Range
 - **#7** Ground Reflection Assumes Flat Ground (z=0)
 - **#8** Maekawa Negative N Threshold Documentation
 - **#9** Wall Reflection Height Geometry Incorrect
-- **#10** "Simple" Atmospheric Absorption Model Incorrectly Formulated
 - **#11** Diffraction Only Traced When Direct Path Blocked
-- ~~**#12** Mixed Ground Sigma Calculation Arbitrary~~ *(counted in 6, remove from list)*
 
 ### 🟡 Minor - Pending (7)
 - **#13** Sommerfeld Correction Discontinuity at |w|=4
