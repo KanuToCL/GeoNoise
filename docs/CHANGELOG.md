@@ -4,6 +4,202 @@ This document contains the implementation history of completed features. For pla
 
 ---
 
+## 2026-01-10
+
+### Settings Panel UI Refinements
+
+**Status:** ✅ Implemented (v0.5.1)
+
+Follow-up refinements to the settings panel for improved visual consistency.
+
+#### Layers Integration
+
+Moved the Layers toggle from the topbar into the Settings panel as a fourth category tab.
+
+**Before:**
+- Layers button in topbar (separate popover)
+- 3 settings categories: Display, Environmental, Physics
+
+**After:**
+- Layers integrated into Settings
+- 4 categories in order: **physics → environmental → display → layers**
+- Topbar is cleaner with fewer buttons
+
+#### Font Styling Consistency
+
+Unified all text styling across the UI to match the elegant "details" and "about" buttons.
+
+| Element | Before | After |
+|---------|--------|-------|
+| `button.primary` (Compute, Generate Map) | `font-weight: 600` | `font-weight: 500` |
+| `.settings-header` | `font-weight: 600` | `font-weight: 500` |
+| `.settings-category-btn` | `font-weight: 600` | `font-weight: 500` |
+| `.settings-panel-header` | `font-weight: 600` | `font-weight: 500` |
+| `.settings-title` (section headers) | `uppercase`, `font-weight: 700` | `lowercase`, `font-weight: 500` |
+
+All text now follows consistent styling:
+- **lowercase** text transform
+- **font-weight: 500** (lighter, elegant)
+- **letter-spacing: 0.08em** (consistent spacing)
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `apps/web/index.html` | Removed Layers button from topbar, added Layers category + panel, lowercase text throughout |
+| `apps/web/src/style.css` | Updated font-weight to 500, lowercase transforms, consistent letter-spacing |
+| `apps/web/src/main.ts` | Updated category type to include 'layers' |
+
+---
+
+### Settings Panel UI Redesign
+
+**Status:** ✅ Implemented (v0.5.0)
+
+Redesigned the settings popover to reduce visual clutter with a tabbed category system and animated slide-out panels.
+
+#### New Design
+
+The gear button now opens a compact popover with 3 vertical category buttons. Clicking a category opens a secondary slide-out panel to the left with that category's settings.
+
+```
+┌─────────────────────┐          ┌─────────────────────┐
+│  Settings Slide     │  ←──────  │    Settings         │
+│  (appears LEFT)     │  12px gap │                     │
+│                     │          │  ┌─────────────────┐ │
+│  [Panel Content]    │          │  │   Display       │ │  ← raised
+│                     │          │  └─────────────────┘ │
+│                     │          │  ┌─────────────────┐ │
+│                     │          │  │  Environmental  │ │  ← raised
+│                     │          │  └─────────────────┘ │
+│                     │          │  ┌─────────────────┐ │
+│                     │          │  │    Physics      │ │  ← raised
+│                     │          │  └─────────────────┘ │
+└─────────────────────┘          └─────────────────────┘
+```
+
+#### Interaction Flow
+
+1. **Click gear button**: Settings popover appears with 3 raised category buttons
+2. **Hover button**: Button becomes sunken (pressed appearance)
+3. **Click button**: Button gets blue ring, slide-out panel animates in from the right
+4. **Click same button again**: Slide-out panel closes
+5. **Click outside**: Both popovers close
+
+#### Button States (Dock-Style Neumorphic)
+
+| State | Visual Effect |
+|-------|---------------|
+| **Default** | Raised (outer shadow) |
+| **Hover** | Sunken (inset shadow, scale 0.98) |
+| **Active** | Deeper sunken (scale 0.96) |
+| **Selected** | Sunken with inset blue ring |
+
+#### Category Contents
+
+| Category | Settings |
+|----------|----------|
+| **Display** | Frequency Weighting, Display Band, Contour Mode, Band Step, Auto-scale |
+| **Environmental** | Temperature, Humidity, Pressure, Speed of Sound, Atmospheric Model |
+| **Physics** | Ground Reflection, Ground Type, Mixed Ground Model, Ground Algorithm, Spreading Loss, Barrier Side Diffraction |
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `apps/web/index.html` | Restructured settings popover with category buttons + separate slide popup |
+| `apps/web/src/style.css` | Added ~200 lines for category buttons and slide popup styles |
+| `apps/web/src/main.ts` | Updated `wireSettingsPopover()` with slide popup positioning and state management |
+
+---
+
+### Physics Audit Fixes: Issues #5, #6, #12
+
+**Status:** ✅ Implemented (v0.4.8)
+
+Resolved three physics issues identified in the audit, improving acoustic accuracy.
+
+#### Issue #5: Side Diffraction Geometry Oversimplified
+
+**Problem:** Horizontal (around-the-end) diffraction was using incorrect edge height:
+```typescript
+// OLD: Clamped to source/receiver heights (wrong for horizontal diffraction)
+edgeZ = Math.min(edgeHeight, Math.max(source.z, receiver.z))
+```
+
+**Root Cause:** Horizontal diffraction around barrier ends should occur at ground level (`z = groundElevation`), not at the barrier height. This is fundamentally different from vertical (over-top) diffraction.
+
+**Fix applied:** Updated `computeSidePathDelta()` in `/packages/engine/src/compute/index.ts`:
+```typescript
+// NEW: Horizontal diffraction goes AROUND at ground level
+const edgeZ = groundElevation;  // Typically 0 for flat terrain
+```
+
+**Tests added:** 5 new tests verifying side diffraction path calculations.
+
+---
+
+#### Issue #6: Delany-Bazley Extrapolation Outside Valid Range
+
+**Problem:** The Delany-Bazley model was used without bounds checking on the `f/σ` ratio. Valid range is 0.01 < f/σ < 1.0.
+
+**Impact:**
+- Low frequencies over hard ground (`f/σ < 0.01`): Model outputs nonsense
+- High frequencies over soft ground (`f/σ > 1.0`): Extrapolation becomes inaccurate
+
+**Fix applied:** Added bounds checking with Miki (1990) extension in `/packages/engine/src/propagation/ground.ts`:
+```typescript
+function mikiNormalizedImpedance(fHz: number, sigma: number): Complex {
+  const ratio = fHz / sigma;
+  // Miki (1990) extension for high f/σ ratios
+  const re = 1 + 5.50 * Math.pow(ratio, -0.632);
+  const im = -8.43 * Math.pow(ratio, -0.632);
+  return complex(re, im);
+}
+```
+
+For `f/σ < 0.01`, returns high impedance (near-hard ground behavior).
+
+**Tests added:** 5 new tests verifying impedance model bounds and continuity.
+
+---
+
+#### Issue #12: Mixed Ground Sigma Calculation Arbitrary
+
+**Problem:** Mixed ground type used an arbitrary interpolation formula that was neither ISO-compliant nor physically accurate.
+
+**Solution:** Implemented **two user-selectable models**:
+
+| Model | Formula | Use Case |
+|-------|---------|----------|
+| **ISO 9613-2** | `σ = σ_soft / G` (G-factor linear) | Regulatory compliance |
+| **Logarithmic** | `log(σ) = G·log(σ_soft) + (1-G)·log(σ_hard)` | Ray-tracing accuracy |
+
+**Schema addition:** Added `groundMixedSigmaModel` to `PropagationConfigSchema`:
+```typescript
+groundMixedSigmaModel: GroundMixedSigmaModelSchema.default('iso9613'),
+```
+
+**UI addition:** New "Mixed Ground Model" dropdown in Settings → Simulation Physics. Visible only when Ground Type is "Mixed".
+
+**Tests added:** 7 new tests verifying both interpolation models.
+
+---
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `packages/engine/src/compute/index.ts` | Fixed side diffraction geometry, removed unused functions |
+| `packages/engine/src/propagation/ground.ts` | Added Miki extension, dual sigma models, bounds checking |
+| `packages/core/src/schema/index.ts` | Added `GroundMixedSigmaModelSchema`, new config field |
+| `packages/engine/tests/physics-validation.spec.ts` | Added 17 new tests |
+| `apps/web/index.html` | Added Mixed Ground Model dropdown |
+| `apps/web/src/main.ts` | Wired up new dropdown with event handlers |
+| `docs/physics_audit.md` | Updated status: 13 resolved, 7 pending |
+
+---
+
 ## 2026-01-09
 
 ### Environmental Conditions Settings

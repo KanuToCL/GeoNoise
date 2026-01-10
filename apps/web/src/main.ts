@@ -539,6 +539,8 @@ const propagationAbsorption = document.querySelector('#propagationAbsorption') a
 const propagationGroundReflection = document.querySelector('#propagationGroundReflection') as HTMLInputElement | null;
 const propagationGroundModel = document.querySelector('#propagationGroundModel') as HTMLSelectElement | null;
 const propagationGroundType = document.querySelector('#propagationGroundType') as HTMLSelectElement | null;
+const propagationGroundMixedSigmaModel = document.querySelector('#propagationGroundMixedSigmaModel') as HTMLSelectElement | null;
+const propagationGroundMixedSigmaModelRow = document.querySelector('#propagationGroundMixedSigmaModelRow') as HTMLLabelElement | null;
 const propagationMaxDistance = document.querySelector('#propagationMaxDistance') as HTMLInputElement | null;
 const propagationGroundDetails = document.querySelector('#propagationGroundDetails') as HTMLDivElement | null;
 const propagationGroundHelp = document.querySelector('#propagationGroundHelp') as HTMLDivElement | null;
@@ -4666,8 +4668,21 @@ function wireSettingsPopover() {
   const container = settingsButton.closest('.settings-toggle') as HTMLDivElement | null;
   if (!container) return;
 
-  // Move popover to body to escape all stacking contexts
+  // Get category buttons from main popover
+  const categoryButtons = settingsPopover.querySelectorAll('.settings-category-btn') as NodeListOf<HTMLButtonElement>;
+
+  // Get the separate slide popup and its panels
+  const slidePopup = document.querySelector('#settingsSlidePopup') as HTMLDivElement | null;
+  const slidePanels = slidePopup?.querySelectorAll('.settings-slide-panel') as NodeListOf<HTMLDivElement> | undefined;
+
+  // State
+  let activeCategory: 'display' | 'environmental' | 'physics' | 'layers' | null = null;
+
+  // Move popover and slide popup to body to escape all stacking contexts
   document.body.appendChild(settingsPopover);
+  if (slidePopup) {
+    document.body.appendChild(slidePopup);
+  }
 
   const updatePosition = () => {
     const buttonRect = settingsButton.getBoundingClientRect();
@@ -4678,11 +4693,76 @@ function wireSettingsPopover() {
     settingsPopover.style.top = 'auto';
   };
 
+  const updateSlidePopupPosition = () => {
+    if (!slidePopup) return;
+    // Position slide popup to the LEFT of the main popover
+    const popoverRect = settingsPopover.getBoundingClientRect();
+    slidePopup.style.position = 'fixed';
+    slidePopup.style.bottom = `${window.innerHeight - popoverRect.bottom}px`;
+    slidePopup.style.right = `${window.innerWidth - popoverRect.left + 12}px`;
+    slidePopup.style.left = 'auto';
+    slidePopup.style.top = 'auto';
+  };
+
+  // Show a specific category panel in the slide popup
+  const showPanel = (category: 'display' | 'environmental' | 'physics' | 'layers') => {
+    activeCategory = category;
+
+    // Update buttons: make clicked one active
+    categoryButtons.forEach((btn) => {
+      const btnCategory = btn.dataset.category;
+      if (btnCategory === category) {
+        btn.classList.add('is-active');
+      } else {
+        btn.classList.remove('is-active');
+      }
+    });
+
+    // Show the corresponding panel in slide popup
+    slidePanels?.forEach((panel) => {
+      if (panel.dataset.panel === category) {
+        panel.classList.add('is-open');
+      } else {
+        panel.classList.remove('is-open');
+      }
+    });
+
+    // Open the slide popup
+    if (slidePopup) {
+      slidePopup.classList.add('is-open');
+      slidePopup.setAttribute('aria-hidden', 'false');
+      updateSlidePopupPosition();
+    }
+  };
+
+  // Close the slide popup
+  const hidePanel = () => {
+    activeCategory = null;
+
+    // Reset all buttons
+    categoryButtons.forEach((btn) => {
+      btn.classList.remove('is-active');
+    });
+
+    // Hide all panels
+    slidePanels?.forEach((panel) => {
+      panel.classList.remove('is-open');
+    });
+
+    // Close the slide popup
+    if (slidePopup) {
+      slidePopup.classList.remove('is-open');
+      slidePopup.setAttribute('aria-hidden', 'true');
+    }
+  };
+
   const close = () => {
     container.classList.remove('is-open');
     settingsPopover.classList.remove('is-open');
     settingsButton.setAttribute('aria-expanded', 'false');
     settingsPopover.setAttribute('aria-hidden', 'true');
+    // Also close the slide popup
+    hidePanel();
   };
 
   const open = () => {
@@ -4702,13 +4782,33 @@ function wireSettingsPopover() {
     }
   };
 
+  // Wire category button clicks
+  categoryButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const category = btn.dataset.category as 'display' | 'environmental' | 'physics' | 'layers' | undefined;
+      if (!category) return;
+
+      if (activeCategory === category) {
+        // Clicking the active button closes the slide popup
+        hidePanel();
+      } else {
+        showPanel(category);
+      }
+    });
+  });
+
   settingsButton.addEventListener('click', (event) => {
     event.stopPropagation();
     toggle();
   });
 
   document.addEventListener('click', (event) => {
-    if (!container.contains(event.target as Node) && !settingsPopover.contains(event.target as Node)) {
+    const target = event.target as Node;
+    const clickedInPopover = settingsPopover.contains(target);
+    const clickedInSlidePopup = slidePopup?.contains(target) ?? false;
+    const clickedInContainer = container.contains(target);
+
+    if (!clickedInContainer && !clickedInPopover && !clickedInSlidePopup) {
       close();
     }
   });
@@ -4716,11 +4816,17 @@ function wireSettingsPopover() {
   window.addEventListener('resize', () => {
     if (settingsPopover.classList.contains('is-open')) {
       updatePosition();
+      if (slidePopup?.classList.contains('is-open')) {
+        updateSlidePopupPosition();
+      }
     }
   });
   window.addEventListener('scroll', () => {
     if (settingsPopover.classList.contains('is-open')) {
       updatePosition();
+      if (slidePopup?.classList.contains('is-open')) {
+        updateSlidePopupPosition();
+      }
     }
   });
 }
@@ -7299,6 +7405,15 @@ function updatePropagationControls() {
     propagationGroundType.value = current.groundType;
     propagationGroundType.disabled = !groundEnabled;
   }
+  // Mixed Ground Model dropdown: only visible when ground reflection is enabled AND ground type is "mixed"
+  const mixedModelVisible = groundEnabled && current.groundType === 'mixed';
+  if (propagationGroundMixedSigmaModel) {
+    propagationGroundMixedSigmaModel.value = current.groundMixedSigmaModel ?? 'iso9613';
+    propagationGroundMixedSigmaModel.disabled = !mixedModelVisible;
+  }
+  if (propagationGroundMixedSigmaModelRow) {
+    propagationGroundMixedSigmaModelRow.classList.toggle('is-hidden', !mixedModelVisible);
+  }
   if (propagationMaxDistance) propagationMaxDistance.value = current.maxDistance.toString();
   if (propagationBarrierSideDiffraction) {
     propagationBarrierSideDiffraction.value = current.barrierSideDiffraction ?? 'auto';
@@ -7355,6 +7470,13 @@ function wirePropagationControls() {
 
   propagationGroundType?.addEventListener('change', () => {
     updatePropagationConfig({ groundType: propagationGroundType.value as PropagationConfig['groundType'] });
+    updatePropagationControls();
+    markDirty();
+    computeScene();
+  });
+
+  propagationGroundMixedSigmaModel?.addEventListener('change', () => {
+    updatePropagationConfig({ groundMixedSigmaModel: propagationGroundMixedSigmaModel.value as PropagationConfig['groundMixedSigmaModel'] });
     markDirty();
     computeScene();
   });

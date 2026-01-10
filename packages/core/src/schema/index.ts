@@ -381,6 +381,7 @@ export type GridConfig = z.infer<typeof GridConfigSchema>;
 export type Meteo = z.infer<typeof MeteoSchema>;
 export type PropagationConfig = z.infer<typeof PropagationConfigSchema>;
 export type BarrierSideDiffraction = z.infer<typeof BarrierSideDiffractionSchema>;
+export type GroundMixedSigmaModel = z.infer<typeof GroundMixedSigmaModelSchema>;
 export type EngineConfig = z.infer<typeof EngineConfigSchema>;
 export type Origin = z.infer<typeof OriginSchema>;
 export type Scene = z.infer<typeof SceneSchema>;

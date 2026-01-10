@@ -107,121 +107,204 @@
               ⚙
             </button>
             <div class="settings-popover settings-popover--corner" id="settingsPopover" aria-hidden="true">
-              <div class="settings-section">
-                <div class="settings-title">Display Settings</div>
-                <label class="property-row property-row-stack">
-                  <span>Frequency Weighting</span>
-                  <select class="ui-inset" id="displayWeighting">
-                    <option value="A" selected>A-weighting (dBA)</option>
-                    <option value="C">C-weighting (dBC)</option>
-                    <option value="Z">Z-weighting (dBZ / Linear)</option>
-                  </select>
-                </label>
-                <label class="property-row property-row-stack">
-                  <span>Display Band</span>
-                  <select class="ui-inset" id="displayBand">
-                    <option value="overall" selected>Overall (Sum)</option>
-                    <option value="0">63 Hz</option>
-                    <option value="1">125 Hz</option>
-                    <option value="2">250 Hz</option>
-                    <option value="3">500 Hz</option>
-                    <option value="4">1000 Hz</option>
-                    <option value="5">2000 Hz</option>
-                    <option value="6">4000 Hz</option>
-                    <option value="7">8000 Hz</option>
-                    <option value="8">16000 Hz</option>
-                  </select>
-                </label>
-              </div>
-              <div class="settings-section">
-                <div class="settings-title">Map Settings</div>
-                <label class="toggle" for="mapRenderStyle">
-                  <input type="checkbox" id="mapRenderStyle" />
-                  <span>Contour Mode</span>
-                </label>
-                <div class="property-row map-band-step" id="mapBandStepRow">
-                  <span>Band Step (dB)</span>
-                  <input class="ui-inset" id="mapBandStep" type="number" min="1" max="20" step="1" value="3" />
-                </div>
-                <label class="toggle" for="mapAutoScale">
-                  <input type="checkbox" id="mapAutoScale" checked />
-                  <span>Auto-scale colors</span>
-                </label>
-              </div>
-              <div class="settings-section">
-                <div class="settings-title">Environmental Conditions</div>
-                <label class="property-row property-row-stack">
-                  <span>Temperature</span>
-                  <div class="input-with-unit">
-                    <input type="number" class="ui-inset" id="meteoTemperature" value="20" min="-10" max="40" step="1" />
-                    <span class="unit-label">°C</span>
-                  </div>
-                </label>
-                <label class="property-row property-row-stack">
-                  <span>Relative Humidity</span>
-                  <div class="input-with-unit">
-                    <input type="number" class="ui-inset" id="meteoHumidity" value="50" min="10" max="100" step="5" />
-                    <span class="unit-label">%</span>
-                  </div>
-                </label>
-                <label class="property-row property-row-stack">
-                  <span>Atmospheric Pressure</span>
-                  <div class="input-with-unit">
-                    <input type="number" class="ui-inset" id="meteoPressure" value="101.325" min="95" max="108" step="0.1" />
-                    <span class="unit-label">kPa</span>
-                  </div>
-                </label>
-                <div class="property-row property-row-stack derived-value">
-                  <span>Speed of Sound</span>
-                  <div class="derived-display" id="derivedSpeedOfSound">343.4 m/s</div>
+              <!-- Category Selection Stack -->
+              <div class="settings-categories" id="settingsCategories">
+                <div class="settings-header">settings</div>
+                <div class="settings-category-stack">
+                  <button class="settings-category-btn" id="settingsCatPhysics" data-category="physics" type="button">
+                    physics
+                  </button>
+                  <button class="settings-category-btn" id="settingsCatEnviron" data-category="environmental" type="button">
+                    environmental
+                  </button>
+                  <button class="settings-category-btn" id="settingsCatDisplay" data-category="display" type="button">
+                    display
+                  </button>
+                  <button class="settings-category-btn" id="settingsCatLayers" data-category="layers" type="button">
+                    layers
+                  </button>
                 </div>
               </div>
-              <div class="settings-section">
-                <div class="settings-title">Simulation Physics</div>
-                <label class="property-row property-row-stack">
-                  <span>Atmospheric Model</span>
-                  <select class="ui-inset" id="propagationAbsorption">
-                    <option value="iso9613">ISO 9613-1</option>
-                    <option value="simple">Simple</option>
-                    <option value="none">None (Disabled)</option>
-                  </select>
-                </label>
-                <label class="toggle" for="propagationGroundReflection">
-                  <input type="checkbox" id="propagationGroundReflection" />
-                  <span>Ground Reflection</span>
-                </label>
-                <label class="property-row property-row-stack">
-                  <span>Ground Type</span>
-                  <select class="ui-inset" id="propagationGroundType">
-                    <option value="hard">Hard (Asphalt, Concrete)</option>
-                    <option value="mixed" selected>Mixed</option>
-                    <option value="soft">Soft (Grass, Soil)</option>
-                  </select>
-                </label>
-                <label class="property-row property-row-stack">
-                  <span>Ground Algorithm</span>
-                  <select class="ui-inset" id="propagationGroundModel">
-                    <option value="twoRayPhasor">Two-Ray</option>
-                    <option value="legacy">ISO 9613-2</option>
-                  </select>
-                </label>
-                <label class="property-row property-row-stack">
-                  <span>Spreading Loss</span>
-                  <select class="ui-inset" id="propagationSpreading">
-                    <option value="spherical">Spherical</option>
-                    <option value="cylindrical">Cylindrical</option>
-                  </select>
-                </label>
-                <!-- Barrier Side Diffraction: horizontal diffraction around barrier ends -->
-                <!-- 'off': ISO 9613-2 infinite barrier, 'auto': enable for <50m, 'on': always -->
-                <label class="property-row property-row-stack">
-                  <span>Barrier Side Diffraction</span>
-                  <select class="ui-inset" id="propagationBarrierSideDiffraction">
-                    <option value="off">Off (Over-top only)</option>
-                    <option value="auto" selected>Auto (< 50m barriers)</option>
-                    <option value="on">On (All barriers)</option>
-                  </select>
-                </label>
+            </div>
+
+            <!-- Slide-out Panel (separate popup to the left of settings) -->
+            <div class="settings-slide-popup" id="settingsSlidePopup" aria-hidden="true">
+              <!-- Display Panel -->
+              <div class="settings-slide-panel" id="settingsPanelDisplay" data-panel="display">
+<div class="settings-panel-header">display</div>
+                <div class="settings-panel-content">
+                  <div class="settings-section">
+                    <div class="settings-title">frequency</div>
+                    <label class="property-row property-row-stack">
+                      <span>Weighting</span>
+                      <select class="ui-inset" id="displayWeighting">
+                        <option value="A" selected>A-weighting (dBA)</option>
+                        <option value="C">C-weighting (dBC)</option>
+                        <option value="Z">Z-weighting (dBZ / Linear)</option>
+                      </select>
+                    </label>
+                    <label class="property-row property-row-stack">
+                      <span>Display Band</span>
+                      <select class="ui-inset" id="displayBand">
+                        <option value="overall" selected>Overall (Sum)</option>
+                        <option value="0">63 Hz</option>
+                        <option value="1">125 Hz</option>
+                        <option value="2">250 Hz</option>
+                        <option value="3">500 Hz</option>
+                        <option value="4">1000 Hz</option>
+                        <option value="5">2000 Hz</option>
+                        <option value="6">4000 Hz</option>
+                        <option value="7">8000 Hz</option>
+                        <option value="8">16000 Hz</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="settings-section">
+                    <div class="settings-title">map rendering</div>
+                    <label class="toggle" for="mapRenderStyle">
+                      <input type="checkbox" id="mapRenderStyle" />
+                      <span>Contour Mode</span>
+                    </label>
+                    <div class="property-row map-band-step" id="mapBandStepRow">
+                      <span>Band Step (dB)</span>
+                      <input class="ui-inset" id="mapBandStep" type="number" min="1" max="20" step="1" value="3" />
+                    </div>
+                    <label class="toggle" for="mapAutoScale">
+                      <input type="checkbox" id="mapAutoScale" checked />
+                      <span>Auto-scale colors</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Environmental Panel -->
+              <div class="settings-slide-panel" id="settingsPanelEnviron" data-panel="environmental">
+<div class="settings-panel-header">environmental</div>
+                <div class="settings-panel-content">
+                  <div class="settings-section">
+                    <div class="settings-title">conditions</div>
+                    <label class="property-row property-row-stack">
+                      <span>Temperature</span>
+                      <div class="input-with-unit">
+                        <input type="number" class="ui-inset" id="meteoTemperature" value="20" min="-10" max="40" step="1" />
+                        <span class="unit-label">°C</span>
+                      </div>
+                    </label>
+                    <label class="property-row property-row-stack">
+                      <span>Relative Humidity</span>
+                      <div class="input-with-unit">
+                        <input type="number" class="ui-inset" id="meteoHumidity" value="50" min="10" max="100" step="5" />
+                        <span class="unit-label">%</span>
+                      </div>
+                    </label>
+                    <label class="property-row property-row-stack">
+                      <span>Atmospheric Pressure</span>
+                      <div class="input-with-unit">
+                        <input type="number" class="ui-inset" id="meteoPressure" value="101.325" min="95" max="108" step="0.1" />
+                        <span class="unit-label">kPa</span>
+                      </div>
+                    </label>
+                    <div class="property-row property-row-stack derived-value">
+                      <span>Speed of Sound</span>
+                      <div class="derived-display" id="derivedSpeedOfSound">343.4 m/s</div>
+                    </div>
+                  </div>
+                  <div class="settings-section">
+                    <div class="settings-title">atmospheric absorption</div>
+                    <label class="property-row property-row-stack">
+                      <span>Model</span>
+                      <select class="ui-inset" id="propagationAbsorption">
+                        <option value="iso9613">ISO 9613-1</option>
+                        <option value="simple">Simple</option>
+                        <option value="none">None (Disabled)</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Physics Panel -->
+              <div class="settings-slide-panel" id="settingsPanelPhysics" data-panel="physics">
+                <div class="settings-panel-header">physics</div>
+                <div class="settings-panel-content">
+                  <div class="settings-section">
+                    <div class="settings-title">ground effects</div>
+                    <label class="toggle" for="propagationGroundReflection">
+                      <input type="checkbox" id="propagationGroundReflection" />
+                      <span>Ground Reflection</span>
+                    </label>
+                    <label class="property-row property-row-stack">
+                      <span>Ground Type</span>
+                      <select class="ui-inset" id="propagationGroundType">
+                        <option value="hard">Hard (Asphalt, Concrete)</option>
+                        <option value="mixed" selected>Mixed</option>
+                        <option value="soft">Soft (Grass, Soil)</option>
+                      </select>
+                    </label>
+                    <label class="property-row property-row-stack" id="propagationGroundMixedSigmaModelRow">
+                      <span>Mixed Ground Model</span>
+                      <select class="ui-inset" id="propagationGroundMixedSigmaModel">
+                        <option value="iso9613" selected>ISO 9613-2 (Compliant)</option>
+                        <option value="logarithmic">Logarithmic (Accurate)</option>
+                      </select>
+                    </label>
+                    <label class="property-row property-row-stack">
+                      <span>Ground Algorithm</span>
+                      <select class="ui-inset" id="propagationGroundModel">
+                        <option value="twoRayPhasor">Two-Ray</option>
+                        <option value="legacy">ISO 9613-2</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="settings-section">
+                    <div class="settings-title">propagation</div>
+                    <label class="property-row property-row-stack">
+                      <span>Spreading Loss</span>
+                      <select class="ui-inset" id="propagationSpreading">
+                        <option value="spherical">Spherical</option>
+                        <option value="cylindrical">Cylindrical</option>
+                      </select>
+                    </label>
+                    <label class="property-row property-row-stack">
+                      <span>Barrier Side Diffraction</span>
+                      <select class="ui-inset" id="propagationBarrierSideDiffraction">
+                        <option value="off">Off (Over-top only)</option>
+                        <option value="auto" selected>Auto (< 50m barriers)</option>
+                        <option value="on">On (All barriers)</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Layers Panel -->
+              <div class="settings-slide-panel" id="settingsPanelLayers" data-panel="layers">
+                <div class="settings-panel-header">layers</div>
+                <div class="settings-panel-content">
+                  <div class="settings-section">
+                    <div class="settings-title">visibility</div>
+                    <label class="toggle" for="layerSources">
+                      <input type="checkbox" id="layerSources" checked />
+                      <span>Sources</span>
+                    </label>
+                    <label class="toggle" for="layerReceivers">
+                      <input type="checkbox" id="layerReceivers" checked />
+                      <span>Receivers</span>
+                    </label>
+                    <label class="toggle" for="layerPanels">
+                      <input type="checkbox" id="layerPanels" checked />
+                      <span>Measure Grids</span>
+                    </label>
+                    <label class="toggle" for="layerNoiseMap">
+                      <input type="checkbox" id="layerNoiseMap" />
+                      <span>Noise Map</span>
+                    </label>
+                    <label class="toggle" for="layerGrid">
+                      <input type="checkbox" id="layerGrid" />
+                      <span>Grid Overlay</span>
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -245,11 +328,6 @@
                   <path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"/>
                 </svg>
               </button>
-<div class="layers-toggle" id="layersToggle">
-              <button class="ghost ui-button" id="layersButton" type="button" aria-expanded="false">
-                Layers
-              </button>
-            </div>
             </div>
           </div>
           <div class="topbar-center">
@@ -300,33 +378,7 @@
           </div>
         </header>
 
-        <!-- Layers popover (outside topbar to escape stacking context) -->
-        <div class="layers-popover" id="layersPopover" aria-hidden="true">
-          <div class="layers-section">
-            <div class="layers-title">Layers</div>
-            <label class="toggle">
-              <input type="checkbox" id="layerSources" checked />
-              <span>Sources</span>
-            </label>
-            <label class="toggle">
-              <input type="checkbox" id="layerReceivers" checked />
-              <span>Receivers</span>
-            </label>
-            <label class="toggle">
-              <input type="checkbox" id="layerPanels" checked />
-              <span>Measure Grids</span>
-            </label>
-            <!-- Heatmap layer produced by Generate Map. -->
-            <label class="toggle">
-              <input type="checkbox" id="layerNoiseMap" />
-              <span>Noise Map</span>
-            </label>
-            <label class="toggle">
-              <input type="checkbox" id="layerGrid" />
-              <span>Grid Overlay</span>
-            </label>
-          </div>
-        </div>
+        <!-- Layers popover removed - now integrated into Settings panel -->
 
         <!-- Bottom dock for creation tools. -->
         <div class="dock" id="dock">

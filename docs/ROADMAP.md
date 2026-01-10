@@ -23,6 +23,8 @@ This document contains planned features and enhancements for GeoNoise. For compl
 
 ### ✅ Recently Completed
 
+- **Settings Panel UI Redesign** (v0.5.0) - Tabbed category selection with animated slide-out panels
+- **Physics Audit Fixes #5, #6, #12** (v0.4.8) - Side diffraction geometry, Delany-Bazley bounds, dual sigma models
 - **Barrier side diffraction toggle** (v0.4.2) - See [CHANGELOG.md](./CHANGELOG.md)
 - **Noise map resolution strategy** (v0.4.2) - Adaptive point caps for better UX
 
@@ -36,7 +38,166 @@ This document contains planned features and enhancements for GeoNoise. For compl
 - Building diffraction models UI exposure
 - Expose `maxReflections` setting in UI (currently hardcoded to 0)
 
-## ✅ Recently Implemented
+## ~~Settings Panel UI Redesign~~ ✅ COMPLETED
+
+> **Status:** ✅ Completed in v0.5.0
+> **Implemented:** 2026-01-10
+
+See [CHANGELOG.md](./CHANGELOG.md#settings-panel-ui-redesign) for full implementation details.
+
+### Overview
+
+Redesign the settings popover to reduce visual clutter while maintaining quick access to all controls. The current flat list of settings sections becomes overwhelming as more options are added.
+
+### Design Concept
+
+The gear button continues to trigger a popup from below. Instead of showing all settings in a scrollable list, the popup shows **three raised category tiles**:
+
+```
+┌─────────────────────────────────────────────────┐
+│  ⚙ Settings                                     │
+├─────────────────────────────────────────────────┤
+│                                                 │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
+│  │ Display  │  │ Environ  │  │ Physics  │      │
+│  │    🎨    │  │    🌡️    │  │    📐    │      │
+│  └──────────┘  └──────────┘  └──────────┘      │
+│   (raised)      (raised)       (raised)        │
+│                                                 │
+└─────────────────────────────────────────────────┘
+```
+
+### Interaction Flow
+
+1. **Gear Button Click**: Popover appears with three category tiles (neumorphic raised style)
+2. **Category Click**:
+   - Selected tile becomes **sunken** (pressed state)
+   - A slide panel animates in from the right showing that category's controls
+   - Other tiles remain raised but dimmed
+3. **Back/Close**:
+   - Click outside closes everything
+   - Click the sunken tile again returns to category selection
+   - ESC key closes
+
+### Category Contents
+
+#### Display (🎨)
+- Frequency Weighting (A/C/Z)
+- Display Band selector
+- Contour Mode toggle
+- Band Step (dB)
+- Auto-scale colors toggle
+
+#### Environmental/Atmospheric (🌡️)
+- Temperature (°C)
+- Relative Humidity (%)
+- Atmospheric Pressure (kPa)
+- Derived Speed of Sound (display)
+- Atmospheric Model dropdown (ISO 9613-1 / Simple / None)
+
+#### Physics (📐)
+- Ground Reflection toggle
+- Ground Type dropdown
+- Mixed Ground Model dropdown
+- Ground Algorithm dropdown
+- Spreading Loss dropdown
+- Barrier Side Diffraction dropdown
+- (Future: maxReflections, diffraction model)
+
+### Animation Details
+
+```
+Category Selection              →  Slide Panel
+┌─────────────────┐             ┌─────────────────────────────────┐
+│  [D] [E] [P]    │  ─────────→ │  [D] [E] [P] │  Display Panel  │
+│  raised tiles   │   slide-in  │  (D sunken)  │  ├─ Freq Weight │
+│                 │             │              │  ├─ Band Select │
+└─────────────────┘             └──────────────┴──────────────────┘
+```
+
+- **Slide animation**: Panel slides in from right (300ms ease-out)
+- **Tile transition**: Raised → sunken (150ms with haptic feel)
+- **Backdrop dim**: Other tiles fade to 60% opacity
+- **Close animation**: Reverse slide-out
+
+### Visual Design (Neumorphic)
+
+**Raised Tile (Inactive):**
+```css
+.settings-category-tile {
+  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
+  box-shadow:
+    6px 6px 12px var(--shadow-dark),
+    -6px -6px 12px var(--shadow-light);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+```
+
+**Sunken Tile (Active):**
+```css
+.settings-category-tile.is-active {
+  box-shadow:
+    inset 4px 4px 8px var(--shadow-dark),
+    inset -4px -4px 8px var(--shadow-light);
+  background: var(--surface);
+}
+```
+
+**Slide Panel:**
+```css
+.settings-slide-panel {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  transform: translateX(100%);
+  opacity: 0;
+  transition: transform 300ms ease-out, opacity 200ms ease;
+}
+
+.settings-slide-panel.is-open {
+  transform: translateX(0);
+  opacity: 1;
+}
+```
+
+### State Management
+
+```typescript
+type SettingsPanelState = {
+  isOpen: boolean;
+  activeCategory: 'display' | 'environmental' | 'physics' | null;
+};
+```
+
+### Responsive Behavior
+
+- **Desktop (>768px)**: Full 3-column category grid, side panel slides right
+- **Mobile (<768px)**: Full-width categories stacked, panel slides up as bottom sheet
+
+### Implementation Plan
+
+| Phase | Task | Effort |
+|-------|------|--------|
+| 1 | Restructure HTML with category tiles container | Low |
+| 2 | Add CSS for raised/sunken tile states | Low |
+| 3 | Create slide panel container structure | Medium |
+| 4 | Implement JavaScript state management | Medium |
+| 5 | Add slide animations and transitions | Medium |
+| 6 | Test and refine interaction feel | Low |
+| 7 | Mobile responsive adjustments | Low |
+
+### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `apps/web/index.html` | Restructure settings popover HTML |
+| `apps/web/src/style.css` | Add category tile and slide panel styles |
+| `apps/web/src/main.ts` | Add settings panel state and event handlers |
+
+---
 
 - **[Select Box Multi-Selection Tool](./FEATURE_SELECT_BOX.md)** - Rectangular marquee selection of multiple elements for batch operations (delete, duplicate). Ctrl+click drag to draw select box, shift+click for additive selection.
 
