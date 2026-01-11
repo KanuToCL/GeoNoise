@@ -1103,6 +1103,47 @@
           </div>
 
           <div class="spec-grid equations-grid">
+            <div class="spec-section">
+              <div class="spec-heading">GRID ENGINE</div>
+              <div class="spec-tray">
+                <div class="spec-text"><strong>Used for:</strong> Measure Grids, Receivers, Noise Maps</div>
+                <div class="spec-text" style="margin-top: 8px;"><strong>Path Finding:</strong></div>
+                <ul class="spec-list" style="margin-left: 16px;">
+                  <li>Single direct path per source-receiver pair</li>
+                  <li>Checks for barrier occlusion → computes diffraction</li>
+                  <li>Ground effect via A<sub>gr</sub> model (ISO or Two-Ray)</li>
+                </ul>
+                <div class="spec-text" style="margin-top: 8px;"><strong>Ground Effect Models:</strong></div>
+                <ul class="spec-list" style="margin-left: 16px;">
+                  <li><strong>ISO 9613-2:</strong> Empirical per-band coefficients (no interference)</li>
+                  <li><strong>Two-Ray:</strong> Phasor interference between direct + ground reflection</li>
+                </ul>
+                <div class="spec-text" style="margin-top: 8px;"><strong>Summation:</strong></div>
+                <div class="equation-pill">L = 10·log₁₀(Σ 10<sup>Lᵢ/10</sup>)</div>
+                <div class="spec-text">Energy (power) summation across sources.</div>
+                <div class="spec-text" style="margin-top: 8px;"><strong>Trade-off:</strong> Fast computation for heat maps. With Two-Ray enabled, captures ground dip. No wall reflections or multi-path beyond ground.</div>
+              </div>
+            </div>
+
+            <div class="spec-section">
+              <div class="spec-heading">PROBE ENGINE</div>
+              <div class="spec-tray">
+                <div class="spec-text"><strong>Used for:</strong> Probe microphones only</div>
+                <div class="spec-text" style="margin-top: 8px;"><strong>Path Finding (Ray Tracing):</strong></div>
+                <ul class="spec-list" style="margin-left: 16px;">
+                  <li>Direct path</li>
+                  <li>Ground-reflected path (specular reflection)</li>
+                  <li>Wall reflections (first-order image sources)</li>
+                  <li>Side diffraction around barrier edges</li>
+                  <li>Over-top diffraction</li>
+                </ul>
+                <div class="spec-text" style="margin-top: 8px;"><strong>Summation:</strong></div>
+                <div class="equation-pill">p = Σ pᵢ·e<sup>jφᵢ</sup> &nbsp; where φ = -k·d</div>
+                <div class="spec-text">Phasor (coherent) summation with phase from path length.</div>
+                <div class="spec-text" style="margin-top: 8px;"><strong>Trade-off:</strong> Full multi-path interference (ground dip, wall comb filtering, diffraction patterns). Slower, used only for point analysis.</div>
+              </div>
+            </div>
+
             <div class="spec-section spec-section--full">
               <div class="spec-heading">CALCULATION ARCHITECTURE</div>
               <div class="spec-tray">
@@ -1126,8 +1167,8 @@
 │  │   │  • Single path      │    │  • Ray tracing (multi-path) │ │
 │  │   │  • Direct + best    │    │  • Ground reflection rays   │ │
 │  │   │    diffraction      │    │  • Wall reflection rays     │ │
-│  │   │  • Used for: Grids, │    │  • Side diffraction paths   │ │
-│  │   │    Receivers, Maps  │    │  • Used for: Probes only    │ │
+│  │   │  • A_gr handles     │    │  • Side diffraction paths   │ │
+│  │   │    ground effect    │    │  • Used for: Probes only    │ │
 │  │   └─────────┬───────────┘    └─────────────┬───────────────┘ │
 │  │             │                              │                 │
 │  └─────────────┼──────────────────────────────┼─────────────────┤
@@ -1138,7 +1179,7 @@
 │  │   For each path, apply per-band:                             │
 │  │   • A_div  (geometric spreading)                             │
 │  │   • A_atm  (atmospheric absorption)                          │
-│  │   • A_gr   (ground effect)                                   │
+│  │   • A_gr   (ground effect — ISO or Two-Ray phasor)           │
 │  │   • A_bar  (barrier diffraction if blocked)                  │
 │  └──────────────────────────────────────────────────────────────┤
 │                              │                                  │
@@ -1163,42 +1204,6 @@
               </div>
             </div>
 
-            <div class="spec-section">
-              <div class="spec-heading">GRID ENGINE</div>
-              <div class="spec-tray">
-                <div class="spec-text"><strong>Used for:</strong> Measure Grids, Receivers, Noise Maps</div>
-                <div class="spec-text" style="margin-top: 8px;"><strong>Path Finding:</strong></div>
-                <ul class="spec-list" style="margin-left: 16px;">
-                  <li>Single direct path per source-receiver pair</li>
-                  <li>Checks for barrier occlusion → computes diffraction</li>
-                  <li>No ground reflection rays (uses empirical A<sub>gr</sub>)</li>
-                </ul>
-                <div class="spec-text" style="margin-top: 8px;"><strong>Summation:</strong></div>
-                <div class="equation-pill">L = 10·log₁₀(Σ 10<sup>Lᵢ/10</sup>)</div>
-                <div class="spec-text">Energy (power) summation — paths cannot interfere.</div>
-                <div class="spec-text" style="margin-top: 8px;"><strong>Trade-off:</strong> Fast computation, suitable for heat maps. Cannot capture wave interference effects like ground dip or comb filtering.</div>
-              </div>
-            </div>
-
-            <div class="spec-section">
-              <div class="spec-heading">PROBE ENGINE</div>
-              <div class="spec-tray">
-                <div class="spec-text"><strong>Used for:</strong> Probe microphones only</div>
-                <div class="spec-text" style="margin-top: 8px;"><strong>Path Finding (Ray Tracing):</strong></div>
-                <ul class="spec-list" style="margin-left: 16px;">
-                  <li>Direct path</li>
-                  <li>Ground-reflected path (specular reflection)</li>
-                  <li>Wall reflections (first-order image sources)</li>
-                  <li>Side diffraction around barrier edges</li>
-                  <li>Over-top diffraction</li>
-                </ul>
-                <div class="spec-text" style="margin-top: 8px;"><strong>Summation:</strong></div>
-                <div class="equation-pill">p = Σ pᵢ·e<sup>jφᵢ</sup> &nbsp; where φ = -k·d</div>
-                <div class="spec-text">Phasor (coherent) summation with phase from path length.</div>
-                <div class="spec-text" style="margin-top: 8px;"><strong>Trade-off:</strong> Captures interference effects (ground dip, comb filtering, constructive/destructive interference). Slower, used only for point analysis.</div>
-              </div>
-            </div>
-
             <div class="spec-section spec-section--full">
               <div class="spec-heading">COMPARISON SUMMARY</div>
               <div class="spec-tray">
@@ -1215,8 +1220,8 @@
                   </tr>
                   <tr>
                     <td>Ground effect</td>
-                    <td>ISO 9613-2 empirical</td>
-                    <td>Two-ray phasor (if enabled)</td>
+                    <td>ISO or Two-Ray phasor</td>
+                    <td>Two-ray phasor</td>
                   </tr>
                   <tr>
                     <td>Wall reflections</td>
@@ -1229,13 +1234,18 @@
                     <td>Coherent (phasor)</td>
                   </tr>
                   <tr>
-                    <td>Interference</td>
-                    <td>Not modeled</td>
-                    <td>Constructive/destructive</td>
+                    <td>Ground interference</td>
+                    <td>With Two-Ray only</td>
+                    <td>Always (if enabled)</td>
+                  </tr>
+                  <tr>
+                    <td>Multi-path interference</td>
+                    <td>No (walls, etc.)</td>
+                    <td>Yes (walls, diffraction)</td>
                   </tr>
                   <tr>
                     <td>Ground dip</td>
-                    <td>Not captured</td>
+                    <td>With Two-Ray enabled</td>
                     <td>Naturally emerges</td>
                   </tr>
                   <tr>
