@@ -3410,49 +3410,48 @@ textarea:focus-visible,
 .about-tabs {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px;
+  gap: 8px;
+  padding: 0;
   border-radius: 999px;
-  background: var(--brand-bg);
-  box-shadow: inset 6px 6px 12px var(--shadow-dark), inset -6px -6px 12px var(--shadow-light);
+  background: transparent;
 }
 
 .about-tab {
   border: none;
-  background: var(--bg);
+  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
   border-radius: 999px;
-  padding: 6px 14px;
+  padding: 8px 16px;
   font-size: 11px;
   text-transform: lowercase;
   letter-spacing: var(--ui-letter-spacing);
   color: var(--text-soft);
   font-weight: 600;
   cursor: pointer;
-  /* Raised state */
-  box-shadow: 2px 2px 4px rgba(100, 110, 130, 0.3), -1px -1px 3px rgba(255, 255, 255, 0.7);
+  /* Raised neumorphic state */
+  box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
   transition: transform 160ms ease, box-shadow 200ms ease, background 160ms ease, color 160ms ease;
 }
 
 .about-tab:hover {
-  background: var(--bg);
-  /* Sunken state */
-  box-shadow: inset 2px 2px 4px rgba(100, 110, 130, 0.25), inset -1px -1px 3px rgba(255, 255, 255, 0.6);
+  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
+  /* Slightly flattened on hover */
+  box-shadow: 2px 2px 4px var(--shadow-dark), -2px -2px 4px var(--shadow-light);
   transform: scale(0.98);
 }
 
 .about-tab:active {
-  box-shadow: inset 3px 3px 5px rgba(100, 110, 130, 0.35), inset -2px -2px 4px rgba(255, 255, 255, 0.5);
+  box-shadow: inset 2px 2px 4px var(--shadow-dark), inset -2px -2px 4px var(--shadow-light);
   transform: scale(0.96);
 }
 
 .about-tab.is-active {
   color: var(--active-blue);
-  /* Active state with inset ring, offset from edge */
+  background: var(--bg);
+  /* Pressed/selected state with subtle inset and ring */
   box-shadow:
-    inset 3px 3px 6px rgba(100, 110, 130, 0.3),
-    inset -2px -2px 4px rgba(255, 255, 255, 0.5),
-    inset 0 0 0 3px var(--bg),
-    inset 0 0 0 5px var(--active-blue);
+    inset 3px 3px 6px var(--shadow-dark),
+    inset -3px -3px 6px var(--shadow-light),
+    inset 0 0 0 2px var(--active-blue);
   transform: scale(0.98);
 }
 
