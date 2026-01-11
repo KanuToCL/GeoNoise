@@ -1915,6 +1915,25 @@ button.icon-button {
               opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
+/* Spring-out animation for auto-hide */
+.canvas-help-tooltip.is-hiding {
+  animation: tooltipSpringOut 500ms cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards;
+}
+
+@keyframes tooltipSpringOut {
+  0% {
+    opacity: 1;
+    transform: scaleY(1) translateY(0);
+  }
+  30% {
+    transform: scaleY(1.05) translateY(-5px);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleY(0) translateY(20px);
+  }
+}
+
 .canvas-help.is-open .canvas-help-tooltip {
   display: flex;
   opacity: 1;
@@ -3900,6 +3919,61 @@ textarea:focus-visible,
   text-align: center;
   letter-spacing: 0.12em;
   text-transform: lowercase;
+}
+
+/* Profile Banner - Thin raised dropdown above category buttons */
+.settings-profile-banner {
+  width: 100%;
+  padding: 12px 18px;
+  margin-bottom: 10px;
+  border: none;
+  border-radius: 14px;
+  background: var(--bg);
+  opacity: 0.85;
+  /* Raised neumorphic shadow - EXACT same as .settings-category-btn */
+  box-shadow:
+    3px 3px 6px rgba(100, 110, 130, 0.3),
+    -2px -2px 5px rgba(255, 255, 255, 0.7);
+}
+
+.settings-profile-banner .profile-select {
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  cursor: pointer;
+  box-shadow: none;
+  outline: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0 center;
+  padding-right: 20px;
+}
+
+.settings-profile-banner .profile-select:hover {
+  color: var(--text);
+}
+
+.settings-profile-banner .profile-select:focus {
+  outline: none;
+  color: var(--text);
+}
+
+/* When profile is "custom", show muted styling */
+.settings-profile-banner.is-custom .profile-select {
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 /* Category Stack - Vertical buttons */

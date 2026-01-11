@@ -6,6 +6,42 @@ This document contains the implementation history of completed features. For pla
 
 ## 2026-01-11
 
+### Enhanced Canvas Controls Help Tooltip
+
+**Status:** ✅ Implemented (v0.5.3)
+
+Expanded the Canvas Controls help tooltip with comprehensive documentation of all canvas behaviors and added an auto-hide feature with spring animation.
+
+#### New Controls Documented
+
+- **Selection:** Added `⌘+Drag: Box select multiple` for marquee selection
+- **Editing section (new):**
+  - `Drag element: Move (live update)` - real-time position updates
+  - `Shift+Drag: Duplicate item` - drag-to-duplicate gesture
+  - `⌘+D: Duplicate selected` - keyboard duplicate shortcut
+  - `Delete/Backspace: Remove selected` - deletion
+  - `Escape: Deselect / Cancel` - cancel operations
+- **Tools:** Expanded to show all keyboard shortcuts (V, S, R, B, H, G, P)
+
+#### Auto-Hide with Spring Animation
+
+The tooltip now automatically disappears after 10 seconds of inactivity with a bouncy spring-out animation:
+
+- Starts timer on initial load or when manually opened
+- Hovering over the tooltip pauses the timer
+- Spring animation bounces up slightly before collapsing down
+- Timer resets when mouse leaves the tooltip
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `apps/web/index.html` | Expanded Canvas Controls tooltip content with new sections |
+| `apps/web/src/style.css` | Added `.is-hiding` class and `tooltipSpringOut` keyframe animation |
+| `apps/web/src/main.ts` | Added 10-second auto-hide timer with spring-out animation |
+
+---
+
 ### Noise Map Resolution Fix on Panel Selection
 
 **Status:** ✅ Fixed (Bug)

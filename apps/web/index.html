@@ -50,9 +50,18 @@
                 Scroll: Zoom in/out<br><br>
                 <strong>Selection</strong><br>
                 Click: Select item<br>
+                ⌘+Drag: Box select multiple<br>
                 Double-click: Quick edit<br><br>
+                <strong>Editing</strong><br>
+                Drag element: Move (live update)<br>
+                Shift+Drag: Duplicate item<br>
+                ⌘+D: Duplicate selected<br>
+                Delete/Backspace: Remove selected<br>
+                Escape: Deselect / Cancel<br><br>
                 <strong>Tools</strong><br>
-                Use dock buttons or keyboard shortcuts
+                V: Select &nbsp; S: Source &nbsp; R: Receiver<br>
+                B: Barrier &nbsp; H: Building &nbsp; G: Grid<br>
+                P: Probe
               </div>
             </div>
           </div>
@@ -110,6 +119,16 @@
               <!-- Category Selection Stack -->
               <div class="settings-categories" id="settingsCategories">
                 <div class="settings-header">settings</div>
+
+                <!-- Profile Banner - Thin raised dropdown -->
+                <div class="settings-profile-banner">
+                  <select class="profile-select" id="calculationProfile">
+                    <option value="iso9613">ISO 9613-2 Compliant</option>
+                    <option value="accurate" selected>Physically Accurate</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </div>
+
                 <div class="settings-category-stack">
                   <button class="settings-category-btn" id="settingsCatPhysics" data-category="physics" type="button">
                     physics

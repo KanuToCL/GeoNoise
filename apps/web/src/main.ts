@@ -7226,20 +7226,59 @@ function wireSaveLoad() {
 function wireCanvasHelp() {
   if (!canvasHelp || !canvasHelpButton || !canvasHelpTooltip) return;
   const dismissed = localStorage.getItem(CANVAS_HELP_KEY) === '1';
+  let autoHideTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const startAutoHideTimer = () => {
+    if (autoHideTimer) clearTimeout(autoHideTimer);
+    autoHideTimer = setTimeout(() => {
+      if (canvasHelp.classList.contains('is-open')) {
+        // Add spring-out animation class
+        canvasHelpTooltip.classList.add('is-hiding');
+        // Wait for animation to complete, then close
+        setTimeout(() => {
+          canvasHelpTooltip.classList.remove('is-hiding');
+          closeHelp();
+        }, 500);
+      }
+    }, 10000); // 10 seconds
+  };
+
+  const clearAutoHideTimer = () => {
+    if (autoHideTimer) {
+      clearTimeout(autoHideTimer);
+      autoHideTimer = null;
+    }
+  };
+
   if (!dismissed) {
     canvasHelp.classList.add('is-open');
     canvasHelpButton.setAttribute('aria-expanded', 'true');
+    startAutoHideTimer();
   }
 
   const closeHelp = () => {
     canvasHelp.classList.remove('is-open');
     canvasHelpButton.setAttribute('aria-expanded', 'false');
+    clearAutoHideTimer();
   };
 
   canvasHelpButton.addEventListener('click', (event) => {
     event.stopPropagation();
     const isOpen = canvasHelp.classList.toggle('is-open');
     canvasHelpButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    if (isOpen) {
+      startAutoHideTimer();
+    } else {
+      clearAutoHideTimer();
+    }
+  });
+
+  // Reset timer when user interacts with the tooltip
+  canvasHelpTooltip.addEventListener('mouseenter', clearAutoHideTimer);
+  canvasHelpTooltip.addEventListener('mouseleave', () => {
+    if (canvasHelp.classList.contains('is-open')) {
+      startAutoHideTimer();
+    }
   });
 
   canvasHelpDismiss?.addEventListener('click', () => {
