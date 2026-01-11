@@ -675,6 +675,104 @@ From the original project TODO:
 
 ---
 
+## Probe Ray Visualization
+
+> **Status:** 📋 Planned
+> **Priority:** Medium
+
+### Overview
+
+Add a toggle in the probe inspector to visualize all rays traced by the Probe engine, both on the map and as a level breakdown in the inspector panel.
+
+### Inspector Panel: Path Breakdown
+
+Show each traced path with its individual contribution:
+
+```
+┌─ Probe Inspector ─────────────────────────────────┐
+│  L_eq: 72.3 dB(A)                                 │
+│                                                   │
+│  ☑ Show Traced Rays                               │
+│                                                   │
+│  Path Contributions:                              │
+│  ┌───────────────────────────────────────────┐   │
+│  │ ━━━ Direct              68.2 dB  ████████ │   │
+│  │ ┅┅┅ Ground Bounce       64.1 dB  ██████   │   │
+│  │ ••• Wall Reflection     52.3 dB  ███      │   │
+│  │ ━•━ Roof Diffraction    48.7 dB  ██       │   │
+│  └───────────────────────────────────────────┘   │
+│                                                   │
+│  Dominant: Direct path (68.2 dB)                  │
+│  Interference: Destructive at 500 Hz             │
+└───────────────────────────────────────────────────┘
+```
+
+### Map Visualization
+
+When toggle enabled, render ray paths on the map canvas:
+
+```
+                    🔊 Source
+                   /|\`\
+                  / | \ `\
+        Direct → /  |  \  `\ ← Wall reflection
+                /   |   \   `\
+               /    |    \    🏢
+              /     |     \   Wall
+             /    ●──┘     \
+            /   Ground      \
+           /   reflection    \
+          /                   \
+         🎤 ←─────────────────┘
+        Probe
+```
+
+**Line styles:**
+- **Solid (━━━)**: Direct path
+- **Dashed (┅┅┅)**: Ground bounce (shows reflection point)
+- **Dotted (•••)**: Wall reflections
+- **Dash-dot (━•━)**: Diffraction paths (over/around barriers)
+
+**Color/opacity:** Based on path contribution level (brighter = higher dB)
+
+### Use Cases
+
+1. **Debug** - Understand why probe level differs from expected
+2. **Verify** - Confirm engine is tracing correct paths
+3. **Optimize** - Identify dominant paths for barrier placement
+4. **Educational** - Visualize multi-path propagation physics
+
+### Implementation Notes
+
+```typescript
+interface TracedPath {
+  type: 'direct' | 'ground' | 'wall' | 'diffraction';
+  points: Vec3[];           // Path vertices (for drawing)
+  level_dB: number;         // Contribution level
+  phase_rad: number;        // Phase at receiver
+  reflectionPoint?: Vec3;   // For ground/wall paths
+  diffractionEdge?: Vec3;   // For diffraction paths
+}
+
+interface ProbeRayVisualization {
+  enabled: boolean;
+  paths: TracedPath[];
+  showLabels: boolean;      // Show dB labels on paths
+  colorByLevel: boolean;    // Color intensity by contribution
+}
+```
+
+### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `apps/web/src/probeWorker.ts` | Return path geometry with results |
+| `apps/web/src/main.ts` | Render paths on canvas, update inspector |
+| `apps/web/index.html` | Add toggle and path breakdown UI |
+| `apps/web/src/style.css` | Path breakdown styling |
+
+---
+
 ## Future Enhancements Summary
 
 | Feature | Priority | Effort | Status |
