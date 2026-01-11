@@ -199,16 +199,18 @@ For finite-length barriers, sound can also diffract **around the ends** (horizon
 
 ### Side Path Difference
 
-For each barrier edge (left/right):
+For each barrier edge (left/right), horizontal diffraction occurs at **ground level**:
 
 ```
-δ_side = |S→Edge| + |Edge→R| - |S→R|
+δ_side = |S→Edge_ground| + |Edge_ground→R| - |S→R|
 ```
 
 Where:
-- `S→Edge` = 3D distance from source to barrier edge point
-- `Edge→R` = 3D distance from edge point to receiver
+- `S→Edge_ground` = 3D distance from source to barrier edge at z=0
+- `Edge_ground→R` = 3D distance from edge at z=0 to receiver
 - `S→R` = direct 3D distance (blocked by barrier)
+
+> **Note:** Per physics audit Issue #5, horizontal (around-the-end) diffraction uses ground-level edge points, not barrier height. Sound diffracts *around* the barrier ends at ground level.
 
 ### Combined Path Selection
 
@@ -414,11 +416,24 @@ A_total = A_div + A_atm + A_gr
 
 ### Blocked Path (Barrier Present)
 
+GeoNoise uses **ISO 9613-2 §7.4 additive formula** with ground partitioning:
+
 ```
-A_total = A_div + A_atm + max(A_bar, A_gr)
+A_total = A_div + A_atm + A_bar + A_gr
 ```
 
-The `max()` term prevents a barrier from making results louder than the unblocked case.
+Where ground effect is computed separately for source-side and receiver-side regions:
+
+```
+A_gr = A_gr_source + A_gr_receiver
+
+A_gr_source   = ground effect from source to barrier top
+A_gr_receiver = ground effect from barrier top to receiver
+```
+
+This correctly models that both barrier diffraction AND ground absorption reduce sound levels behind barriers on soft ground.
+
+> **Legacy fallback:** When barrier geometry info is unavailable, uses `max(A_bar, A_gr)` to avoid negative insertion loss.
 
 ---
 
@@ -513,6 +528,28 @@ A_gr = -20·log₁₀|1 + γ·(r₁/r₂)·e^(jφ)|
 | Mixed       | 20,000 - 200,000    | ~0.7-0.9   | varies |
 | Soft        | < 20,000            | ~0.6-0.7   | ~160-170° |
 
+### Mixed Ground Sigma Models
+
+For mixed ground types, GeoNoise offers two interpolation models (Settings → Physics → Mixed Ground Model):
+
+| Model | Formula | Use Case |
+|-------|---------|----------|
+| **ISO 9613-2** | `σ_eff = σ_soft / G` | Standards compliance |
+| **Logarithmic** | `log(σ) = G·log(σ_soft) + (1-G)·log(σ_hard)` | Physical accuracy |
+
+Where G = mixed factor (0 = hard, 1 = soft).
+
+### Delany-Bazley Model Bounds
+
+The Delany-Bazley (1970) model is only valid for:
+```
+0.01 < f/σ < 1.0
+```
+
+Outside this range:
+- **f/σ < 0.01** (very hard surface): Returns high impedance (|Γ| ≈ 1)
+- **f/σ > 1.0** (outside valid range): Uses **Miki (1990) extension**
+
 **Implementation**: [packages/engine/src/propagation/ground.ts](../packages/engine/src/propagation/ground.ts)
 
 ---
@@ -562,6 +599,16 @@ k = 2πf/c
 
 - **Same source, multiple paths**: Coherent (phasor) summation → captures interference
 - **Different sources**: Energetic (incoherent) summation → independent sources
+
+### Diffraction for Unblocked Paths
+
+Per physics audit Issue #11, diffraction paths are traced even when the direct path is unblocked, if a barrier is nearby. This captures interference patterns that would otherwise be missed.
+
+```typescript
+maxDiffractionDeltaForUnblockedPath: 5.0  // meters (~1λ at 63 Hz)
+```
+
+When `pathDifference < threshold`, the diffraction path is included in coherent summation.
 
 **Implementation**: [packages/shared/src/phasor/index.ts](../packages/shared/src/phasor/index.ts)
 

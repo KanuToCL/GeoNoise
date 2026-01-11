@@ -31,7 +31,7 @@ This document contains planned features and enhancements for GeoNoise. For compl
 ### 🔨 In Progress / High Priority
 
 - Visual indicator when probe is "calculating"
-- **Physics audit fixes** (see below)
+- **Physics audit fixes** (7 remaining - see below)
 
 ### 📅 Planned (This Cycle)
 
@@ -349,171 +349,98 @@ This feature addresses the root cause of Issue #2 (Two-Ray Ground Model Sign Inc
 
 ## Physics Audit - Bug Fixes
 
-> **Audit Date:** 2026-01-07
-> **Status:** 🔨 In Progress
+> **Audit Date:** 2025-01-08 (Updated: 2025-01-09)
+> **Status:** 13 Resolved, 7 Pending
+> **Ground Truth:** [physics_audit.md](./physics_audit.md)
 
-A comprehensive physics consistency audit identified several issues that need to be addressed. Items are prioritized by severity and physics impact.
+A comprehensive physics consistency audit identified several issues. See [physics_audit.md](./physics_audit.md) for full details and implementation code.
 
-### 🔴 Critical (P0) - Fix Immediately
+### ✅ Resolved Issues (13)
 
-#### 1. Two-Ray Ground Reflection Amplitude Ratio Missing
+| Issue | Description | Resolution |
+|-------|-------------|------------|
+| #1 | Spreading Loss Formula Constant Ambiguity | Fixed with exact constants + documentation |
+| #2 | Two-Ray Ground Model Sign Inconsistency | Resolved by design (see Calculation Profile Presets) |
+| #2b | computeProbeCoherent Double-Counts Direct Path | Fixed: paths now processed uniformly |
+| #3 | Barrier + Ground Effect Interaction | Fixed: ISO 9613-2 §7.4 additive formula with ground partitioning |
+| #4 | Atmospheric Absorption Uses Direct Distance | Fixed: now uses actualPathLength for diffracted paths |
+| #5 | Side Diffraction Geometry Oversimplified | Fixed: horizontal diffraction at ground level |
+| #5 (probeWorker) | Simplified Atmospheric Absorption | Fixed: now respects UI model selection |
+| #6 | Delany-Bazley Extrapolation Outside Valid Range | Fixed: bounds checking + Miki (1990) extension |
+| #10 | "Simple" Atmospheric Model Incorrectly Formulated | Fixed: replaced buggy formula with lookup table |
+| #11 | Diffraction Only Traced When Direct Blocked | Fixed: traces nearby diffraction for coherent summation |
+| #12 | Mixed Ground Sigma Calculation Arbitrary | Fixed: user-selectable ISO 9613-2 or logarithmic interpolation |
+| #16 | Same Formula for Thin/Thick Barriers | Fixed: buildings use coefficient 40 and cap 25 dB |
+| #18 | Speed of Sound Constant vs Formula Mismatch | Fixed: Environmental Conditions UI for user-controlled temp/humidity/pressure |
 
-**File:** `/apps/web/src/probeWorker.ts` (lines 1298-1340)
-**Status:** ✅ Fixed (2026-01-07)
+### 🟠 Moderate Priority - Pending (2)
 
-**Problem:** The probe's ground reflection code was missing the geometric amplitude ratio `r1/r2` that the engine's `agrTwoRayDb()` correctly includes. The phase calculation was implicitly correct (direct path uses `-k*r1`, ground uses `-k*r2`), but amplitude scaling was incomplete.
+#### #7. Ground Reflection Assumes Flat Ground (z=0)
 
-**Fix applied:** Added geometric ratio to match textbook two-ray model:
-```typescript
-// Before (missing geometric ratio):
-const reflectionLoss = -20 * Math.log10(groundCoeff.magnitude);
+**File:** `packages/engine/src/raytracing/index.ts:312-317`
+**Status:** ⬜ Open
 
-// After (correct textbook model):
-const geometricRatio = directDistance / groundPathDistance;  // r1/r2
-const reflectionLoss = -20 * Math.log10(groundCoeff.magnitude * geometricRatio);
-```
+**Problem:** Ground reflection point calculation hardcodes `z: 0`, doesn't account for terrain variation.
 
-This now matches the engine's implementation: `complexScale(gamma, r1/r2)`.
-
-**Note:** The noise map was already correct - it uses `agrTwoRayDb()` from the engine which properly implements the full two-ray model with both path lengths and amplitude scaling.
-
----
-
-#### 2. 2D Distance Extraction Method Is Indirect
-
-**File:** `/packages/engine/src/propagation/index.ts` (lines 273-274)
-**Status:** ✅ Fixed (2026-01-07)
-
-**Problem:** Code passed 3D distance then extracted 2D via Pythagorean theorem, risking numerical instability.
-
-**Fix applied:** Now extracts horizontal distance correctly. Consider refactoring to pass 2D coordinates directly in future.
+**Impact:** Wrong for any terrain variation.
 
 ---
 
-### 🟠 Medium (P1) - Fix Soon
+#### #9. Wall Reflection Height Geometry Incorrect
 
-#### 3. Barrier Side Diffraction Edge Height Is Wrong
+**File:** `packages/engine/src/raytracing/index.ts:387-389`
+**Status:** ⬜ Open
 
-**File:** `/apps/web/src/probeWorker.ts` (lines 807-811)
-**Status:** ⬜ Not Started
+**Problem:** Uses arbitrary clamping `Math.min(imageSource.surface.height, Math.max(source.z, receiver.z))` instead of proper geometric calculation from image source method.
 
-**Problem:** For horizontal side diffraction, edge height is clamped to source/receiver heights:
-```typescript
-z: Math.min(edgeHeight, Math.max(source.z, receiver.z))
-```
-
-For horizontal diffraction around barrier ends, the edge should be at ground level (`z=0`), not clamped.
-
-**Impact:** Side diffraction path lengths are incorrect, leading to wrong attenuation values.
+**Impact:** Geometry error in reflected paths.
 
 ---
 
-#### 4. Ground Reflection Phase Inconsistent with Delany-Bazley
+### 🟡 Minor Priority - Pending (5)
 
-**File:** `/apps/web/src/probeWorker.ts` (lines 939-946)
-**Status:** ⬜ Not Started
+#### #13. Sommerfeld Correction Discontinuity at |w|=4
 
-**Problem:** Uses ad-hoc polynomial approximations for soft ground reflection phase (`0.8π to 0.95π`) instead of the Delany-Bazley model already implemented in `/packages/engine/src/propagation/ground.ts`.
+**File:** `packages/engine/src/propagation/ground.ts:59`
+**Status:** ⬜ Open
 
-**Fix:** Import and use the existing Delany-Bazley implementation for consistency.
-
----
-
-#### 5. Simplified Atmospheric Absorption in probeWorker
-
-**File:** `/apps/web/src/probeWorker.ts`
-**Status:** ✅ Fixed (2026-01-07)
-
-**Problem:** The probe always used a simplified lookup table for atmospheric absorption, ignoring the user's UI selection between "ISO 9613-1" and "Simple" models.
-
-**Root cause:** The `buildProbeRequest()` function was not passing the `atmosphericAbsorption` model setting to the worker. The probe config only had a boolean on/off flag, not the model type.
-
-**Fix applied:**
-1. Updated `ProbeConfig` interface to use `AtmosphericAbsorptionModel` type (`'none' | 'simple' | 'iso9613'`)
-2. Updated `buildProbeRequest()` to pass the model from `getPropagationConfig()`, plus temperature, humidity, and pressure
-3. Implemented full ISO 9613-1 atmospheric absorption formula in probeWorker
-4. Updated `atmosphericAbsorptionCoeff()` to dispatch to the correct model based on user selection
-
-Now the probe respects the "Atmospheric Model" dropdown in Settings.
+**Problem:** Discontinuity in ground wave function at threshold. Should use smooth transition.
 
 ---
 
-### 🟡 Low (P2) - Nice to Have
+#### #14. Hardcoded Diffraction Phase Shift
 
-#### 7. Building Diffraction Phase Shift Approximation
+**File:** `packages/engine/src/raytracing/index.ts:467`
+**Status:** ⬜ Open
 
-**File:** `/apps/web/src/probeWorker.ts` (line 1291)
-**Status:** ⬜ Not Started (Downgraded from Medium)
-
-**Current implementation:**
-```typescript
-const phase = -k * diffPath.totalDistance + (-Math.PI / 4) * diffPath.diffractionPoints;
-```
-
-**Assessment:** The `-π/4` per diffraction edge is a **GTD-inspired approximation** that's reasonable for practical use:
-- Geometric Theory of Diffraction (GTD) predicts `-π/4` for "soft" boundaries
-- The main amplitude calculation via Maekawa/Fresnel number is correct
-- Since direct paths are blocked when diffraction occurs, there's minimal interference concern
-- Changing this would require significant validation effort
-
-**Impact:** Minimal practical impact. The approximation is physically motivated and widely used.
+**Problem:** Uses `-π/4` constant. Exact phase depends on diffraction angle (UTD model).
 
 ---
 
-#### 8. Missing Edge Case Guards in Fresnel Calculation
+#### #15. Incoherent Source Summation Only
 
-**File:** `/packages/engine/src/propagation/index.ts` (lines 198-209)
-**Status:** ⬜ Not Started
+**File:** `packages/engine/src/compute/index.ts:467`
+**Status:** ⬜ Open (by design)
 
-**Problem:** No protection for `frequency <= 0` or `wavelength <= 0` which could cause division issues.
-
-**Fix:**
-```typescript
-if (frequency <= 0) return 0;
-const lambda = wavelength ?? 343 / frequency;
-if (lambda <= 0) return 0;
-```
+**Note:** Cannot model correlated sources. Low priority - most real-world sources are uncorrelated.
 
 ---
 
-#### 9. Speed of Sound Hardcoded to 343 m/s
+#### #17. Ground Absorption Not Spectral
 
-**File:** `/apps/web/src/probeWorker.ts` (line 96)
-**Status:** ⬜ Not Started
+**File:** `packages/engine/src/raytracing/index.ts:340-345`
+**Status:** ⬜ Open
 
-**Problem:** Uses constant `343 m/s` while engine uses temperature-dependent `speedOfSound(temp)`.
-
-| Temp | Speed |
-|------|-------|
-| 0°C  | 331 m/s |
-| 20°C | 343 m/s |
-| 30°C | 350 m/s |
-
-**Impact:** ~0.5-5 dB discrepancy depending on temperature setting.
+**Problem:** Uses single absorption value for all frequencies instead of ISO 9613-2 Table 2 spectral coefficients.
 
 ---
 
-#### 9. Corner Diffraction Height Assignment Ambiguous
+#### #19. Diffraction Loss = 0 in Ray Tracing Result
 
-**File:** `/apps/web/src/probeWorker.ts` (line 610)
-**Status:** ⬜ Not Started
+**File:** `packages/engine/src/raytracing/index.ts:469`
+**Status:** ⬜ Open
 
-**Problem:** Corner height uses `min(source.z, receiver.z, buildingTop)` which may place diffraction point lower than the receiver.
-
----
-
-#### 10. Complex Division Edge Case Handling
-
-**File:** `/packages/engine/src/propagation/complex.ts` (lines 19-25)
-**Status:** ⬜ Not Started
-
-**Problem:** Returns `{0,0}` on exact divide-by-zero. Should use epsilon threshold.
-
-**Fix:**
-```typescript
-const EPSILON = 1e-10;
-if (Math.abs(denom) < EPSILON) return { re: 0, im: 0 };
-```
+**Problem:** Diffraction loss is a placeholder (0), computed downstream. Should pre-compute per-band loss.
 
 ---
 
@@ -529,17 +456,6 @@ The following implementations were verified as **physically accurate**:
 | Double-Edge Diffraction | `probeWorker.ts:655` | ✅ Coefficient 40, cap 25 dB |
 | Two-Ray Geometry | `probeWorker.ts:971-988` | ✅ r1, r2 formulas correct |
 | Coherent Phasor Sum | `phasor/index.ts:213-227` | ✅ Proper complex summation |
-
----
-
-### Testing Recommendations
-
-| Test | Description |
-|------|-------------|
-| **Two-Ray Validation** | Source/receiver at different heights over soft ground. Verify comb filtering at f where r2-r1 ≈ λ/2 |
-| **Building Diffraction** | Compare 5m, 50m, 500m buildings against Maekawa tables |
-| **Temperature Variation** | Verify phase consistency between 0°C and 30°C |
-| **Side Diffraction** | Compare 10m vs 100m barrier side loss (should differ significantly) |
 
 ---
 
@@ -762,7 +678,6 @@ From the original project TODO:
 | Feature | Priority | Effort | Status |
 |---------|----------|--------|--------|
 | Probe calculating indicator | High | Low | In Progress |
-| Barrier side diffraction | Medium | Medium | Planned |
 | Expose maxReflections UI | Medium | Low | Planned |
 | Configurable diffraction models | Medium | High | Future |
 | Ghost source visualization | Low | Medium | Future |
