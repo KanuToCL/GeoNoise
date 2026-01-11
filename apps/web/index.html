@@ -1,9 +1,110 @@
 <!doctype html>
-<html lang="en" data-theme="default" data-feature-profile-dropdown="false">
+<html lang="en" data-theme="default" data-feature-profile-dropdown="false" data-feature-probe-engine-controls="false">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GeoNoise</title>
+    <title>GeoNoise - Environmental Noise Modeling & Acoustic Propagation Software</title>
+
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="GeoNoise is a free, browser-based environmental noise modeling tool for acoustic consultants and engineers. Features ISO 9613-2 propagation, barrier diffraction, ground effects, and multi-path ray tracing with coherent phasor summation." />
+    <meta name="keywords" content="noise modeling software, environmental noise, acoustic propagation, ISO 9613-2, sound propagation, noise mapping, barrier diffraction, ground effect, noise assessment, acoustic software, sound level prediction, noise contour map, environmental acoustics, outdoor sound propagation, noise consultant tools, free noise software, web-based acoustics, Maekawa diffraction, Delany-Bazley, atmospheric absorption, noise heatmap" />
+    <meta name="author" content="GeoNoise" />
+    <meta name="robots" content="index, follow" />
+    <meta name="googlebot" content="index, follow" />
+    <link rel="canonical" href="https://geonoise.app/" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://geonoise.app/" />
+    <meta property="og:title" content="GeoNoise - Environmental Noise Modeling Software" />
+    <meta property="og:description" content="Free browser-based noise modeling with ISO 9613-2 propagation, barrier diffraction, ground effects, and coherent multi-path ray tracing. No installation required." />
+    <meta property="og:image" content="https://geonoise.app/og-image.png" />
+    <meta property="og:site_name" content="GeoNoise" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://geonoise.app/" />
+    <meta name="twitter:title" content="GeoNoise - Environmental Noise Modeling Software" />
+    <meta name="twitter:description" content="Free browser-based noise modeling with ISO 9613-2 propagation, barrier diffraction, ground effects, and coherent multi-path ray tracing." />
+    <meta name="twitter:image" content="https://geonoise.app/twitter-card.png" />
+
+    <!-- Schema.org Structured Data for Software Application -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "GeoNoise",
+      "applicationCategory": "EngineeringApplication",
+      "operatingSystem": "Web Browser",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "description": "Environmental noise modeling and acoustic propagation software for calculating outdoor sound levels. Implements ISO 9613-2 for noise mapping, barrier diffraction (Maekawa), ground effects (Delany-Bazley), and multi-path ray tracing with coherent phasor summation.",
+      "featureList": [
+        "ISO 9613-2 sound propagation",
+        "Barrier diffraction (Maekawa formula)",
+        "Ground effect modeling (Delany-Bazley, Miki)",
+        "Atmospheric absorption (ISO 9613-1)",
+        "Multi-path ray tracing",
+        "Coherent phasor summation",
+        "Noise contour mapping",
+        "Building reflection and occlusion",
+        "9-band octave spectrum analysis (63 Hz - 16 kHz)",
+        "A/C/Z frequency weighting",
+        "Real-time noise map updates",
+        "CSV/JSON export"
+      ],
+      "softwareHelp": {
+        "@type": "CreativeWork",
+        "name": "GeoNoise Documentation",
+        "url": "https://geonoise.app/docs"
+      }
+    }
+    </script>
+
+    <!-- Schema.org FAQ for common acoustic questions -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is ISO 9613-2?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "ISO 9613-2 is the international standard for calculating outdoor sound propagation. It accounts for geometric divergence, atmospheric absorption, ground effects, barrier diffraction, and other attenuation factors. GeoNoise implements the full ISO 9613-2 model for noise mapping."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How does barrier diffraction work?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Barrier diffraction uses the Maekawa formula: A_bar = 10·log₁₀(3 + 20N) where N is the Fresnel number. Sound bends over and around barriers, with higher frequencies attenuated more than lower frequencies. GeoNoise calculates both over-top and side diffraction paths."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is the ground dip phenomenon?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The ground dip is a frequency-dependent reduction in sound level caused by destructive interference between direct and ground-reflected sound waves. It typically occurs around 200-500 Hz depending on geometry. GeoNoise models this using coherent two-ray phasor summation."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is the Delany-Bazley model?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The Delany-Bazley model calculates ground surface impedance from flow resistivity: Z = 1 + 9.08(f/σ)^(-0.75) - j·11.9(f/σ)^(-0.73). It's used to determine how much sound is reflected vs absorbed by the ground. GeoNoise supports both Delany-Bazley and the Miki extension."
+          }
+        }
+      ]
+    }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -228,7 +329,7 @@
                       <div class="derived-display" id="derivedSpeedOfSound">343.4 m/s</div>
                     </div>
                   </div>
-                  <div class="settings-section">
+<div class="settings-section">
                     <div class="settings-title">atmospheric absorption</div>
                     <label class="property-row property-row-stack">
                       <span>Model</span>
@@ -238,45 +339,27 @@
                         <option value="none">None (Disabled)</option>
                       </select>
                     </label>
+                    <div class="equation-collapsible" data-equation="atmosphericAbsorption">
+                      <div class="equation-header" role="button" tabindex="0">
+                        <span class="equation-toggle">▶</span>
+                        <span>equation</span>
+                      </div>
+                      <div class="equation-content" hidden>
+                        <div class="equation-main" id="atmAbsorptionEquation">A_atm = α(f) · d / 1000</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <!-- Physics Panel -->
+<!-- Physics Panel -->
               <div class="settings-slide-panel" id="settingsPanelPhysics" data-panel="physics">
                 <div class="settings-panel-header">physics</div>
                 <div class="settings-panel-content">
-                  <div class="settings-section">
-                    <div class="settings-title">ground effects</div>
-                    <label class="toggle" for="propagationGroundReflection">
-                      <input type="checkbox" id="propagationGroundReflection" />
-                      <span>Ground Effects</span>
-                    </label>
-                    <label class="property-row property-row-stack">
-                      <span>Ground Type</span>
-                      <select class="ui-inset" id="propagationGroundType">
-                        <option value="hard">Hard (Asphalt, Concrete)</option>
-                        <option value="mixed" selected>Mixed</option>
-                        <option value="soft">Soft (Grass, Soil)</option>
-                      </select>
-                    </label>
-                    <label class="property-row property-row-stack" id="propagationGroundMixedSigmaModelRow">
-                      <span>Mixed Ground Model</span>
-                      <select class="ui-inset" id="propagationGroundMixedSigmaModel">
-                        <option value="iso9613" selected>ISO 9613-2 (Compliant)</option>
-                        <option value="logarithmic">Logarithmic (Accurate)</option>
-                      </select>
-                    </label>
-                    <label class="property-row property-row-stack">
-                      <span>Ground Algorithm</span>
-                      <select class="ui-inset" id="propagationGroundModel">
-                        <option value="twoRayPhasor">Two-Ray</option>
-                        <option value="legacy">ISO 9613-2</option>
-                      </select>
-                    </label>
-                  </div>
-                  <div class="settings-section">
-                    <div class="settings-title">propagation</div>
+
+<!-- SHARED Section -->
+                  <div class="settings-section physics-engine-section">
+                    <div class="settings-title">shared</div>
                     <label class="property-row property-row-stack">
                       <span>Spreading Loss</span>
                       <select class="ui-inset" id="propagationSpreading">
@@ -284,15 +367,141 @@
                         <option value="cylindrical">Cylindrical</option>
                       </select>
                     </label>
+<div class="equation-collapsible" data-equation="spreading">
+                      <div class="equation-header" role="button" tabindex="0">
+                        <span class="equation-toggle">▶</span>
+                        <span>equation</span>
+                      </div>
+<div class="equation-content" hidden>
+                        <div class="equation-main">A_div = 20·log₁₀(d) + 10·log₁₀(4π)</div>
+                      </div>
+                    </div>
                     <label class="property-row property-row-stack">
-                      <span>Barrier Side Diffraction</span>
-                      <select class="ui-inset" id="propagationBarrierSideDiffraction">
-                        <option value="off">Off (Over-top only)</option>
-                        <option value="auto" selected>Auto (< 50m barriers)</option>
-                        <option value="on">On (All barriers)</option>
+                      <span>Ground Surface</span>
+                      <select class="ui-inset" id="propagationGroundType">
+                        <option value="hard">Hard (Asphalt, Concrete)</option>
+                        <option value="mixed" selected>Mixed</option>
+                        <option value="soft">Soft (Grass, Soil)</option>
                       </select>
                     </label>
                   </div>
+
+                  <!-- GRID ENGINE Section -->
+                  <div class="settings-section physics-engine-section">
+                    <div class="settings-title">grid engine</div>
+                    <div class="engine-subtitle">Heatmaps · Receivers · Measure Grids</div>
+                    <label class="toggle" for="propagationGroundReflection">
+                      <input type="checkbox" id="propagationGroundReflection" />
+                      <span>Ground Effects</span>
+                    </label>
+                    <label class="property-row property-row-stack">
+                      <span>Ground Effect Model</span>
+                      <select class="ui-inset" id="propagationGroundModel">
+                        <option value="twoRayPhasor">Ground Interference</option>
+                        <option value="legacy">ISO 9613-2</option>
+                      </select>
+                    </label>
+<div class="equation-collapsible" data-equation="groundModel">
+                      <div class="equation-header" role="button" tabindex="0">
+                        <span class="equation-toggle">▶</span>
+                        <span>equation</span>
+                      </div>
+                      <div class="equation-content" hidden>
+                        <div class="equation-main" id="groundModelEquation">A_gr = -20·log₁₀|1 + Γ·(r₁/r₂)·e^(jk(r₂-r₁))|</div>
+                      </div>
+                    </div>
+<label class="property-row property-row-stack" id="propagationGroundMixedSigmaModelRow">
+                      <span>Mixed Interpolation</span>
+                      <select class="ui-inset" id="propagationGroundMixedSigmaModel">
+                        <option value="iso9613" selected>ISO 9613-2 (Linear)</option>
+                        <option value="logarithmic">Logarithmic</option>
+                      </select>
+                    </label>
+                    <div class="equation-collapsible" data-equation="mixedInterpolation">
+                      <div class="equation-header" role="button" tabindex="0">
+                        <span class="equation-toggle">▶</span>
+                        <span>equation</span>
+                      </div>
+                      <div class="equation-content" hidden>
+                        <div class="equation-main" id="mixedInterpEquation">σ_eff = σ_soft / G</div>
+                      </div>
+                    </div>
+<label class="property-row property-row-stack">
+                      <span>Side Diffraction</span>
+                      <select class="ui-inset" id="propagationBarrierSideDiffraction">
+                        <option value="off">Off (Over-top only)</option>
+                        <option value="auto" selected>Auto (&lt; 50m barriers)</option>
+                        <option value="on">On (All barriers)</option>
+                      </select>
+                    </label>
+                    <div class="equation-collapsible" data-equation="sideDiffraction">
+                      <div class="equation-header" role="button" tabindex="0">
+                        <span class="equation-toggle">▶</span>
+                        <span>equation</span>
+                      </div>
+                      <div class="equation-content" hidden>
+                        <div class="equation-main" id="sideDiffractionEquation">δ = min(δ_top, δ_left, δ_right)</div>
+                      </div>
+                    </div>
+                  </div>
+
+<!-- PROBE ENGINE Section (Feature Flagged - not wired to engine yet) -->
+                  <div class="settings-section physics-engine-section feature-probe-engine-controls">
+                    <div class="settings-title">probe engine</div>
+                    <div class="engine-subtitle">Probe Microphones · Multi-path Ray Tracing</div>
+<div class="probe-paths-group">
+                      <span class="probe-paths-label">Paths Traced</span>
+                      <label class="toggle" for="probeGroundReflection">
+                        <input type="checkbox" id="probeGroundReflection" checked />
+                        <span>Ground Reflection</span>
+                      </label>
+                      <label class="toggle" for="probeWallReflections">
+                        <input type="checkbox" id="probeWallReflections" checked />
+                        <span>Wall Reflections</span>
+                      </label>
+                      <label class="toggle" for="probeBarrierDiffraction">
+                        <input type="checkbox" id="probeBarrierDiffraction" checked />
+                        <span>Barrier Diffraction</span>
+                      </label>
+                      <div class="probe-equation-summary">
+                        <div class="equation-main">p = Σ pᵢ · e^(j·φᵢ)</div>
+                      </div>
+                    </div>
+                    <div class="probe-ground-group">
+                      <span class="probe-paths-label">Ground Physics</span>
+<label class="toggle" for="probeSommerfeldCorrection">
+                        <input type="checkbox" id="probeSommerfeldCorrection" />
+                        <span>Sommerfeld Correction</span>
+                      </label>
+                      <div class="equation-collapsible" data-equation="sommerfeld">
+                        <div class="equation-header" role="button" tabindex="0">
+                          <span class="equation-toggle">▶</span>
+                          <span>equation</span>
+                        </div>
+                        <div class="equation-content" hidden>
+                          <div class="equation-main">Γ_sph = Γ_plane + (1 - Γ_plane)·F(w)</div>
+                        </div>
+                      </div>
+                      <label class="property-row property-row-stack">
+                        <span>Impedance Model</span>
+                        <select class="ui-inset" id="probeImpedanceModel">
+                          <option value="delanyBazley">Delany-Bazley</option>
+                          <option value="delanyBazleyMiki" selected>Delany-Bazley-Miki</option>
+                        </select>
+                      </label>
+<div class="equation-collapsible" data-equation="impedance">
+                        <div class="equation-header" role="button" tabindex="0">
+                          <span class="equation-toggle">▶</span>
+                          <span>equation</span>
+                        </div>
+                        <div class="equation-content" hidden>
+                          <div class="equation-main" id="impedanceEquation">Z_n = 1 + 9.08(f/σ)^(-0.75) - j·11.9(f/σ)^(-0.73)</div>
+                        </div>
+                      </div>
+</div>
+                    </div>
+                  </div>
+
                 </div>
               </div>
 

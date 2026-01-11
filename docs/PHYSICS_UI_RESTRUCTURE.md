@@ -1,7 +1,7 @@
 # Physics Settings UI Restructure
 
 > **Document Date:** 2026-01-11
-> **Status:** Proposed
+> **Status:** Implemented (UI Complete, Probe Wiring Pending)
 > **Goal:** Separate Grid and Probe engine settings with COMSOL-style live equations
 
 ---

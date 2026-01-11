@@ -6,6 +6,61 @@ This document contains the implementation history of completed features. For pla
 
 ## 2026-01-11
 
+### Physics Settings UI Restructure
+
+**Status:** ✅ UI Complete | ⚠️ Probe Engine Wiring Pending
+
+Major redesign of the Physics settings panel separating Grid Engine and Probe Engine settings with COMSOL-style collapsible equations.
+
+#### New Panel Structure
+
+| Section | Purpose | Wiring Status |
+|---------|---------|---------------|
+| **s h a r e d** | Spreading Loss, Ground Surface | ✅ Fully wired to engine |
+| **g r i d  e n g i n e** | Ground Effects, Ground Model, Mixed Interpolation, Side Diffraction | ✅ Fully wired to engine |
+| **p r o b e  e n g i n e** | Ground Reflection, Wall Reflections, Barrier Diffraction, Sommerfeld, Impedance Model | ⚠️ **UI Only - Not wired to probe worker** |
+
+#### Probe Engine Controls (Placeholders - Wiring TODO)
+
+These controls update the UI and equations but do NOT affect probe calculations yet:
+
+| Control | Current Behavior | TODO |
+|---------|-----------------|------|
+| Ground Reflection toggle | `console.log()` only | Wire to `probeWorker.ts` |
+| Wall Reflections toggle | `console.log()` only | Wire to `probeWorker.ts` |
+| Barrier Diffraction toggle | `console.log()` only | Wire to `probeWorker.ts` |
+| Sommerfeld Correction toggle | `console.log()` only | Add Sommerfeld to ground model |
+| Impedance Model dropdown | `console.log()` only | Add Miki fallback logic |
+
+The probe worker currently has these features hardcoded ON. Wiring the toggles will allow users to disable specific path types for debugging or performance.
+
+#### Features Implemented
+
+- **Three clear sections** with letter-spaced titles (`s h a r e d`, `g r i d  e n g i n e`, `p r o b e  e n g i n e`)
+- **Collapsible equations** that update dynamically when dropdown selection changes
+- **Phasor summation display** showing `p = Σ pᵢ · e^(j·φᵢ)` for probe paths
+- **Blue toggle ring** with inset effect when active (matching slider style)
+- **Fade effect** on collapsed equations (50% opacity → 100% when expanded)
+- **No hover bounce** on toggles (removed per user feedback)
+
+#### Build Tools Added
+
+| File | Purpose |
+|------|---------|
+| `nuke-rebuild.command` | Double-click for nuclear clean + rebuild (clears all caches) |
+| `run-web.command` | Updated to use `npm run build:clean` when stale build detected |
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `apps/web/index.html` | Restructured physics panel into 3 sections with equation collapsibles |
+| `apps/web/src/style.css` | ~150 lines for section styling, equation displays, toggle effects |
+| `apps/web/src/main.ts` | Equation update functions, placeholder event listeners for probe controls |
+| `docs/PHYSICS_UI_RESTRUCTURE.md` | Updated status to "Implemented (UI Complete, Probe Wiring Pending)" |
+
+---
+
 ### Engines Tab in Details Modal
 
 **Status:** ✅ Implemented (v0.6.0)

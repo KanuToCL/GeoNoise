@@ -547,6 +547,17 @@ const propagationGroundHelp = document.querySelector('#propagationGroundHelp') a
 const propagationGroundModelHelp = document.querySelector('#propagationGroundModelHelp') as HTMLDivElement | null;
 const propagationBarrierSideDiffraction = document.querySelector('#propagationBarrierSideDiffraction') as HTMLSelectElement | null;
 
+// Probe Engine controls
+const probeGroundReflection = document.querySelector('#probeGroundReflection') as HTMLInputElement | null;
+const probeWallReflections = document.querySelector('#probeWallReflections') as HTMLInputElement | null;
+const probeBarrierDiffraction = document.querySelector('#probeBarrierDiffraction') as HTMLInputElement | null;
+const probeSommerfeldCorrection = document.querySelector('#probeSommerfeldCorrection') as HTMLInputElement | null;
+const probeImpedanceModel = document.querySelector('#probeImpedanceModel') as HTMLSelectElement | null;
+
+// Equation display elements
+const groundModelEquation = document.querySelector('#groundModelEquation') as HTMLDivElement | null;
+const impedanceEquation = document.querySelector('#impedanceEquation') as HTMLDivElement | null;
+
 // Environmental Conditions (meteo) controls
 const meteoTemperature = document.querySelector('#meteoTemperature') as HTMLInputElement | null;
 const meteoHumidity = document.querySelector('#meteoHumidity') as HTMLInputElement | null;
@@ -4881,6 +4892,162 @@ function wireSettingsPopover() {
         updateSlidePopupPosition();
       }
     }
+});
+}
+
+// Wire up equation collapsible toggles
+function wireEquationCollapsibles() {
+  const collapsibles = document.querySelectorAll('.equation-collapsible') as NodeListOf<HTMLDivElement>;
+
+  collapsibles.forEach((collapsible) => {
+    const header = collapsible.querySelector('.equation-header') as HTMLDivElement | null;
+    const content = collapsible.querySelector('.equation-content') as HTMLDivElement | null;
+
+    if (!header || !content) return;
+
+    const toggle = () => {
+      const isExpanded = collapsible.classList.contains('is-expanded');
+      if (isExpanded) {
+        collapsible.classList.remove('is-expanded');
+        content.hidden = true;
+      } else {
+        collapsible.classList.add('is-expanded');
+        content.hidden = false;
+      }
+    };
+
+    header.addEventListener('click', toggle);
+    header.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggle();
+      }
+    });
+  });
+
+// Update ground model equation when dropdown changes
+  propagationGroundModel?.addEventListener('change', updateGroundModelEquation);
+  updateGroundModelEquation();
+
+  // Update spreading equation when dropdown changes
+  propagationSpreading?.addEventListener('change', updateSpreadingEquation);
+  updateSpreadingEquation();
+
+  // Update impedance equation when dropdown changes
+  probeImpedanceModel?.addEventListener('change', updateImpedanceEquation);
+  updateImpedanceEquation();
+
+  // Update mixed interpolation equation when dropdown changes
+  propagationGroundMixedSigmaModel?.addEventListener('change', updateMixedInterpEquation);
+  updateMixedInterpEquation();
+
+// Update side diffraction equation when dropdown changes
+  propagationBarrierSideDiffraction?.addEventListener('change', updateSideDiffractionEquation);
+  updateSideDiffractionEquation();
+
+  // Update atmospheric absorption equation when dropdown changes
+  propagationAbsorption?.addEventListener('change', updateAtmAbsorptionEquation);
+  updateAtmAbsorptionEquation();
+}
+
+function updateGroundModelEquation() {
+  if (!groundModelEquation) return;
+  const model = propagationGroundModel?.value ?? 'twoRayPhasor';
+
+  if (model === 'legacy') {
+    groundModelEquation.textContent = 'A_gr = A_s + A_r + A_m';
+  } else {
+    groundModelEquation.textContent = 'A_gr = -20·log₁₀|1 + Γ·(r₁/r₂)·e^(jk(r₂-r₁))|';
+  }
+}
+
+function updateSpreadingEquation() {
+  const collapsible = document.querySelector('[data-equation="spreading"]') as HTMLDivElement | null;
+  if (!collapsible) return;
+
+  const mainEq = collapsible.querySelector('.equation-main') as HTMLDivElement | null;
+  if (!mainEq) return;
+
+  const spreading = propagationSpreading?.value ?? 'spherical';
+
+  if (spreading === 'cylindrical') {
+    mainEq.textContent = 'A_div = 10·log₁₀(d) + 10·log₁₀(2π)';
+  } else {
+    mainEq.textContent = 'A_div = 20·log₁₀(d) + 10·log₁₀(4π)';
+  }
+}
+
+function updateImpedanceEquation() {
+  if (!impedanceEquation) return;
+  const model = probeImpedanceModel?.value ?? 'delanyBazleyMiki';
+
+  if (model === 'delanyBazley') {
+    impedanceEquation.textContent = 'Z_n = 1 + 9.08(f/σ)^(-0.75) - j·11.9(f/σ)^(-0.73)';
+  } else {
+    impedanceEquation.textContent = 'Z_n = 1 + 9.08(f/σ)^(-0.75) - j·11.9(f/σ)^(-0.73)';
+  }
+}
+
+function updateMixedInterpEquation() {
+  const mixedInterpEquation = document.querySelector('#mixedInterpEquation') as HTMLDivElement | null;
+  if (!mixedInterpEquation) return;
+  const model = propagationGroundMixedSigmaModel?.value ?? 'iso9613';
+
+  if (model === 'logarithmic') {
+    mixedInterpEquation.textContent = 'σ_eff = σ_soft^G × σ_hard^(1-G)';
+  } else {
+    mixedInterpEquation.textContent = 'σ_eff = σ_soft / G';
+  }
+}
+
+function updateSideDiffractionEquation() {
+  const sideDiffractionEquation = document.querySelector('#sideDiffractionEquation') as HTMLDivElement | null;
+  if (!sideDiffractionEquation) return;
+  const mode = propagationBarrierSideDiffraction?.value ?? 'auto';
+
+  if (mode === 'off') {
+    sideDiffractionEquation.textContent = 'δ = A + B - d_direct';
+  } else {
+    sideDiffractionEquation.textContent = 'δ = min(δ_top, δ_left, δ_right)';
+  }
+}
+
+function updateAtmAbsorptionEquation() {
+  const atmAbsorptionEquation = document.querySelector('#atmAbsorptionEquation') as HTMLDivElement | null;
+  if (!atmAbsorptionEquation) return;
+  const model = propagationAbsorption?.value ?? 'iso9613';
+
+  if (model === 'none') {
+    atmAbsorptionEquation.textContent = 'A_atm = 0';
+  } else if (model === 'simple') {
+    atmAbsorptionEquation.textContent = 'A_atm = α(f) · d / 1000';
+  } else {
+    atmAbsorptionEquation.textContent = 'A_atm = α(f,T,RH,p) · d / 1000';
+  }
+}
+
+// Wire up Probe Engine controls (future: connect to probe config)
+function wireProbeEngineControls() {
+  // These toggles will eventually be wired to probe calculation config
+  // For now, just log changes for testing
+  probeGroundReflection?.addEventListener('change', () => {
+    console.log('[Probe] Ground Reflection:', probeGroundReflection.checked);
+  });
+
+  probeWallReflections?.addEventListener('change', () => {
+    console.log('[Probe] Wall Reflections:', probeWallReflections.checked);
+  });
+
+  probeBarrierDiffraction?.addEventListener('change', () => {
+    console.log('[Probe] Barrier Diffraction:', probeBarrierDiffraction.checked);
+  });
+
+  probeSommerfeldCorrection?.addEventListener('change', () => {
+    console.log('[Probe] Sommerfeld Correction:', probeSommerfeldCorrection.checked);
+  });
+
+  probeImpedanceModel?.addEventListener('change', () => {
+    console.log('[Probe] Impedance Model:', probeImpedanceModel.value);
   });
 }
 
@@ -7658,7 +7825,9 @@ function init() {
   wireDisplaySettings();
   wireRefineButton();
   wireLayersPopover();
-  wireSettingsPopover();
+wireSettingsPopover();
+  wireEquationCollapsibles();
+  wireProbeEngineControls();
   wireSceneName();
   wireContextPanel();
   wireProbePanel();

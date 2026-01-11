@@ -62,28 +62,18 @@ fi
 
 if [[ "$REBUILD_NEEDED" == true ]]; then
   echo ""
-  echo "🔧 Build is stale or incomplete. Running force rebuild..."
+  echo "🔧 Build is stale or incomplete. Running clean build..."
   echo ""
 
-  # Clear stale tsbuildinfo files
-  find "$ROOT_DIR" -name "*.tsbuildinfo" -delete 2>/dev/null || true
-
-  # Force rebuild all packages in order
-  npx tsc -b --force \
-    packages/shared \
-    packages/core \
-    packages/geo \
-    packages/engine \
-    packages/engine-backends \
-    packages/engine-webgpu \
-    apps/web
+  # Use npm run build:clean which clears Turbo cache + tsbuildinfo + force rebuilds
+  npm run build:clean
 
   echo ""
   echo "✅ Rebuild complete!"
   echo ""
 fi
 
-npm -w @geonoise/web run dev &
+npm run dev &
 DEV_PID=$!
 
 cleanup() {
