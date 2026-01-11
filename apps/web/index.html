@@ -825,55 +825,7 @@
                   <p class="spec-text" style="margin-top: 12px;"><em>Low frequencies diffract easily → less attenuation. High frequencies are blocked effectively.</em></p>
                 </div>
               </div>
-            </div>
-
-            <!-- Building Diffraction -->
-            <div class="collapsible-section" data-collapsible>
-              <div class="collapsible-header" tabindex="0" role="button" aria-expanded="false">
-                <div class="collapsible-header-left">
-                  <div class="collapsible-title-group">
-                    <span class="collapsible-title">building diffraction</span>
-                    <span class="collapsible-subtitle">Double-edge over roof + around corners</span>
-                  </div>
-                </div>
-                <div class="collapsible-chevron">▼</div>
-              </div>
-              <div class="collapsible-divider"></div>
-              <div class="collapsible-body">
-                <div class="collapsible-content">
-                  <p class="spec-text">For thick obstacles, sound diffracts twice (entry + exit edges):</p>
-                  <pre class="physics-diagram">    S                              R
-     \                            /
-      A₁ ──→ ●────────● ←── A₂
-             │  ROOF  │
-      ═══════╧════════╧═══════   Building</pre>
-                  <p class="spec-text"><strong>Path:</strong> Total = A₁ + T (roof width) + A₂</p>
-                  <div class="formula-highlight">A<sub>bar</sub> = 10·log₁₀(3 + 40·N) &nbsp;&nbsp; capped at 25 dB</div>
-                  <p class="spec-text">Note: coefficient is <strong>40</strong> (not 20) for double-edge diffraction.</p>
-                  <p class="spec-text"><strong>Horizontal diffraction:</strong> Also computed around building corners using single-edge Maekawa. The minimum-loss path is selected.</p>
-
-                  <p class="spec-text" style="margin-top: 16px;"><strong>Probe vs Grid Accuracy:</strong></p>
-                  <div style="background: var(--surface-lo); border-radius: 8px; padding: 12px; margin-top: 8px;">
-                    <p class="spec-text" style="margin: 0 0 8px 0;"><strong>Probe engine</strong> traces multiple diffraction paths (roof + all corners) and sums them coherently with phase. This is more physically accurate.</p>
-                    <p class="spec-text" style="margin: 0 0 8px 0;"><strong>Receiver grid</strong> uses a simplified single-path model for real-time performance.</p>
-                    <p class="spec-text" style="margin: 0; color: var(--text-muted);"><em>Expected difference: Probe shows 5-10 dB higher levels behind buildings due to multiple contributing paths. Use probes for final analysis at critical locations.</em></p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Wall Reflections -->
-            <div class="collapsible-section" data-collapsible>
-              <div class="collapsible-header" tabindex="0" role="button" aria-expanded="false">
-                <div class="collapsible-header-left">
-                  <div class="collapsible-title-group">
-                    <span class="collapsible-title">wall reflections</span>
-                    <span class="collapsible-subtitle">Image source method, 1st-order</span>
-                  </div>
-                </div>
-                <div class="collapsible-chevron">▼</div>
-              </div>
-              <div class="collapsible-divider"></div>
+<div class="collapsible-divider"></div>
               <div class="collapsible-body">
                 <div class="collapsible-content">
                   <p class="spec-text">Reflections from building walls computed using virtual image sources:</p>
@@ -1053,21 +1005,31 @@
                 </div>
               </div>
             </div>
-            <div class="spec-section spec-section--full">
+<div class="spec-section spec-section--full">
               <div class="spec-heading">GROUND EFFECTS</div>
               <div class="spec-tray">
-                <div class="spec-text">Legacy ISO 9613-2 Eq. 10 (soft ground):</div>
+                <div class="spec-text">ISO 9613-2 Tables 3-4 (per-band, primary model):</div>
                 <div class="equation-pill">
-                  A<sub>gr</sub> = max(0, 4.8 - (2h<sub>m</sub> / d) (17 + 300 / d))
+                  A<sub>gr</sub> = A<sub>s</sub> + A<sub>r</sub> + A<sub>m</sub>
+                </div>
+                <div class="equation-block">
+                  <div>A<sub>s</sub> = a'(f) + b'(f)·G·log(h<sub>s</sub>) + c'(f)·G·log(d<sub>p,s</sub>) + d'(f)·G</div>
+                  <div>A<sub>r</sub> = a'(f) + b'(f)·G·log(h<sub>r</sub>) + c'(f)·G·log(d<sub>p,r</sub>) + d'(f)·G</div>
+                  <div>A<sub>m</sub> = a(f)·q + b(f)·(1-G)·q &nbsp; where q = max(0, 1 - 30(h<sub>s</sub>+h<sub>r</sub>)/d)</div>
+                  <div>d<sub>p</sub> = min(30·h, d) &nbsp;&nbsp; G = ground factor (0=hard, 0.5=mixed, 1=soft)</div>
                 </div>
                 <div class="spec-text">Two-ray phasor geometry:</div>
                 <div class="equation-pill">
                   r<sub>1</sub> = &radic;(d<sup>2</sup> + (h<sub>s</sub> - h<sub>r</sub>)<sup>2</sup>),
                   r<sub>2</sub> = &radic;(d<sup>2</sup> + (h<sub>s</sub> + h<sub>r</sub>)<sup>2</sup>)
                 </div>
-                <div class="spec-text">Normalized impedance (Delany-Bazley):</div>
+                <div class="spec-text">Normalized impedance — Delany-Bazley (0.01 &lt; f/σ &lt; 1.0):</div>
                 <div class="equation-pill">
                   &zeta; = 1 + 9.08 (f/&sigma;)<sup>-0.75</sup> - j 11.9 (f/&sigma;)<sup>-0.73</sup>
+                </div>
+                <div class="spec-text">Miki extension (f/σ &gt; 1.0):</div>
+                <div class="equation-pill">
+                  &zeta; = 1 + 5.50 (f/&sigma;)<sup>-0.632</sup> - j 8.43 (f/&sigma;)<sup>-0.632</sup>
                 </div>
                 <div class="spec-text">Reflection coefficient (locally reacting):</div>
                 <div class="equation-pill">
@@ -1083,22 +1045,25 @@
             <div class="spec-section spec-section--full">
               <div class="spec-heading">BARRIER DIFFRACTION</div>
               <div class="spec-tray">
-                <div class="spec-text">Thin barrier (single edge):</div>
+                <div class="spec-text">Thin barrier (single edge, cap 20 dB):</div>
                 <div class="equation-block">
                   <div>A = &radic;(d(S,I)<sup>2</sup> + (h<sub>b</sub> - h<sub>s</sub>)<sup>2</sup>)</div>
                   <div>B = &radic;(d(I,R)<sup>2</sup> + (h<sub>b</sub> - h<sub>r</sub>)<sup>2</sup>)</div>
                   <div>&delta; = A + B - d<sub>direct</sub></div>
                 </div>
-                <div class="spec-text">Thick barrier (building roof):</div>
+                <div class="spec-text">Thick barrier / building (double edge, cap 25 dB):</div>
                 <div class="equation-block">
                   <div>A = &radic;(d(S,I<sub>in</sub>)<sup>2</sup> + (h<sub>b</sub> - h<sub>s</sub>)<sup>2</sup>)</div>
-                  <div>B = d(I<sub>in</sub>, I<sub>out</sub>)</div>
+                  <div>B = d(I<sub>in</sub>, I<sub>out</sub>) &nbsp; (roof width)</div>
                   <div>C = &radic;(d(I<sub>out</sub>,R)<sup>2</sup> + (h<sub>b</sub> - h<sub>r</sub>)<sup>2</sup>)</div>
                   <div>&delta; = A + B + C - d<sub>direct</sub></div>
                 </div>
                 <div class="spec-text">Maekawa-style insertion loss:</div>
                 <div class="equation-pill">N = 2&delta; / &lambda;</div>
-                <div class="equation-pill">A<sub>bar</sub> &#8776; 10 log<sub>10</sub>(3 + 20N)</div>
+                <div class="equation-pill">Thin: A<sub>bar</sub> = 10 log<sub>10</sub>(3 + 20N) &nbsp; cap 20 dB</div>
+                <div class="equation-pill">Thick: A<sub>bar</sub> = 10 log<sub>10</sub>(3 + 40N) &nbsp; cap 25 dB</div>
+                <div class="spec-text">Blocked path total (ISO 9613-2 §7.4 additive):</div>
+                <div class="equation-pill">A<sub>total</sub> = A<sub>div</sub> + A<sub>atm</sub>(d<sub>actual</sub>) + A<sub>bar</sub> + A<sub>gr</sub></div>
               </div>
             </div>
             <div class="spec-section">
