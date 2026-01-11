@@ -3410,19 +3410,16 @@ textarea:focus-visible,
 .about-tabs {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px;
-  border-radius: 999px;
-  background: var(--bg);
-  /* Sunken container - like the dock */
-  box-shadow: inset 4px 4px 8px rgba(100, 110, 130, 0.25), inset -4px -4px 8px rgba(255, 255, 255, 0.6);
+  gap: 10px;
+  padding: 0;
+  background: transparent;
 }
 
 .about-tab {
   border: none;
   background: var(--bg);
   border-radius: 999px;
-  padding: 8px 16px;
+  padding: 8px 18px;
   font-size: 11px;
   text-transform: lowercase;
   letter-spacing: var(--ui-letter-spacing);
