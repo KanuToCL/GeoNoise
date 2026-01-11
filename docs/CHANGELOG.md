@@ -6,6 +6,47 @@ This document contains the implementation history of completed features. For pla
 
 ## 2026-01-11
 
+### Noise Map Resolution Fix on Panel Selection
+
+**Status:** ✅ Fixed (Bug)
+
+**Issue:** Clicking on a measure grid (panel) caused the noise map resolution to drop drastically, making the heatmap appear very pixelated. The resolution never recovered after clicking.
+
+**Root Cause:** The `recalculateNoiseMapIfVisible()` function always used ultra-low resolution (`RES_LOW` with only 2,500 points) for any recalculation, regardless of whether the user was actively dragging or just clicking to select. When clicking on a panel:
+
+1. `computeScene()` was called on mouseup
+2. This triggered `recalculateNoiseMapIfVisible()` with ultra-low resolution
+3. Since panel drags don't affect geometry, `shouldLiveUpdateMap()` returned `false`
+4. The high-resolution restoration (`recalculateNoiseMap(RES_HIGH)`) was never called
+5. Result: Map stuck at 2,500 points permanently until another action triggered high-res
+
+**Fix:** Modified `recalculateNoiseMapIfVisible()` to check the `interactionActive` flag before choosing resolution:
+
+```typescript
+function recalculateNoiseMapIfVisible() {
+  if (!layers.noiseMap || !noiseMap) {
+    return; // Map not visible, nothing to recalculate
+  }
+  // Use low resolution only during active dragging for responsiveness.
+  // For static updates (after changes complete), use high resolution.
+  if (interactionActive) {
+    recalculateNoiseMap(RES_LOW, DRAG_POINTS);  // 8px/cell, 35k points
+  } else {
+    recalculateNoiseMap(RES_HIGH, STATIC_POINTS);  // 2px/cell, 50k points
+  }
+}
+```
+
+Now the function only uses low resolution during actual geometry-affecting drags. Static updates (like clicking to select a panel) use high resolution.
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `apps/web/src/main.ts` | Updated `recalculateNoiseMapIfVisible()` to check `interactionActive` flag |
+
+---
+
 ### Inspector Panel Visual Fixes
 
 **Status:** ✅ Implemented (v0.5.2)

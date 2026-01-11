@@ -1950,8 +1950,13 @@ function recalculateNoiseMapIfVisible() {
   if (!layers.noiseMap || !noiseMap) {
     return; // Map not visible, nothing to recalculate
   }
-  // Use low resolution for live updates to keep UI responsive
-  recalculateNoiseMap(RES_LOW, 2500);
+  // Use low resolution only during active dragging for responsiveness.
+  // For static updates (after changes complete), use high resolution.
+  if (interactionActive) {
+    recalculateNoiseMap(RES_LOW, DRAG_POINTS);
+  } else {
+    recalculateNoiseMap(RES_HIGH, STATIC_POINTS);
+  }
 }
 
 type NoiseMapComputeOptions = {
