@@ -304,8 +304,8 @@ Frequency coefficients (ISO 9613-2 Table 3):
 
 **Characteristics:**
 - ✅ ISO 9613-2 compliant
-- ❌ No interference effects
-- ❌ No ground dip phenomenon
+- ⚠️ Averaged interference (smoothed, not geometry-specific)
+- ❌ No sharp ground dip or constructive boost
 
 </details>
 
