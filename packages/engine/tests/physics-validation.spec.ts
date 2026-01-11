@@ -571,7 +571,7 @@ describe('Diffraction Ray Tracing - Issue #11', () => {
       name: 'Nearby → include',
       inputs: 'barrier h=2.5m (below line of sight), threshold=5m',
       equation: 'δ = d_src→edge + d_edge→rcv - d_direct < threshold → include',
-      expected: 'δ < 5m, diffraction traced',
+      expected: `δ < 5m, diffraction traced`,
       actual: `δ=${pathDiff.toFixed(2)}m, traced=${hasDiffraction}`,
       tolerance: 'inequality',
       passed,
@@ -2105,6 +2105,8 @@ describe('KNOWN GAPS - Critical Physics Issues', () => {
       recordResult({
         category: 'Issue #5',
         name: '#5 Side diffraction at ground level',
+        inputs: 'src=(0,0,1.5), rcv=(0,20,1.5), barrier 10m wide, 4m tall',
+        equation: 'δ_side = d(src→edge@z=0) + d(edge→rcv) - d_direct',
         expected: `Side path delta > Over-top delta (${aroundLeftDelta.toFixed(2)} > ${overTopDelta.toFixed(2)})`,
         actual: `Around-left delta = ${aroundLeftDelta.toFixed(2)}, Over-top delta = ${overTopDelta.toFixed(2)}`,
         tolerance: 'geometry',
@@ -2157,6 +2159,8 @@ describe('KNOWN GAPS - Critical Physics Issues', () => {
       recordResult({
         category: 'Issue #5',
         name: '#5 Around-ends vs over-top comparison',
+        inputs: 'src=(-50,0,1.5), rcv=(50,0,1.5), barrier 2m wide, 10m tall',
+        equation: 'δ_around = d(src→edge@ground) + d(edge→rcv) - d_direct',
         expected: `Around delta (${aroundRightDelta.toFixed(2)}) < Over-top delta (${overTopDelta.toFixed(2)})`,
         actual: `Around-right = ${aroundRightDelta.toFixed(2)}, Over-top = ${overTopDelta.toFixed(2)}`,
         tolerance: 'geometry',
@@ -2209,9 +2213,9 @@ describe('KNOWN GAPS - Critical Physics Issues', () => {
       // Record as passing since the implementation now uses ground level
       recordResult({
         category: 'Issue #5',
-        name: '#5 Side diffraction uses ground level',
+        name: '#5 Side diffraction at ground level',
         inputs: 'src=(0,0,2), rcv=(10,0,2), edge=(5,5,z)',
-        equation: 'Side diffraction: edge at z=groundElevation (0), not barrierHeight',
+        equation: 'δ_side = d(src→edge@z=0) + d(edge@z=0→rcv) - d_direct',
         expected: `Edge at z=0 (ground)`,
         actual: `Edge at z=groundElevation (implemented)`,
         tolerance: 'implementation',
@@ -2234,6 +2238,8 @@ describe('KNOWN GAPS - Critical Physics Issues', () => {
       recordResult({
         category: 'Issue #5',
         name: '#5 Auto mode threshold (50m)',
+        inputs: 'shortBarrierLength=30m, longBarrierLength=80m, threshold=50m',
+        equation: 'useSide = barrierLength < 50m',
         expected: 'Short=true, Long=false',
         actual: `Short=${useSideForShort}, Long=${useSideForLong}`,
         tolerance: 'threshold',
@@ -2293,6 +2299,8 @@ describe('KNOWN GAPS - Critical Physics Issues', () => {
       recordResult({
         category: 'Issue #5',
         name: '#5 Minimum path selection',
+        inputs: 'S=(-4,0,1.5), R=(4,20,1.5), barrier=(-5,10)-(5,10) h=5m',
+        equation: 'δ = d_source-edge + d_edge-receiver - d_direct; select min(δ_left, δ_right, δ_top)',
         expected: `Min delta = top (${topDelta.toFixed(2)})`,
         actual: `Left=${leftDelta.toFixed(2)}, Right=${rightDelta.toFixed(2)}, Top=${topDelta.toFixed(2)}`,
         tolerance: 'geometry',
@@ -2336,6 +2344,8 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       recordResult({
         category: 'Issue #6',
         name: '#6 Low f/σ ratio (hard surface)',
+        inputs: 'f=125Hz, σ=200000 Pa·s/m², f/σ=0.000625',
+        equation: 'ζ = 1 + 9.08(f/σ)^-0.75 - j·11.9(f/σ)^-0.73, low f/σ → high Re(ζ)',
         expected: `f/σ < 0.01 → high impedance (Re > 50)`,
         actual: `f/σ=${ratio.toFixed(6)}, ζ=(${impedance.re.toFixed(1)}, ${impedance.im.toFixed(1)})`,
         tolerance: 'inequality',
@@ -2366,6 +2376,8 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       recordResult({
         category: 'Issue #6',
         name: '#6 High f/σ ratio (Miki extension)',
+        inputs: 'f=8000Hz, σ=5000 Pa·s/m², f/σ=1.6',
+        equation: 'ζ = 1 + 5.50(f/σ)^-0.632 - j·8.43(f/σ)^-0.632 (Miki 1990)',
         expected: `f/σ > 1.0 → Miki: Re≈${expectedRe.toFixed(2)}`,
         actual: `f/σ=${ratio.toFixed(2)}, ζ=(${impedance.re.toFixed(2)}, ${impedance.im.toFixed(2)})`,
         tolerance: '±0.1',
@@ -2398,6 +2410,8 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       recordResult({
         category: 'Issue #6',
         name: '#6 Valid range (standard D-B)',
+        inputs: 'f=1000Hz, σ=20000 Pa·s/m², f/σ=0.05',
+        equation: 'ζ = 1 + 9.08(f/σ)^-0.75 - j·11.9(f/σ)^-0.73 (Delany-Bazley 1970)',
         expected: `0.01 < f/σ < 1.0 → standard D-B`,
         actual: `f/σ=${ratio.toFixed(3)}, ζ=(${impedance.re.toFixed(1)}, ${impedance.im.toFixed(1)})`,
         tolerance: '±1',
@@ -2432,6 +2446,8 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       recordResult({
         category: 'Issue #6',
         name: '#6 Finite for all inputs',
+        inputs: 'f/σ ∈ {0.000063, 16, 0.05, 0.01}',
+        equation: 'All ζ must be finite: Re(ζ)≠±∞, Im(ζ)≠±∞, no NaN',
         expected: 'All impedances finite',
         actual: results.join(', '),
         tolerance: 'exact',
@@ -2474,6 +2490,8 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       recordResult({
         category: 'GAP-Moderate',
         name: '#7 Terrain elevation',
+        inputs: 'Ground reflection point (x,y)',
+        equation: 'z_ground = terrainHeight(x,y) instead of z_ground = 0',
         expected: 'groundZ = terrain(x,y)',
         actual: 'groundZ = 0 (flat)',
         tolerance: 'NOT IMPLEMENTED',
@@ -2526,6 +2544,8 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       recordResult({
         category: 'Issue #12',
         name: '#12 Soft ground = σ_soft',
+        inputs: 'groundType=soft, σ_soft=20000',
+        equation: 'σ_eff = σ_soft (no interpolation needed)',
         expected: `σ = ${sigmaSoft}`,
         actual: `ISO: ${sigmaISO}, Log: ${sigmaLog}`,
         tolerance: 'exact',
@@ -2548,6 +2568,8 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       recordResult({
         category: 'Issue #12',
         name: '#12 Hard ground = σ → ∞',
+        inputs: 'groundType=hard, σ_hard=1e9',
+        equation: 'σ_eff = σ_hard ≈ ∞ (rigid surface approximation)',
         expected: 'σ ≥ 1e8',
         actual: `ISO: ${sigmaISO.toExponential(1)}, Log: ${sigmaLog.toExponential(1)}`,
         tolerance: 'inequality',
@@ -2621,6 +2643,8 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       recordResult({
         category: 'Issue #12',
         name: '#12 Models produce different σ',
+        inputs: 'G=0.5, σ_soft=20000, σ_hard=1e9',
+        equation: 'ISO: σ/G=40k vs Log: √(σ_soft·σ_hard)=4.47e6',
         expected: 'Significant difference',
         actual: `ISO: ${sigmaISO.toFixed(0)}, Log: ${sigmaLog.toExponential(2)}`,
         tolerance: 'inequality',
@@ -2644,6 +2668,8 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       recordResult({
         category: 'Issue #12',
         name: '#12 G=1 gives σ_soft',
+        inputs: 'G=1.0 (100% soft), σ_soft=20000',
+        equation: 'ISO: σ_soft/1=σ_soft, Log: σ_soft^1·σ_hard^0=σ_soft',
         expected: `σ ≈ ${sigmaSoft}`,
         actual: `ISO: ${sigmaISO.toFixed(0)}, Log: ${sigmaLog.toFixed(0)}`,
         tolerance: '±1',
@@ -2668,6 +2694,8 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       recordResult({
         category: 'Issue #12',
         name: '#12 G≈0 gives high σ',
+        inputs: 'G=0.01 (99% hard), σ_soft=20000',
+        equation: 'ISO: σ_soft/0.01=2e6, Log: σ_soft^0.01·σ_hard^0.99≈σ_hard',
         expected: 'σ >> σ_soft',
         actual: `ISO: ${sigmaISO.toExponential(2)}, Log: ${sigmaLog.toExponential(2)}`,
         tolerance: 'inequality',
@@ -2839,6 +2867,8 @@ describe('Issue #2: Two-Ray Ground Model Sign Consistency', () => {
     recordResult({
       category: 'Issue #2',
       name: '#2 Hard vs Soft interference',
+      inputs: 'd=50m, hs=2m, hr=1.5m, f=[125..2000]Hz',
+      equation: 'Hard: |Γ|≈1 → stronger interference, Soft: |Γ|<1 → weaker',
       expected: 'Hard ground has stronger interference',
       actual: `Hard range: ${hardRange.toFixed(2)} dB, Soft range: ${softRange.toFixed(2)} dB`,
       tolerance: 'comparison',
@@ -3000,6 +3030,8 @@ describe('Issue #14: Diffraction Phase Shift', () => {
     recordResult({
       category: 'Issue #14',
       name: '#14 Phase independent of barrier height',
+      inputs: 'h_low=3m, h_high=10m, same src/rcv geometry',
+      equation: 'ψ = -π/4 (constant, does not vary with barrier height)',
       expected: 'Same phase for all heights',
       actual: `Low: ${lowPhase.toFixed(4)}, High: ${highPhase.toFixed(4)}`,
       tolerance: 'exact',
@@ -3029,6 +3061,8 @@ describe('Issue #14: Diffraction Phase Shift', () => {
     recordResult({
       category: 'Issue #14',
       name: '#14 Phase independent of path diff',
+      inputs: 'rcv_near=12m, rcv_far=50m from source',
+      equation: 'ψ = -π/4 (constant, does not vary with path difference)',
       expected: 'Same phase for all geometries',
       actual: `Near: ${nearPhase.toFixed(4)}, Far: ${farPhase.toFixed(4)}`,
       tolerance: 'exact',
@@ -3131,6 +3165,8 @@ describe('Issue #14: Diffraction Phase Shift', () => {
     recordResult({
       category: 'Issue #14',
       name: '#14 Limitation: constant phase',
+      inputs: 'shallow shadow vs deep shadow geometry',
+      equation: 'ψ = -π/4 always (UTD would use ψ = f(shadow_angle))',
       expected: 'Same -π/4 for all angles (documented limitation)',
       actual: `Shallow: ${shallowPhase.toFixed(4)}, Deep: ${deepPhase.toFixed(4)}`,
       tolerance: 'limitation documented',
