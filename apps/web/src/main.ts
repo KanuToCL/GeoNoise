@@ -673,6 +673,10 @@ type PinnedContextPanel = {
 };
 const pinnedContextPanels: PinnedContextPanel[] = [];
 let pinnedContextSeq = 1;
+/** Global z-index counter for inspector panels - ensures new panels appear above existing ones.
+ *  Capped well below dock z-index (99999) to ensure dock is always on top. */
+let inspectorZIndex = 100;
+const INSPECTOR_MAX_ZINDEX = 9000; // Dock is at 99999, keep panels well below
 let dragState: DragState = null;
 let measureStart: Point | null = null;
 let measureEnd: Point | null = null;
@@ -2731,6 +2735,10 @@ function renderProbeInspector() {
   probePanel.classList.toggle('is-open', isOpen);
   probePanel.classList.toggle('probe-panel--active', isOpen);
   probePanel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+  // Bring probe panel to front when opening so it appears above pinned panels
+  if (isOpen) {
+    bringPanelToFront(probePanel);
+  }
   if (probePin) {
     const pinActive = !!probe && pinnedProbePanels.has(probe.id);
     probePin.disabled = !probe;
@@ -2765,18 +2773,43 @@ function cloneProbeData(data: ProbeResult['data']): ProbeResult['data'] {
     frequencies: [...data.frequencies],
     magnitudes: [...data.magnitudes],
     interferenceDetails: data.interferenceDetails ? { ...data.interferenceDetails } : undefined,
-  };
+    };
 }
 
-function clampPanelToParent(panel: HTMLElement, parent: HTMLElement, left: number, top: number, padding: number) {
+/** Get the minimum top position for inspector panels (below the topbar) */
+function getInspectorMinTop(parent: HTMLElement, padding: number): number {
+  const topbar = document.querySelector('.topbar') as HTMLElement | null;
+  if (topbar) {
+    const topbarRect = topbar.getBoundingClientRect();
+    const parentRect = parent.getBoundingClientRect();
+    // Return position below topbar with padding, relative to parent
+    return topbarRect.bottom - parentRect.top + padding;
+  }
+  return padding;
+}
+
+function clampPanelToParent(panel: HTMLElement, parent: HTMLElement, left: number, top: number, padding: number, minTop?: number) {
   const maxLeft = parent.clientWidth - panel.offsetWidth - padding;
   const maxTop = parent.clientHeight - panel.offsetHeight - padding;
+  // Use provided minTop (e.g., below topbar) or fall back to padding
+  const effectiveMinTop = minTop ?? padding;
   const clampedLeft = Math.min(Math.max(left, padding), Math.max(padding, maxLeft));
-  const clampedTop = Math.min(Math.max(top, padding), Math.max(padding, maxTop));
+  const clampedTop = Math.min(Math.max(top, effectiveMinTop), Math.max(effectiveMinTop, maxTop));
   panel.style.left = `${clampedLeft}px`;
   panel.style.top = `${clampedTop}px`;
   panel.style.right = 'auto';
   panel.style.bottom = 'auto';
+}
+
+/** Bring an inspector panel to the front by incrementing the global z-index counter.
+ *  Z-index is capped at INSPECTOR_MAX_ZINDEX to ensure dock always stays on top. */
+function bringPanelToFront(panel: HTMLElement) {
+  inspectorZIndex++;
+  // Cap at max to keep dock always on top
+  if (inspectorZIndex > INSPECTOR_MAX_ZINDEX) {
+    inspectorZIndex = INSPECTOR_MAX_ZINDEX;
+  }
+  panel.style.zIndex = String(inspectorZIndex);
 }
 
 function makePanelDraggable(
@@ -2797,7 +2830,7 @@ function makePanelDraggable(
     const parentRect = parent.getBoundingClientRect();
     const nextLeft = event.clientX - parentRect.left - dragOffsetX;
     const nextTop = event.clientY - parentRect.top - dragOffsetY;
-    clampPanelToParent(panel, parent, nextLeft, nextTop, padding);
+    clampPanelToParent(panel, parent, nextLeft, nextTop, padding, getInspectorMinTop(parent, padding));
   };
 
   const handleMouseUp = () => {
@@ -2822,6 +2855,8 @@ function makePanelDraggable(
     panel.style.bottom = 'auto';
     isDragging = true;
     document.body.style.userSelect = 'none';
+    // Bring panel to front when starting to drag
+    bringPanelToFront(panel);
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
   });
@@ -2919,6 +2954,9 @@ function createPinnedProbePanel(probeId: string) {
   panel.appendChild(footer);
   uiLayer.appendChild(panel);
 
+  // Bring new panel to front of all inspector windows
+  bringPanelToFront(panel);
+
   const ctx = canvas.getContext('2d');
   if (!ctx) {
     panel.remove();
@@ -2941,7 +2979,7 @@ function createPinnedProbePanel(probeId: string) {
     const initialTop = anchorRect
       ? anchorRect.top - parentRect.top + offset
       : parentRect.height - panelRect.height - offset;
-    clampPanelToParent(panel, parent, initialLeft, initialTop, 12);
+    clampPanelToParent(panel, parent, initialLeft, initialTop, 12, getInspectorMinTop(parent, 12));
     renderProbeChartOn(canvas, ctx, probeResults.get(probeId) ?? null);
   });
 
@@ -3047,6 +3085,9 @@ function createProbeSnapshot(data: ProbeResult['data'], sourceProbeName?: string
   panel.appendChild(footer);
   uiLayer.appendChild(panel);
 
+  // Bring new panel to front of all inspector windows
+  bringPanelToFront(panel);
+
   const ctx = canvas.getContext('2d');
   if (!ctx) {
     panel.remove();
@@ -3065,7 +3106,7 @@ function createProbeSnapshot(data: ProbeResult['data'], sourceProbeName?: string
     const offset = 24 + stackOffset;
     const initialLeft = (anchorRect ? anchorRect.left - parentRect.left + offset : parentRect.width - panelRect.width - offset);
     const initialTop = (anchorRect ? anchorRect.top - parentRect.top + offset : parentRect.height - panelRect.height - offset);
-    clampPanelToParent(panel, parent, initialLeft, initialTop, 12);
+      clampPanelToParent(panel, parent, initialLeft, initialTop, 12, getInspectorMinTop(parent, 12));
     renderProbeChartOn(canvas, ctx, data);
   });
 
@@ -3224,6 +3265,9 @@ function createPinnedContextPanel(sel: Selection) {
   panel.appendChild(body);
   uiLayer.appendChild(panel);
 
+  // Bring new panel to front of all inspector windows
+  bringPanelToFront(panel);
+
   // Store the pinned panel with properties container reference
   const pinnedPanel: PinnedContextPanel = {
     selection: sel,
@@ -3248,7 +3292,7 @@ function createPinnedContextPanel(sel: Selection) {
     const initialTop = anchorRect
       ? anchorRect.top - parentRect.top + offset
       : parentRect.height - panelRect.height - offset;
-    clampPanelToParent(panel, parent, initialLeft, initialTop, 12);
+      clampPanelToParent(panel, parent, initialLeft, initialTop, 12, getInspectorMinTop(parent, 12));
   });
 
   // Make panel draggable
@@ -4052,6 +4096,10 @@ function setSelection(next: Selection) {
     const shouldShowPanel = hasInspectorContent && !isAlreadyPinned;
     contextPanel.classList.toggle('is-open', shouldShowPanel);
     contextPanel.setAttribute('aria-hidden', shouldShowPanel ? 'false' : 'true');
+    // Bring context panel to front when opening so it appears above pinned panels
+    if (shouldShowPanel) {
+      bringPanelToFront(contextPanel);
+    }
   }
   // Hide pin button for multi-selection (can't pin multiple elements)
   if (contextPin) {
