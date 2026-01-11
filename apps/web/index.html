@@ -615,6 +615,17 @@
           >
             Full Equations
           </button>
+          <button
+            class="about-tab"
+            type="button"
+            role="tab"
+            id="aboutTabEngines"
+            aria-selected="false"
+            aria-controls="aboutPanelEngines"
+            data-about-tab="engines"
+          >
+            Engines
+          </button>
         </div>
         <div
           class="about-panel is-active"
@@ -1072,6 +1083,194 @@
                 <div class="spec-text">Octave-band weighting:</div>
                 <div class="equation-pill">L<sub>A</sub> = L<sub>band</sub> + A(f)</div>
                 <div class="equation-pill">L<sub>C</sub> = L<sub>band</sub> + C(f)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div
+          class="about-panel"
+          role="tabpanel"
+          id="aboutPanelEngines"
+          aria-labelledby="aboutTabEngines"
+          aria-hidden="true"
+          data-about-panel="engines"
+        >
+          <div class="spec-section spec-section--full">
+            <p class="section-intro">
+              GeoNoise uses two calculation engines optimized for different use cases.
+              Understanding when each is applied helps interpret results correctly.
+            </p>
+          </div>
+
+          <div class="spec-grid equations-grid">
+            <div class="spec-section spec-section--full">
+              <div class="spec-heading">CALCULATION ARCHITECTURE</div>
+              <div class="spec-tray">
+                <pre class="physics-diagram">┌─────────────────────────────────────────────────────────────────┐
+│                      GeoNoise Calculation Flow                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌──────────────┐              ┌──────────────┐                 │
+│  │   Sources    │              │  Receivers   │                 │
+│  │ (with Lw/f)  │              │    Grids     │                 │
+│  └──────┬───────┘              │    Probes    │                 │
+│         │                      └──────┬───────┘                 │
+│         ▼                             │                         │
+│  ┌──────────────────────────────────────────────────────────────┤
+│  │                    PATH FINDING                              │
+│  ├──────────────────────────────────────────────────────────────┤
+│  │                                                              │
+│  │   ┌─────────────────────┐    ┌─────────────────────────────┐ │
+│  │   │   GRID ENGINE       │    │      PROBE ENGINE           │ │
+│  │   │                     │    │                             │ │
+│  │   │  • Single path      │    │  • Ray tracing (multi-path) │ │
+│  │   │  • Direct + best    │    │  • Ground reflection rays   │ │
+│  │   │    diffraction      │    │  • Wall reflection rays     │ │
+│  │   │  • Used for: Grids, │    │  • Side diffraction paths   │ │
+│  │   │    Receivers, Maps  │    │  • Used for: Probes only    │ │
+│  │   └─────────┬───────────┘    └─────────────┬───────────────┘ │
+│  │             │                              │                 │
+│  └─────────────┼──────────────────────────────┼─────────────────┤
+│                ▼                              ▼                 │
+│  ┌──────────────────────────────────────────────────────────────┤
+│  │                 ATTENUATION (ISO 9613-2)                     │
+│  ├──────────────────────────────────────────────────────────────┤
+│  │   For each path, apply per-band:                             │
+│  │   • A_div  (geometric spreading)                             │
+│  │   • A_atm  (atmospheric absorption)                          │
+│  │   • A_gr   (ground effect)                                   │
+│  │   • A_bar  (barrier diffraction if blocked)                  │
+│  └──────────────────────────────────────────────────────────────┤
+│                              │                                  │
+│                              ▼                                  │
+│  ┌──────────────────────────────────────────────────────────────┤
+│  │                    SUMMATION                                 │
+│  ├──────────────────────────────────────────────────────────────┤
+│  │                                                              │
+│  │   ┌─────────────────────┐    ┌─────────────────────────────┐ │
+│  │   │   INCOHERENT        │    │      COHERENT (Phasor)      │ │
+│  │   │                     │    │                             │ │
+│  │   │  L = 10·log₁₀(Σ10^  │    │  p = Σ pᵢ·e^(jφᵢ)          │ │
+│  │   │          (Lᵢ/10))   │    │  L = 20·log₁₀|p|            │ │
+│  │   │                     │    │                             │ │
+│  │   │  • Power summation  │    │  • Phase-aware interference │ │
+│  │   │  • Fast, stable     │    │  • Captures nulls & peaks   │ │
+│  │   │  • Used by: Grids   │    │  • Used by: Probes          │ │
+│  │   └─────────────────────┘    └─────────────────────────────┘ │
+│  │                                                              │
+│  └──────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────────┘</pre>
+              </div>
+            </div>
+
+            <div class="spec-section">
+              <div class="spec-heading">GRID ENGINE</div>
+              <div class="spec-tray">
+                <div class="spec-text"><strong>Used for:</strong> Measure Grids, Receivers, Noise Maps</div>
+                <div class="spec-text" style="margin-top: 8px;"><strong>Path Finding:</strong></div>
+                <ul class="spec-list" style="margin-left: 16px;">
+                  <li>Single direct path per source-receiver pair</li>
+                  <li>Checks for barrier occlusion → computes diffraction</li>
+                  <li>No ground reflection rays (uses empirical A<sub>gr</sub>)</li>
+                </ul>
+                <div class="spec-text" style="margin-top: 8px;"><strong>Summation:</strong></div>
+                <div class="equation-pill">L = 10·log₁₀(Σ 10<sup>Lᵢ/10</sup>)</div>
+                <div class="spec-text">Energy (power) summation — paths cannot interfere.</div>
+                <div class="spec-text" style="margin-top: 8px;"><strong>Trade-off:</strong> Fast computation, suitable for heat maps. Cannot capture wave interference effects like ground dip or comb filtering.</div>
+              </div>
+            </div>
+
+            <div class="spec-section">
+              <div class="spec-heading">PROBE ENGINE</div>
+              <div class="spec-tray">
+                <div class="spec-text"><strong>Used for:</strong> Probe microphones only</div>
+                <div class="spec-text" style="margin-top: 8px;"><strong>Path Finding (Ray Tracing):</strong></div>
+                <ul class="spec-list" style="margin-left: 16px;">
+                  <li>Direct path</li>
+                  <li>Ground-reflected path (specular reflection)</li>
+                  <li>Wall reflections (first-order image sources)</li>
+                  <li>Side diffraction around barrier edges</li>
+                  <li>Over-top diffraction</li>
+                </ul>
+                <div class="spec-text" style="margin-top: 8px;"><strong>Summation:</strong></div>
+                <div class="equation-pill">p = Σ pᵢ·e<sup>jφᵢ</sup> &nbsp; where φ = -k·d</div>
+                <div class="spec-text">Phasor (coherent) summation with phase from path length.</div>
+                <div class="spec-text" style="margin-top: 8px;"><strong>Trade-off:</strong> Captures interference effects (ground dip, comb filtering, constructive/destructive interference). Slower, used only for point analysis.</div>
+              </div>
+            </div>
+
+            <div class="spec-section spec-section--full">
+              <div class="spec-heading">COMPARISON SUMMARY</div>
+              <div class="spec-tray">
+                <table class="physics-table">
+                  <tr>
+                    <th>Aspect</th>
+                    <th>Grid Engine</th>
+                    <th>Probe Engine</th>
+                  </tr>
+                  <tr>
+                    <td>Path count</td>
+                    <td>1 per source</td>
+                    <td>Multiple (ray traced)</td>
+                  </tr>
+                  <tr>
+                    <td>Ground effect</td>
+                    <td>ISO 9613-2 empirical</td>
+                    <td>Two-ray phasor (if enabled)</td>
+                  </tr>
+                  <tr>
+                    <td>Wall reflections</td>
+                    <td>No</td>
+                    <td>Yes (first-order)</td>
+                  </tr>
+                  <tr>
+                    <td>Summation</td>
+                    <td>Incoherent (power)</td>
+                    <td>Coherent (phasor)</td>
+                  </tr>
+                  <tr>
+                    <td>Interference</td>
+                    <td>Not modeled</td>
+                    <td>Constructive/destructive</td>
+                  </tr>
+                  <tr>
+                    <td>Ground dip</td>
+                    <td>Not captured</td>
+                    <td>Naturally emerges</td>
+                  </tr>
+                  <tr>
+                    <td>Performance</td>
+                    <td>Fast (grid-parallel)</td>
+                    <td>Slower (per-probe)</td>
+                  </tr>
+                  <tr>
+                    <td>Output</td>
+                    <td>Heatmap, single dB value</td>
+                    <td>Frequency response curve</td>
+                  </tr>
+                </table>
+              </div>
+            </div>
+
+            <div class="spec-section spec-section--full">
+              <div class="spec-heading">WHY TWO ENGINES?</div>
+              <div class="spec-tray">
+                <p class="spec-text">
+                  <strong>Grids/Receivers</strong> need to compute thousands of points quickly for heat maps.
+                  Using multi-path ray tracing everywhere would be prohibitively slow.
+                  The ISO 9613-2 single-path approach is designed for this: it's an engineering standard
+                  optimized for outdoor prediction across large areas with acceptable accuracy.
+                </p>
+                <p class="spec-text" style="margin-top: 12px;">
+                  <strong>Probes</strong> are point measurements where you want detailed frequency response.
+                  Ray tracing + coherent summation reveals interference effects invisible to incoherent methods:
+                  the ground dip phenomenon, wall reflection comb filtering, and barrier edge diffraction patterns.
+                </p>
+                <p class="spec-text" style="margin-top: 12px;">
+                  Both engines share the same <strong>ISO 9613-2 attenuation functions</strong> for A<sub>div</sub>,
+                  A<sub>atm</sub>, A<sub>gr</sub>, and A<sub>bar</sub>. The difference is in <em>how many paths</em>
+                  are traced and <em>how they're combined</em> at the receiver.
+                </p>
               </div>
             </div>
           </div>
