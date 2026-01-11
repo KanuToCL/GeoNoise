@@ -6,6 +6,71 @@ This document contains the implementation history of completed features. For pla
 
 ## 2026-01-11
 
+### Engines Tab in Details Modal
+
+**Status:** ✅ Implemented (v0.6.0)
+
+Added a new "Engines" tab to the Details modal providing comprehensive documentation of GeoNoise's dual-engine calculation architecture. This documentation is verified against the actual codebase for academic accuracy.
+
+#### Content Added
+
+1. **Grid Engine Section**
+   - Used for: Measure Grids, Receivers, Noise Maps
+   - Single direct path per source-receiver pair
+   - Barrier occlusion check with diffraction computation
+   - Ground effect via A_gr model (user-selectable ISO 9613-2 or Two-Ray phasor)
+   - Energy (power) summation across sources (incoherent)
+
+2. **Probe Engine Section**
+   - Used for: Probe microphones only
+   - Ray tracing with multi-path: Direct, Ground-reflected, Wall reflections (first-order), Side diffraction, Over-top diffraction
+   - Coherent phasor summation with phase from path length (φ = -k·d)
+   - Full interference modeling (constructive/destructive, ground dip, comb filtering)
+
+3. **Architecture Diagram (ASCII)**
+   - Visual flow: Sources → Path Finding → Attenuation (ISO 9613-2) → Summation
+   - Shows Grid Engine vs Probe Engine branches
+   - Shows Incoherent vs Coherent summation methods
+
+4. **Comparison Table**
+   - 9 comparison aspects: Path count, Ground effect, Wall reflections, Summation, Ground interference, Multi-path interference, Ground dip, Performance, Output
+
+5. **"Why Two Engines?" Explanation**
+   - Rationale for using ISO 9613-2 single-path for grids (fast, thousands of points)
+   - Rationale for ray tracing + phasor for probes (detailed frequency response, interference)
+
+#### Code Verification
+
+All claims verified against production code with exact file paths and function names:
+
+| Claim | Verified Function | File |
+|-------|-------------------|------|
+| Single path per source-receiver | `traceDirectPath()` | `raytracing/index.ts:274-295` |
+| Barrier occlusion & diffraction | `traceDiffractionPath()` | `raytracing/index.ts:428-471` |
+| ISO 9613-2 ground effect | `agrISO9613PerBand()` | `propagation/index.ts:348-425` |
+| Two-Ray phasor ground effect | `agrTwoRayDb()` | `propagation/ground.ts:212-243` |
+| Coherent phasor summation | `sumPhasorsCoherent()` | `phasor/index.ts:213-227` |
+| Phase formula φ = -k·d | `createPhasor()` | `phasor/index.ts:165-176` |
+| Ray tracing multi-path | `traceAllPaths()` | `raytracing/index.ts:513-586` |
+| Wall reflections | `traceWallPaths()` | `raytracing/index.ts:362-422` |
+| Maekawa diffraction | `maekawaDiffraction()` | `raytracing/index.ts:596-608` |
+| Incoherent source summation | `sumMultipleSpectra()` | `compute/index.ts:730-732` |
+
+#### Accuracy Corrections
+
+Fixed incorrect claim that Grid engine "cannot capture interference":
+- **ISO 9613-2 model**: Empirical per-band coefficients (no interference) ✓
+- **Two-Ray model**: DOES compute phasor interference between direct + ground reflection ✓
+- Updated comparison table: "Ground interference: With Two-Ray only" for Grid engine
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `apps/web/index.html` | Added "Engines" tab button, Engines panel with all content |
+
+---
+
 ### Enhanced Canvas Controls Help Tooltip
 
 **Status:** ✅ Implemented (v0.5.3)
