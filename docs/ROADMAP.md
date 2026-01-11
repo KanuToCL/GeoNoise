@@ -334,6 +334,8 @@ This feature addresses the root cause of Issue #2 (Two-Ray Ground Model Sign Inc
 ---
 
 ## 🔮 Future Enhancements
+- **ISO 9613-2 Ground Effect (Agr) Per-Band Compliance** - ✅ COMPLETED: Implemented Tables 3-4 with frequency-dependent coefficients for each octave band
+- **Rename "Ground Reflection" toggle to "Ground Effects"** - ✅ COMPLETED: Toggle now labeled "Ground Effects" to reflect both two-ray reflection model AND ISO Agr absorption
 - Configurable diffraction model selection (Maekawa / Kurze-Anderson / ISO 9613-2)
 - Higher-order reflections (2nd, 3rd order bounces)
 - Wall reflections for diffracted paths

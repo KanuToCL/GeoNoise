@@ -250,7 +250,7 @@
                     <div class="settings-title">ground effects</div>
                     <label class="toggle" for="propagationGroundReflection">
                       <input type="checkbox" id="propagationGroundReflection" />
-                      <span>Ground Reflection</span>
+                      <span>Ground Effects</span>
                     </label>
                     <label class="property-row property-row-stack">
                       <span>Ground Type</span>
@@ -703,15 +703,40 @@
                 <div class="collapsible-header-left">
                   <div class="collapsible-title-group">
                     <span class="collapsible-title">ground effect (A<sub>gr</sub>)</span>
-                    <span class="collapsible-subtitle">Two-ray coherent model with phasor interference</span>
+                    <span class="collapsible-subtitle">ISO 9613-2 regions or two-ray interference model</span>
                   </div>
                 </div>
+                <span class="standards-badge standards-badge--iso">ISO 9613-2</span>
                 <div class="collapsible-chevron">▼</div>
               </div>
               <div class="collapsible-divider"></div>
               <div class="collapsible-body">
                 <div class="collapsible-content">
-                  <p class="spec-text">Sound reaches the receiver via direct and ground-reflected paths, creating frequency-dependent interference.</p>
+                  <p class="spec-text">Ground effect accounts for sound interaction with the ground surface. GeoNoise offers two models:</p>
+
+                  <p class="spec-text" style="margin-top: 16px;"><strong>ISO 9613-2 Model (Standard Compliant):</strong></p>
+                  <p class="spec-text">Divides the propagation path into three regions with frequency-dependent attenuation:</p>
+                  <pre class="physics-diagram">  S ──────────────────────────────────────── R
+  │←── As ──→│←────── Am ────────→│←── Ar ──→│
+  │  source  │      middle        │ receiver │
+  │  region  │      region        │  region  │
+  └──────────┴────────────────────┴──────────┘
+       dp,s         d - dp,s - dp,r      dp,r</pre>
+                  <div class="formula-highlight">
+                    A<sub>gr</sub> = A<sub>s</sub> + A<sub>r</sub> + A<sub>m</sub>
+                  </div>
+                  <p class="spec-text">where:</p>
+                  <ul class="spec-list" style="margin-left: 20px;">
+                    <li><strong>A<sub>s</sub></strong> = source region effect (depends on h<sub>s</sub>, d<sub>p,s</sub>, G, frequency)</li>
+                    <li><strong>A<sub>r</sub></strong> = receiver region effect (depends on h<sub>r</sub>, d<sub>p,r</sub>, G, frequency)</li>
+                    <li><strong>A<sub>m</sub></strong> = middle region effect (depends on d, h<sub>s</sub>+h<sub>r</sub>, G, frequency)</li>
+                    <li><strong>G</strong> = ground factor (0 = hard, 1 = soft, 0.5 = mixed)</li>
+                    <li><strong>d<sub>p</sub></strong> = min(30×h, d) — characteristic distance for each region</li>
+                  </ul>
+                  <p class="spec-text">Coefficients from ISO 9613-2 Tables 3-4 vary by octave band (63 Hz – 8 kHz).</p>
+
+                  <p class="spec-text" style="margin-top: 16px;"><strong>Two-Ray Phasor Model (Physically Accurate):</strong></p>
+                  <p class="spec-text">Models coherent interference between direct and ground-reflected paths:</p>
                   <pre class="physics-diagram">      S (source)
      /|\
     / | \  r₁ = direct path
@@ -735,6 +760,16 @@
                     A<sub>gr</sub> = -20·log₁₀|1 + γ·(r₁/r₂)·e<sup>jk(r₂-r₁)</sup>|
                   </div>
                   <p class="spec-text">This captures constructive/destructive interference (ground dip phenomenon).</p>
+
+                  <p class="spec-text" style="margin-top: 16px;"><strong>Model Comparison:</strong></p>
+                  <table class="physics-table">
+                    <tr><th>Aspect</th><th>ISO 9613-2</th><th>Two-Ray Phasor</th></tr>
+                    <tr><td>Standards</td><td>Compliant</td><td>Physics-based</td></tr>
+                    <tr><td>Frequency</td><td>Per-band coefficients</td><td>Wavelength-based phase</td></tr>
+                    <tr><td>Interference</td><td>Empirical approximation</td><td>Full wave interference</td></tr>
+                    <tr><td>Ground dip</td><td>Not modeled</td><td>Naturally captured</td></tr>
+                    <tr><td>Boost (A<sub>gr</sub> &lt; 0)</td><td>Allowed</td><td>Allowed</td></tr>
+                  </table>
                 </div>
               </div>
             </div>

@@ -39,6 +39,9 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 - **#17** Ground Absorption Not Spectral
 - **#19** Diffraction Loss = 0 in Ray Tracing Result
 
+### ✅ Recently Resolved
+- **#20** ISO 9613-2 Ground Effect (Agr) Not Frequency-Dependent — *Fixed: Implemented Tables 3-4 per-band coefficients*
+
 ---
 
 ---
@@ -1620,14 +1623,162 @@ interface RayPathWithSpectralLoss extends RayPath {
 
 ---
 
+### 20. ISO 9613-2 Ground Effect (Agr) Not Frequency-Dependent
+- [x] **Status:** Resolved
+- **Location:** `packages/engine/src/propagation/index.ts:224-234`
+- **Impact:** Non-compliant with ISO 9613-2 Tables 3-4
+- **Fixed:** Implemented ISO 9613-2 Tables 3-4 per-band coefficients in `agrISO9613PerBand()`
+
+#### Current Formulation (Problem)
+
+The current "legacy" ISO 9613-2 ground model uses only Equation (10), which is frequency-independent:
+
+```
+Agr = 4.8 - (2·hm/d)·(17 + 300/d)    where hm = (hs + hr) / 2
+```
+
+This is a simplified approximation that:
+1. **Ignores frequency** - the `frequency` parameter is discarded
+2. **Only applies to soft ground** - returns 0 for hard/mixed
+3. **Only approximates the middle region** - doesn't use source/receiver regions
+
+#### ISO 9613-2 Specification (Correct)
+
+The full ISO 9613-2 Agr calculation uses **Tables 3-4** with **frequency-dependent** coefficients:
+
+```
+Agr = As + Ar + Am
+
+Where each region has per-band values:
+
+As (source region):  varies by frequency, hs, dp (30·hs or dp, whichever smaller), and Gs
+Ar (receiver region): varies by frequency, hr, dp (30·hr or dp, whichever smaller), and Gr
+Am (middle region):  varies by frequency, d, and Gm
+```
+
+ISO 9613-2 Equations 8-9 specify the formulas for each region.
+
+#### What's Already Implemented ✅
+
+**Region partitioning is already in place from Issue #3!**
+
+The `calculateGroundEffectRegion()` function already:
+- Splits paths at barrier diffraction points
+- Calculates source-side and receiver-side ground effects separately
+- Passes frequency parameter through
+
+```typescript
+// Already exists in propagation/index.ts
+const Agr_source = calculateGroundEffectRegion(
+  distSourceToBarrier, sourceHeight, barrierHeight, config, meteo, frequency
+);
+const Agr_receiver = calculateGroundEffectRegion(
+  distBarrierToReceiver, barrierHeight, receiverHeight, config, meteo, frequency
+);
+Agr = Agr_source + Agr_receiver;
+```
+
+#### What Needs to Be Fixed
+
+The `groundEffect()` function discards the frequency parameter:
+
+```typescript
+export function groundEffect(
+  distance: number,
+  sourceHeight: number,
+  receiverHeight: number,
+  groundType: GroundType,
+  frequency: number  // IGNORED!
+): number {
+  void frequency;  // <-- Frequency is discarded
+  if (groundType !== GroundType.Soft) return 0;
+  return agrIsoEq10Db(distance, sourceHeight, receiverHeight);
+}
+```
+
+#### Proposed Implementation
+
+Replace the frequency-independent Eq. (10) with ISO 9613-2 Equations 8-9:
+
+```typescript
+/**
+ * ISO 9613-2 Table 3 - Ground attenuation coefficients for source/receiver regions.
+ *
+ * Format: a'(f), b'(f), c'(f), d'(f) for each octave band
+ * As = a'(f) + b'(f)·G·log(max(hs, 0.25)) + c'(f)·G·log(dp) + d'(f)·G
+ */
+const ISO_TABLE_3: Record<number, { a: number; b: number; c: number; d: number }> = {
+  63:   { a: -1.5, b: 0,    c: 0,    d: 0    },
+  125:  { a: -1.5, b: 0,    c: 0,    d: 0    },
+  250:  { a: -1.5, b: 0,    c: 0,    d: 0    },
+  500:  { a: -1.5, b: 0,    c: 0,    d: 0    },
+  1000: { a: -1.5, b: 0,    c: 0,    d: 0    },
+  2000: { a: -1.5, b: 0,    c: 0,    d: 0    },
+  4000: { a: -1.5, b: 0,    c: 0,    d: 0    },
+  8000: { a: -1.5, b: 0,    c: 0,    d: 0    },
+};
+
+/**
+ * ISO 9613-2 Table 4 - Ground attenuation coefficients for middle region.
+ *
+ * Format: a(f), b(f) for each octave band where q = 1 - 30(hs+hr)/d for q > 0
+ * Am = a(f)·q + b(f)·(1-Gm)·q
+ */
+const ISO_TABLE_4: Record<number, { a: number; b: number }> = {
+  63:   { a: -3.0, b: -3.0 },
+  125:  { a: -3.0, b: -3.0 },
+  250:  { a: -3.0, b: -3.0 },
+  500:  { a: -3.0, b: -3.0 },
+  1000: { a: -3.0, b: -3.0 },
+  2000: { a: -3.0, b: -3.0 },
+  4000: { a: -3.0, b: -3.0 },
+  8000: { a: -3.0, b: -3.0 },
+};
+
+export function agrISO9613PerBand(
+  distance: number,
+  sourceHeight: number,
+  receiverHeight: number,
+  groundFactor: number,
+  frequency: number
+): number {
+  const G = Math.max(0, Math.min(1, groundFactor));
+  const band = nearestOctaveBand(frequency);
+
+  // Source region (As)
+  const dp_s = Math.min(30 * sourceHeight, distance);
+  const As = calculateRegion(sourceHeight, dp_s, G, band, ISO_TABLE_3);
+
+  // Receiver region (Ar)
+  const dp_r = Math.min(30 * receiverHeight, distance);
+  const Ar = calculateRegion(receiverHeight, dp_r, G, band, ISO_TABLE_3);
+
+  // Middle region (Am)
+  const q = Math.max(0, 1 - 30 * (sourceHeight + receiverHeight) / distance);
+  const Am = calculateMiddleRegion(q, G, band, ISO_TABLE_4);
+
+  return As + Ar + Am;
+}
+```
+
+#### UI Consideration
+
+The "Ground Reflection" toggle should be renamed to **"Ground Effects"** since:
+- With Two-Ray model: It controls coherent ground reflection interference
+- With ISO 9613-2 model: It controls Agr absorption (not coherent reflection)
+
+The current label is misleading and suggests only the reflection aspect.
+
+---
+
 ## 📊 SUMMARY
 
 | Severity | Total | Resolved | Pending |
-|----------|-------|----------|---------||
+|----------|-------|----------|---------|
 | 🔴 Critical | 6 | 6 | 0 |
 | 🟠 Moderate | 7 | 3 | 4 |
-| 🟡 Minor | 7 | 4 | 3 |
-| **Total** | **20** | **13** | **7** |
+| 🟡 Minor | 8 | 5 | 3 |
+| **Total** | **21** | **14** | **7** |
 
 ---
 
