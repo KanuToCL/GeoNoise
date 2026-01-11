@@ -42,7 +42,7 @@ Single-path calculation with incoherent source summation.
 | Setting | Options | Description |
 |---------|---------|-------------|
 | **Ground Effects** | Toggle | Enable/disable ground effect calculation |
-| **Ground Effect Model** | ISO 9613-2 / Two-Ray Phasor | How A_gr is calculated |
+| **Ground Effect Model** | ISO 9613-2 / Ground Interference | How A_gr is calculated |
 | **Mixed Ground Interpolation** | ISO 9613-2 / Logarithmic | Sigma interpolation for mixed ground |
 | **Side Diffraction** | Off / Auto / On | Horizontal diffraction around barrier ends |
 
@@ -74,7 +74,7 @@ Each physics option includes a collapsible equation section that shows the formu
 ┌─────────────────────────────────────────────────────────────┐
 │ Ground Effect Model                                         │
 │ ┌─────────────────────────────────────────────────────────┐ │
-│ │ Two-Ray Phasor                                        ▼ │ │
+│ │ Ground Interference                                   ▼ │ │
 │ └─────────────────────────────────────────────────────────┘ │
 │                                                             │
 │ ▶ Equation                                    [collapsed]   │
@@ -265,6 +265,9 @@ For ALL barriers regardless of length:
 
 #### Ground Effect Model
 
+> **ISO 9613-2**: Empirical per-band coefficients, no interference effects
+> **Ground Interference**: Models constructive/destructive interference between direct and ground-reflected paths (produces "ground dip" phenomenon)
+
 <details>
 <summary><strong>ISO 9613-2 (Tables 3-4)</strong></summary>
 
@@ -307,7 +310,7 @@ Frequency coefficients (ISO 9613-2 Table 3):
 </details>
 
 <details>
-<summary><strong>Two-Ray Phasor</strong></summary>
+<summary><strong>Ground Interference (Direct + Ground Bounce)</strong></summary>
 
 ```
         Direct ray (r₁)
@@ -682,7 +685,7 @@ Recommended for general use.
 │ │                                                                     │ │
 │ │ ☑ Ground Effects                                                    │ │
 │ │                                                                     │ │
-│ │ Ground Effect Model:  [Two-Ray Phasor ▼]                           │ │
+│ │ Ground Effect Model:  [Ground Interference ▼]                      │ │
 │ │   ▼ Equation                                                        │ │
 │ │   ┌───────────────────────────────────────────────────────────────┐ │ │
 │ │   │ A_gr = -20·log₁₀|1 + Γ·(r₁/r₂)·e^(jk(r₂-r₁))|                 │ │ │
@@ -734,8 +737,8 @@ interface EquationDisplay {
 }
 
 // Example: Render equation based on selected option
-function getGroundEffectEquation(model: 'legacy' | 'twoRayPhasor'): EquationDisplay {
-  if (model === 'twoRayPhasor') {
+function getGroundEffectEquation(model: 'iso9613' | 'groundInterference'): EquationDisplay {
+  if (model === 'groundInterference') {
     return {
       collapsed: true,
       equation: 'A_gr = -20·log₁₀|1 + Γ·(r₁/r₂)·e^(jk(r₂-r₁))|',
