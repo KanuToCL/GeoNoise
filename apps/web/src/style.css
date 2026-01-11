@@ -321,17 +321,19 @@ body {
 
 .dock {
   /* Bottom-centered floating tool dock. */
-  position: absolute;
+  position: fixed;
   left: 50%;
   bottom: 32px;
-  transform: translateX(-50%);
+  /* Use margin-left instead of transform to avoid stacking context issues */
+  margin-left: -170px; /* Approx half width of dock-tools */
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
   overflow: visible;
-  z-index: 50;
+  /* Always on top of ALL elements including inspector panels */
+  z-index: 99999 !important;
   pointer-events: auto;
 }
 
@@ -571,7 +573,7 @@ body {
   background: var(--bg);
   border: none;
   border-radius: 20px;
-  /* Hard edge shadow - no neumorphic highlight glow */
+  /* Hard edge shadow - same as topbar and other floating containers */
   box-shadow: 0 8px 32px #8a95a8, 0 2px 8px #a0a8b8;
   opacity: 0;
   transform: translateX(12px);
@@ -612,7 +614,7 @@ body {
   background: var(--bg);
   border: none;
   border-radius: 20px;
-  /* Hard edge shadow - no neumorphic highlight glow */
+  /* Hard edge shadow ONLY - matches context-panel exactly */
   box-shadow: 0 8px 32px #8a95a8, 0 2px 8px #a0a8b8;
   opacity: 0;
   transform: translateY(12px);
@@ -731,15 +733,20 @@ body {
 }
 
 .probe-panel--snapshot {
-  box-shadow: var(--shadow-panel), 0 0 0 2px #8ae8f0;
+  /* Hard edge shadow with subtle accent border - matches other panels */
+  box-shadow: 0 8px 32px #8a95a8, 0 2px 8px #a0a8b8;
+  border: 2px solid #8ae8f0;
 }
 
 .probe-panel--active {
-  box-shadow: var(--shadow-panel), 0 0 0 2px #8fc0ff;
+  /* Hard edge shadow with subtle accent border - matches other panels */
+  box-shadow: 0 8px 32px #8a95a8, 0 2px 8px #a0a8b8;
+  border: 2px solid #8fc0ff;
 }
 
 .probe-panel--pinned {
-  box-shadow: var(--shadow-panel);
+  /* Hard edge shadow ONLY - matches context-panel exactly */
+  box-shadow: 0 8px 32px #8a95a8, 0 2px 8px #a0a8b8;
 }
 
 .probe-panel--snapshot .probe-title {

@@ -4,6 +4,65 @@ This document contains the implementation history of completed features. For pla
 
 ---
 
+## 2026-01-11
+
+### Inspector Panel Visual Fixes
+
+**Status:** ✅ Implemented (v0.5.2)
+
+Fixed two visual issues with floating inspector panels and the dock toolbar.
+
+#### Dock Z-Index Fix
+
+The add element dock (bottom toolbar with V, S, R, P, B, H, G buttons) was being covered by floating inspector windows. This was caused by CSS `transform: translateX(-50%)` creating a new stacking context, which prevented the z-index from working globally.
+
+**Before:**
+```css
+.dock {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);  /* Creates stacking context! */
+  z-index: 99999;
+}
+```
+
+**After:**
+```css
+.dock {
+  position: fixed;
+  left: 50%;
+  margin-left: -170px;  /* Margin-based centering, no stacking context */
+  z-index: 99999;
+}
+```
+
+The dock now uses `position: fixed` with margin-based centering, ensuring it always remains on top of all inspector panels regardless of their z-index.
+
+#### Probe Panel Halo Removal
+
+Probe inspector windows had a soft, light-colored halo/glow effect around them, while other panels (like Barrier/Source inspectors) had hard edge shadows. This inconsistency was due to different box-shadow values.
+
+**Before (probe-panel):**
+```css
+box-shadow: 0 4px 16px rgba(80, 90, 110, 0.35), 0 1px 3px rgba(80, 90, 110, 0.2);
+```
+
+**After (matches topbar and context-panel):**
+```css
+box-shadow: 0 8px 32px #8a95a8, 0 2px 8px #a0a8b8;
+```
+
+All floating panels now use the same hard-edge shadow style for visual consistency.
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `apps/web/src/style.css` | Changed dock positioning from transform to margin-based centering; unified probe-panel shadows with context-panel |
+| `apps/web/index.html` | Fixed CSS file paths (`./src/styles/theme.css`, `./src/style.css`) |
+
+---
+
 ## 2026-01-10
 
 ### Settings Panel UI Refinements
