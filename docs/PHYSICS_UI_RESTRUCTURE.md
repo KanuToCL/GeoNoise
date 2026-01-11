@@ -32,7 +32,6 @@ These settings define the physical environment and affect both calculation engin
 | **Ground Surface** | Hard / Mixed / Soft | Physical ground type (impedance) |
 | **Spreading Loss** | Spherical / Cylindrical | Point source vs line source |
 | **Atmospheric Absorption** | None / Simple / ISO 9613-1 | Air absorption model |
-| **Side Diffraction** | Off / Auto / On | Horizontal diffraction around barrier ends |
 
 ---
 
@@ -45,6 +44,7 @@ Single-path calculation with incoherent source summation.
 | **Ground Effects** | Toggle | Enable/disable ground effect calculation |
 | **Ground Effect Model** | ISO 9613-2 / Two-Ray Phasor | How A_gr is calculated |
 | **Mixed Ground Interpolation** | ISO 9613-2 / Logarithmic | Sigma interpolation for mixed ground |
+| **Side Diffraction** | Off / Auto / On | Horizontal diffraction around barrier ends |
 
 ---
 
@@ -58,7 +58,9 @@ Multi-path ray tracing with coherent phasor summation.
 | **Wall Reflections** | Toggle | Trace 1st-order wall reflection rays |
 | **Barrier Diffraction** | Toggle | Trace over-top and side diffraction paths |
 | **Sommerfeld Correction** | Toggle | Spherical wave ground correction |
-| **Ground Impedance Model** | Delany-Bazley / Miki | Surface impedance calculation |
+| **Ground Impedance Model** | Delany-Bazley / Delany-Bazley-Miki | Surface impedance calculation |
+
+> **Note:** Side diffraction is always ON for Probe engine (all paths are traced).
 
 ---
 
@@ -618,31 +620,37 @@ where:
 
 Outside valid range:
   f/σ < 0.01: Returns high impedance (|Γ| ≈ 1)
-  f/σ > 1.0:  Auto-switches to Miki extension
+  f/σ > 1.0:  Model breaks down (may produce errors)
 ```
 
-Original Delany-Bazley (1970) empirical model.
+Original Delany-Bazley (1970) empirical model. Use when strict
+compliance with D-B is required, but be aware of range limitations.
 
 </details>
 
 <details>
-<summary><strong>Miki (Extended Range)</strong></summary>
+<summary><strong>Delany-Bazley-Miki (Recommended)</strong></summary>
 
 ```
-Normalized surface impedance:
+Hybrid model with automatic fallback:
 
-Z_n = 1 + 5.50(f/σ)^(-0.632) - j·8.43(f/σ)^(-0.632)
+  If 0.01 < f/σ < 1.0:
+    Z_n = 1 + 9.08(f/σ)^(-0.75) - j·11.9(f/σ)^(-0.73)   [Delany-Bazley]
 
-Valid range: 0.01 < f/σ < 10.0 (extended)
+  If f/σ ≥ 1.0 (or f/σ < 0.01):
+    Z_n = 1 + 5.50(f/σ)^(-0.632) - j·8.43(f/σ)^(-0.632) [Miki]
+
+Miki valid range: 0.01 < f/σ < 10.0 (extended)
 
 Reference: Y. Miki (1990), J. Acoust. Soc. Jpn.
 
-More accurate than Delany-Bazley for:
-  • High frequencies over soft ground
-  • Low frequencies over hard ground
+More robust for:
+  • High frequencies over soft ground (f/σ > 1.0)
+  • Low frequencies over hard ground (f/σ < 0.01)
 ```
 
-Miki (1990) modification with extended valid range.
+Delany-Bazley with automatic Miki fallback when outside D-B valid range.
+Recommended for general use.
 
 </details>
 
