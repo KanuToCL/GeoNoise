@@ -647,7 +647,7 @@
                 <div class="collapsible-header-left">
                   <div class="collapsible-title-group">
                     <span class="collapsible-title">geometric divergence (A<sub>div</sub>)</span>
-                    <span class="collapsible-subtitle">Spherical spreading: A = 20·log₁₀(d) + 11 dB</span>
+                    <span class="collapsible-subtitle">Spherical spreading: A = 20·log₁₀(d) + 10·log₁₀(4π)</span>
                   </div>
                 </div>
                 <div class="collapsible-chevron">▼</div>
@@ -656,8 +656,8 @@
               <div class="collapsible-body">
                 <div class="collapsible-content">
                   <p class="spec-text">Point source spherical spreading models how sound energy spreads over an expanding sphere.</p>
-                  <div class="formula-highlight">A<sub>div</sub> = 20·log₁₀(d) + 11 dB</div>
-                  <p class="spec-text">where d = 3D distance (m), 11 dB = 10·log₁₀(4π) for hemispherical radiation.</p>
+                  <div class="formula-highlight">A<sub>div</sub> = 20·log₁₀(d) + 10·log₁₀(4π)</div>
+                  <p class="spec-text">where d = 3D distance (m), 10·log₁₀(4π) ≈ 10.99 dB for full spherical radiation.</p>
                   <p class="spec-text"><strong>Derivation:</strong> Power flux Φ = W/(4πr²), therefore L<sub>p</sub> = L<sub>W</sub> - 10·log₁₀(4πr²)</p>
                 </div>
               </div>
@@ -1021,13 +1021,13 @@
                 <div class="equation-pill">d<sub>direct</sub> = &radic;(d<sub>2D</sub><sup>2</sup> + (h<sub>s</sub> - h<sub>r</sub>)<sup>2</sup>)</div>
               </div>
             </div>
-            <div class="spec-section">
+<div class="spec-section">
               <div class="spec-heading">SPREADING</div>
               <div class="spec-tray">
                 <div class="spec-text">Point source (spherical):</div>
-                <div class="equation-pill">A<sub>div</sub> = 20 log<sub>10</sub>(d) + 11</div>
+                <div class="equation-pill">A<sub>div</sub> = 20 log<sub>10</sub>(d) + 10 log<sub>10</sub>(4π)</div>
                 <div class="spec-text">Line source (cylindrical):</div>
-                <div class="equation-pill">A<sub>div</sub> = 10 log<sub>10</sub>(d) + 8</div>
+                <div class="equation-pill">A<sub>div</sub> = 10 log<sub>10</sub>(d) + 10 log<sub>10</sub>(2π)</div>
               </div>
             </div>
             <div class="spec-section spec-section--full">
