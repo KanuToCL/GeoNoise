@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="default" data-feature-profile-dropdown="false" data-feature-probe-engine-controls="false">
+<html lang="en" data-theme="default" data-feature-profile-dropdown="false" data-feature-probe-engine-controls="true">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -217,20 +217,12 @@
               ⚙
             </button>
             <div class="settings-popover settings-popover--corner" id="settingsPopover" aria-hidden="true">
-              <!-- Category Selection Stack -->
+<!-- Category Selection Stack -->
               <div class="settings-categories" id="settingsCategories">
                 <div class="settings-header">settings</div>
+                <span class="settings-profile-indicator" id="settingsProfileIndicator">physically accurate</span>
 
-                <!-- Profile Banner - Thin raised dropdown -->
-                <div class="settings-profile-banner">
-                  <select id="calculationProfile">
-                    <option value="iso9613">ISO 9613-2 Compliant</option>
-                    <option value="accurate" selected>Physically Accurate</option>
-                    <option value="custom">Custom</option>
-                  </select>
-                </div>
-
-                <div class="settings-category-stack">
+                  <div class="settings-category-stack">
                   <button class="settings-category-btn" id="settingsCatPhysics" data-category="physics" type="button">
                     physics
                   </button>
@@ -357,6 +349,18 @@
                 <div class="settings-panel-header">physics</div>
                 <div class="settings-panel-content">
 
+<!-- Calculation Profile Selector -->
+                  <div class="settings-section physics-profile-section">
+                    <div class="settings-title">calculation profile</div>
+                    <label class="property-row property-row-stack">
+                      <select class="ui-inset profile-select" id="calculationProfile">
+                        <option value="iso9613">ISO 9613-2:1996</option>
+                        <option value="accurate" selected>Physically Accurate</option>
+                        <option value="custom" disabled>Custom</option>
+                      </select>
+                    </label>
+                  </div>
+
 <!-- SHARED Section -->
                   <div class="settings-section physics-engine-section">
                     <div class="settings-title">shared</div>
@@ -459,12 +463,18 @@
                         <input type="checkbox" id="probeWallReflections" checked />
                         <span>Wall Reflections</span>
                       </label>
-                      <label class="toggle" for="probeBarrierDiffraction">
+<label class="toggle" for="probeBarrierDiffraction">
                         <input type="checkbox" id="probeBarrierDiffraction" checked />
                         <span>Barrier Diffraction</span>
                       </label>
-                      <div class="probe-equation-summary">
-                        <div class="equation-main">p = Σ pᵢ · e^(j·φᵢ)</div>
+<div class="equation-collapsible" data-equation="phasorSummation">
+                        <div class="equation-header" role="button" tabindex="0">
+                          <span class="equation-toggle">▶</span>
+                          <span>equation</span>
+                        </div>
+                        <div class="equation-content" hidden>
+                          <div class="equation-main">p = Σ pᵢ · e^(j·φᵢ)</div>
+                        </div>
                       </div>
                     </div>
                     <div class="probe-ground-group">

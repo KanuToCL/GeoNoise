@@ -4541,6 +4541,45 @@ html[data-feature-profile-dropdown="false"] .settings-profile-banner {
 }
 
 /* ==========================================================================
+   Physics Profile Selector
+   ========================================================================== */
+
+.physics-profile-section {
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+/* Profile dropdown styling */
+.profile-select {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.profile-select option[value="custom"] {
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+/* Profile indicator in main settings popover */
+.settings-profile-indicator {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+.settings-profile-indicator.is-custom {
+  font-style: italic;
+  color: var(--text-soft);
+}
+
+/* ==========================================================================
    Feature Flags
    ========================================================================== */
 
@@ -4645,8 +4684,8 @@ html:not([data-feature-profile-dropdown="true"]) .settings-profile-banner {
    ========================================================================== */
 
 .equation-collapsible {
-  margin-top: 4px;
-  margin-bottom: 6px;
+  margin-top: 2px;
+  margin-bottom: 2px;
 }
 
 .equation-header,

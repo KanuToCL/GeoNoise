@@ -242,7 +242,7 @@ type SettingsPanelState = {
 
 ## Calculation Profile Presets
 
-> **Status:** 📋 Planned
+> **Status:** ✅ Complete
 > **Priority:** High
 > **Target:** v0.6.0
 
@@ -277,14 +277,14 @@ The two primary profiles target different versions of ISO 9613-2:
 | Source Summation | Incoherent (power sum) | ✅ Implemented |
 | Side Diffraction | Off (infinite barrier assumption) | ✅ Configurable |
 
-### Remaining Work for 1996 Profile
+### Profile System Tasks
 
-| Task | Priority | Description |
-|------|----------|-------------|
-| Create profile dropdown in UI | HIGH | Settings → Profile selector |
-| Define profile type in schema | HIGH | `CalculationProfile` enum |
-| Auto-detect when settings match profile | MEDIUM | Show "Custom" when user deviates |
-| Profile persistence in scene JSON | LOW | Save/restore selected profile |
+| Task | Priority | Status |
+|------|----------|--------|
+| Create profile dropdown in UI | HIGH | ✅ Complete |
+| Define profile type in schema | HIGH | ✅ Complete |
+| Auto-detect when settings match profile | MEDIUM | ✅ Complete |
+| Profile persistence in scene JSON | LOW | 📋 Planned |
 
 ---
 

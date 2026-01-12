@@ -6,6 +6,41 @@ This document contains the implementation history of completed features. For pla
 
 ## 2026-01-12
 
+### Calculation Profile Selector
+
+**Status:** ✅ Complete
+
+Added a calculation profile selector to the Physics settings panel that allows switching between ISO 9613-2:1996 compliant and Physically Accurate presets, with auto-detection of Custom when settings are modified.
+
+#### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Profile Dropdown** | Dropdown in Physics panel with ISO 9613-2:1996, Physically Accurate, and Custom options |
+| **Profile Indicator** | Small text indicator in main settings popover header showing active profile |
+| **Auto-detection** | Automatically switches to "Custom" when any setting differs from presets |
+| **Preset Application** | Clicking a profile applies all associated settings instantly |
+
+#### Profile Definitions
+
+| Setting | ISO 9613-2:1996 | Physically Accurate |
+|---------|-----------------|---------------------|
+| Spreading Loss | Spherical | Spherical |
+| Ground Type | Mixed | Mixed |
+| Ground Effects | ON | ON |
+| Ground Effect Model | ISO 9613-2 (legacy) | Ground Interference (twoRayPhasor) |
+| Mixed Interpolation | ISO 9613-2 (Linear) | Logarithmic |
+| Side Diffraction | Off | Auto |
+| Atmospheric Absorption | ISO 9613-1 | ISO 9613-1 |
+
+#### UI Improvements
+
+- Enabled probe engine controls (previously feature-flagged)
+- Reduced equation dropdown margins for tighter visual coupling with controls
+- Converted phasor summation equation to collapsible dropdown format
+
+---
+
 ### Delany-Bazley & Miki Impedance Models
 
 **Status:** ✅ Complete - Wired to Probe Worker
