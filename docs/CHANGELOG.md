@@ -4,6 +4,45 @@ This document contains the implementation history of completed features. For pla
 
 ---
 
+## v0.7.0 (2026-01-12)
+
+### Version Bump & Demo Scene
+
+**Status:** ✅ Complete
+
+Updated version to 0.7.0 and created an impressive demo scene for first-time users.
+
+#### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Version 0.7.0** | Updated version in package.json and About modal |
+| **Courtyard Demo Scene** | Source S1 surrounded by 5 buildings in a courtyard layout |
+| **Pre-placed Probe** | Probe positioned inside courtyard, auto-pinned on startup |
+| **Barrier Demo** | Noise barrier to the left of the source |
+| **Measure Grid** | Large grid covering the courtyard to show noise gradients |
+
+#### Demo Scene Layout
+
+| Element | Count | Description |
+|---------|-------|-------------|
+| Sources | 1 | Central source at 100 dB |
+| Buildings | 5 | Arranged in courtyard: top, right, bottom, left, plus corner |
+| Barriers | 1 | Vertical barrier left of source |
+| Measure Grid | 1 | Covers courtyard area with 6m spacing |
+| Probe | 1 | Auto-pinned on startup |
+| Receivers | 2 | Inside and outside courtyard |
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `package.json` | Version 0.4.0 → 0.7.0 |
+| `apps/web/index.html` | About modal version updated to 0.7.0 |
+| `apps/web/src/main.ts` | New demo scene, auto-pin probe on init |
+
+---
+
 ## 2026-01-12
 
 ### LaTeX Equation Rendering with KaTeX

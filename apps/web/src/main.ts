@@ -639,33 +639,64 @@ resizeObserver.observe(canvas.closest('.canvas-frame') ?? canvas);
 const capability = detectWebGPU();
 const origin = { latLon: { lat: 0, lon: 0 }, altitude: 0 };
 
+// =============================================================================
+// DEMO SCENE: SOURCE SURROUNDED BY BUILDINGS
+// =============================================================================
+// A clean courtyard-style scene with sources surrounded by buildings,
+// creating interesting reflections, shadows, and acoustic patterns.
+// =============================================================================
+
 const scene = {
   sources: [
-    { id: 's1', name: 'Source S1', x: -40, y: 10, z: 1.5, power: 100, spectrum: createFlatSpectrum(100) as Spectrum9, gain: 0, enabled: true },
-    { id: 's2', name: 'Source S2', x: 60, y: -20, z: 1.5, power: 94, spectrum: createFlatSpectrum(94) as Spectrum9, gain: 0, enabled: true },
+    // Central source surrounded by buildings - creates interesting reflections
+    { id: 's1', name: 'Source S1', x: 0, y: 0, z: 1.5, power: 100, spectrum: createFlatSpectrum(100) as Spectrum9, gain: 0, enabled: true },
   ] as Source[],
   receivers: [
-    { id: 'r1', x: 10, y: 30, z: 1.5 },
-    { id: 'r2', x: -20, y: -40, z: 1.5 },
+    // R1: Inside the courtyard near S1
+    { id: 'r1', x: 25, y: 15, z: 1.5 },
+    // R2: Outside the courtyard, partially shielded
+    { id: 'r2', x: -50, y: -30, z: 1.5 },
   ] as Receiver[],
   panels: [
+    // Large measure grid covering the courtyard and surrounding area
     {
       id: 'p1',
       points: [
-        { x: 30, y: 20 },
-        { x: 80, y: 10 },
-        { x: 70, y: -30 },
-        { x: 25, y: -10 },
+        { x: -20, y: 55 },
+        { x: 55, y: 55 },
+        { x: 55, y: -35 },
+        { x: -20, y: -35 },
       ],
       elevation: 1.5,
-      sampling: { resolution: 10, pointCap: 300 },
+      sampling: { resolution: 6, pointCap: 400 },
     },
   ] as Panel[],
-  probes: [] as Probe[],
+  probes: [
+    // Probe in the courtyard to show reflections and interference
+    { id: 'pr1', x: 20, y: 10, z: 1.7 },
+  ] as Probe[],
   buildings: [
-    new Building({ id: 'bd1', x: 0, y: 0, width: 18, height: 12, rotation: 0.2, z_height: 12 }),
+    // Buildings surrounding the central source in a courtyard arrangement
+    // Top building
+    new Building({ id: 'bd1', x: 0, y: 40, width: 25, height: 10, rotation: 0, z_height: 12 }),
+    // Right building
+    new Building({ id: 'bd2', x: 40, y: 10, width: 10, height: 30, rotation: 0, z_height: 10 }),
+    // Bottom building
+    new Building({ id: 'bd3', x: 5, y: -25, width: 20, height: 8, rotation: 0.1, z_height: 8 }),
+    // Left building
+    new Building({ id: 'bd4', x: -30, y: 5, width: 8, height: 25, rotation: 0, z_height: 14 }),
+    // Additional building in upper right
+    new Building({ id: 'bd5', x: 60, y: 30, width: 12, height: 10, rotation: -0.15, z_height: 6 }),
   ] as Building[],
-  barriers: [] as Barrier[],
+  barriers: [
+    // Barrier to the left of S1, between source and left building
+    {
+      id: 'bar1',
+      p1: { x: -15, y: 15 },
+      p2: { x: -15, y: -15 },
+      height: 3,
+    },
+  ] as Barrier[],
 };
 
 const layers = {
@@ -8306,6 +8337,10 @@ wireSettingsPopover();
   pushHistory({ markDirty: false });
   markSaved();
   computeScene();
+  // Pin the initial demo probe so users see the frequency response immediately
+  if (scene.probes.length > 0) {
+    pinProbe(scene.probes[0].id);
+  }
   // Initial map uses high resolution with maximum point cap for a good first impression
   void computeNoiseMapInternal({ resolutionPx: RES_HIGH, maxPoints: REFINE_POINTS, silent: true, requestId: 'grid:init' });
   window.addEventListener('resize', resizeCanvas);
