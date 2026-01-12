@@ -4,6 +4,51 @@ This document contains the implementation history of completed features. For pla
 
 ---
 
+## 2026-01-12
+
+### Delany-Bazley & Miki Impedance Models
+
+**Status:** ✅ Complete - Wired to Probe Worker
+
+Replaced simplified empirical ground reflection model with physics-based impedance calculations using the Delany-Bazley and Miki models from acoustic literature.
+
+#### Implementation Details
+
+| Component | Formula | Reference |
+|-----------|---------|-----------|
+| **Delany-Bazley** | `Zn = 1 + 9.08(f/σ)^(-0.75) - j·11.9(f/σ)^(-0.73)` | Delany & Bazley (1970) |
+| **Miki Extension** | `Zn = 1 + 5.50(f/σ)^(-0.632) - j·8.43(f/σ)^(-0.632)` | Miki (1990) |
+| **Reflection Coefficient** | `Γ = (Zn·cos(θ) - 1) / (Zn·cos(θ) + 1)` | Plane-wave theory |
+| **Mixed Ground** | `σ_eff = σ_hard^(1-G) × σ_soft^G` | ISO 9613-2 logarithmic interpolation |
+
+#### Flow Resistivity Values (Pa·s/m²)
+
+| Ground Type | Value | Description |
+|-------------|-------|-------------|
+| Hard | 2,000,000 | Concrete, asphalt |
+| Soft | 20,000 | Loose soil, grass lawn |
+| Gravel | 500,000 | Gravel surface |
+| Compact Soil | 100,000 | Compacted earth |
+| Snow | 30,000 | Fresh snow |
+
+#### Model Selection Logic
+
+- **Delany-Bazley**: Used when f/σ < 1.0 (its valid range)
+- **Miki**: Used when f/σ ≥ 1.0 (extended range with better low-frequency behavior)
+- **Auto mode**: Automatically selects based on f/σ ratio
+
+#### Technical Changes
+
+- Added `Complex` interface and operations (`complexMultiply`, `complexDivide`, `complexMagnitude`, `complexPhase`)
+- Added `FLOW_RESISTIVITY` constants for different ground types
+- Implemented `delanyBazleyImpedance()` and `mikiImpedance()` functions
+- Implemented `calculateSurfaceImpedance()` with auto-selection logic
+- Implemented `calculateReflectionCoefficient()` using plane-wave formula
+- Implemented `calculateMixedFlowResistivity()` with logarithmic interpolation
+- Updated `getGroundReflectionCoeff()` to use physics-based model
+
+---
+
 ## 2026-01-11
 
 ### Physics Settings UI Restructure

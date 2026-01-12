@@ -990,21 +990,263 @@ function traceBarrierDiffractionPaths(
 }
 
 // ============================================================================
-// Ground Reflection Coefficients
+// Ground Reflection Coefficients - Delany-Bazley & Miki Impedance Models
+// ============================================================================
+//
+// PHYSICS BACKGROUND:
+// The ground reflection coefficient Γ is calculated from the normalized surface
+// impedance Zn using the plane-wave reflection formula:
+//
+//   Γ = (Zn·cos(θ) - 1) / (Zn·cos(θ) + 1)
+//
+// where θ is the angle of incidence (0° = normal incidence).
+//
+// For locally-reacting surfaces (which porous grounds approximate), the surface
+// impedance is derived from empirical models based on flow resistivity σ.
+//
+// DELANY-BAZLEY MODEL (1970):
+// Based on extensive measurements of fibrous materials. Valid range: 0.01 < f/σ < 1.0
+//
+//   Zn = 1 + 9.08(f/σ)^(-0.75) - j·11.9(f/σ)^(-0.73)
+//
+// where:
+//   f = frequency (Hz)
+//   σ = flow resistivity (Pa·s/m² = rayls/m = kPa·s/m³ × 1000)
+//   j = imaginary unit
+//
+// MIKI EXTENSION (1990):
+// Extended range with better low-frequency behavior. Valid range: 0.01 < f/σ < 10.0
+//
+//   Zn = 1 + 5.50(f/σ)^(-0.632) - j·8.43(f/σ)^(-0.632)
+//
+// FLOW RESISTIVITY VALUES (typical, Pa·s/m²):
+//   - Hard (concrete/asphalt): 200,000 - 2,000,000
+//   - Grass (short, compacted): 150,000 - 300,000
+//   - Grass (lawn): 100,000 - 200,000
+//   - Soil (compacted): 50,000 - 100,000
+//   - Soil (loose): 20,000 - 50,000
+//   - Snow (fresh): 10,000 - 50,000
+//   - Gravel: 500,000 - 1,000,000
+//
+// References:
+//   - Delany & Bazley (1970) "Acoustical properties of fibrous absorbent materials"
+//   - Miki (1990) "Acoustical properties of porous materials - Modifications of DB model"
+//   - ISO 9613-2:1996 "Attenuation of sound during propagation outdoors"
 // ============================================================================
 
 /**
- * Get ground reflection coefficient (complex) based on ground type.
+ * Complex number operations for impedance calculations.
+ */
+interface Complex {
+  re: number;  // Real part
+  im: number;  // Imaginary part
+}
+
+function complexMultiply(a: Complex, b: Complex): Complex {
+  return {
+    re: a.re * b.re - a.im * b.im,
+    im: a.re * b.im + a.im * b.re,
+  };
+}
+
+function complexDivide(a: Complex, b: Complex): Complex {
+  const denom = b.re * b.re + b.im * b.im;
+  if (denom < EPSILON) {
+    return { re: 0, im: 0 };
+  }
+  return {
+    re: (a.re * b.re + a.im * b.im) / denom,
+    im: (a.im * b.re - a.re * b.im) / denom,
+  };
+}
+
+function complexMagnitude(z: Complex): number {
+  return Math.sqrt(z.re * z.re + z.im * z.im);
+}
+
+function complexPhase(z: Complex): number {
+  return Math.atan2(z.im, z.re);
+}
+
+/**
+ * Flow resistivity values for different ground types (Pa·s/m²).
+ * These are typical values from acoustic literature.
+ */
+const FLOW_RESISTIVITY = {
+  hard: 2_000_000,     // Concrete, asphalt (very high impedance, near-perfect reflection)
+  soft: 20_000,        // Loose soil, grass lawn (porous, absorptive)
+  gravel: 500_000,     // Gravel surface
+  compactSoil: 100_000, // Compacted earth
+  snow: 30_000,        // Fresh snow
+} as const;
+
+/**
+ * Impedance model selection.
+ */
+type ImpedanceModel = 'delany-bazley' | 'miki' | 'auto';
+
+/**
+ * Delany-Bazley normalized surface impedance.
  *
- * The reflection coefficient Γ determines how much energy is reflected
- * and what phase shift occurs at the ground surface.
+ * Zn = 1 + 9.08(f/σ)^(-0.75) - j·11.9(f/σ)^(-0.73)
  *
- * Physics:
- * - Hard ground (concrete, asphalt): High reflection, minimal phase shift
- * - Soft ground (grass, soil): Lower reflection, ~180° phase shift
- * - Mixed: Interpolation between hard and soft
+ * Valid range: 0.01 < f/σ < 1.0
+ * Outside this range, results are extrapolated (less accurate).
  *
- * Based on empirical measurements and Delany-Bazley model simplifications.
+ * @param frequency - Frequency in Hz
+ * @param flowResistivity - Flow resistivity σ in Pa·s/m²
+ * @returns Complex normalized surface impedance Zn
+ */
+function delanyBazleyImpedance(frequency: number, flowResistivity: number): Complex {
+  const X = frequency / flowResistivity;  // Dimensionless parameter f/σ
+
+  // Clamp to valid range for numerical stability
+  const Xc = Math.max(0.001, Math.min(X, 10.0));
+
+  // Delany-Bazley coefficients
+  const realPart = 1 + 9.08 * Math.pow(Xc, -0.75);
+  const imagPart = -11.9 * Math.pow(Xc, -0.73);
+
+  return { re: realPart, im: imagPart };
+}
+
+/**
+ * Miki normalized surface impedance (extended range).
+ *
+ * Zn = 1 + 5.50(f/σ)^(-0.632) - j·8.43(f/σ)^(-0.632)
+ *
+ * Valid range: 0.01 < f/σ < 10.0
+ * Better low-frequency behavior than Delany-Bazley.
+ *
+ * @param frequency - Frequency in Hz
+ * @param flowResistivity - Flow resistivity σ in Pa·s/m²
+ * @returns Complex normalized surface impedance Zn
+ */
+function mikiImpedance(frequency: number, flowResistivity: number): Complex {
+  const X = frequency / flowResistivity;  // Dimensionless parameter f/σ
+
+  // Clamp to valid range for numerical stability
+  const Xc = Math.max(0.001, Math.min(X, 100.0));
+
+  // Miki coefficients (extended range)
+  const realPart = 1 + 5.50 * Math.pow(Xc, -0.632);
+  const imagPart = -8.43 * Math.pow(Xc, -0.632);
+
+  return { re: realPart, im: imagPart };
+}
+
+/**
+ * Calculate normalized surface impedance using the appropriate model.
+ *
+ * 'auto' mode selects:
+ *   - Delany-Bazley for f/σ < 1.0 (its valid range)
+ *   - Miki for f/σ >= 1.0 (extended range)
+ *
+ * @param frequency - Frequency in Hz
+ * @param flowResistivity - Flow resistivity σ in Pa·s/m²
+ * @param model - Which impedance model to use
+ * @returns Complex normalized surface impedance Zn
+ */
+function calculateSurfaceImpedance(
+  frequency: number,
+  flowResistivity: number,
+  model: ImpedanceModel = 'auto'
+): Complex {
+  const X = frequency / flowResistivity;
+
+  if (model === 'delany-bazley') {
+    return delanyBazleyImpedance(frequency, flowResistivity);
+  } else if (model === 'miki') {
+    return mikiImpedance(frequency, flowResistivity);
+  } else {
+    // 'auto': Use DB within its valid range, Miki outside
+    if (X < 1.0) {
+      return delanyBazleyImpedance(frequency, flowResistivity);
+    } else {
+      return mikiImpedance(frequency, flowResistivity);
+    }
+  }
+}
+
+/**
+ * Calculate plane-wave reflection coefficient from surface impedance.
+ *
+ * Γ = (Zn·cos(θ) - 1) / (Zn·cos(θ) + 1)
+ *
+ * For locally-reacting surfaces, the impedance doesn't depend on angle.
+ *
+ * @param Zn - Complex normalized surface impedance
+ * @param incidenceAngle - Angle of incidence in radians (0 = normal)
+ * @returns Complex reflection coefficient
+ */
+function calculateReflectionCoefficient(Zn: Complex, incidenceAngle: number): Complex {
+  const cosTheta = Math.cos(incidenceAngle);
+
+  // Zn * cos(θ)
+  const ZnCosTheta: Complex = {
+    re: Zn.re * cosTheta,
+    im: Zn.im * cosTheta,
+  };
+
+  // Numerator: Zn·cos(θ) - 1
+  const numerator: Complex = {
+    re: ZnCosTheta.re - 1,
+    im: ZnCosTheta.im,
+  };
+
+  // Denominator: Zn·cos(θ) + 1
+  const denominator: Complex = {
+    re: ZnCosTheta.re + 1,
+    im: ZnCosTheta.im,
+  };
+
+  return complexDivide(numerator, denominator);
+}
+
+/**
+ * Calculate effective flow resistivity for mixed ground.
+ *
+ * Two approaches from the literature:
+ *
+ * 1. ISO 9613-2 method (linear interpolation of ground factor G):
+ *    σ_eff = σ_hard^(1-G) × σ_soft^G  (logarithmic interpolation)
+ *
+ * 2. Area-weighted method:
+ *    σ_eff = σ_soft / G  (assumes G is fraction of soft ground)
+ *
+ * We use logarithmic interpolation as it's more physically meaningful
+ * for acoustic properties that span orders of magnitude.
+ *
+ * @param mixedFactor - G factor (0 = fully hard, 1 = fully soft)
+ * @returns Effective flow resistivity in Pa·s/m²
+ */
+function calculateMixedFlowResistivity(mixedFactor: number): number {
+  // Clamp to valid range
+  const G = Math.max(0, Math.min(1, mixedFactor));
+
+  // Logarithmic interpolation between hard and soft
+  // σ_eff = σ_hard^(1-G) × σ_soft^G
+  const logSigmaHard = Math.log(FLOW_RESISTIVITY.hard);
+  const logSigmaSoft = Math.log(FLOW_RESISTIVITY.soft);
+  const logSigmaEff = logSigmaHard * (1 - G) + logSigmaSoft * G;
+
+  return Math.exp(logSigmaEff);
+}
+
+/**
+ * Get ground reflection coefficient using Delany-Bazley/Miki impedance model.
+ *
+ * This is the physics-based replacement for the simplified empirical model.
+ * It calculates:
+ * 1. Flow resistivity based on ground type
+ * 2. Surface impedance using DB or Miki model
+ * 3. Reflection coefficient from impedance
+ *
+ * @param groundType - Type of ground surface
+ * @param mixedFactor - For 'mixed' type: 0 = hard, 1 = soft
+ * @param frequency - Frequency in Hz
+ * @param incidenceAngle - Angle of incidence in radians (default: grazing, π/2 - 0.1)
+ * @param model - Which impedance model to use
  */
 interface GroundReflectionCoeff {
   magnitude: number;  // |Γ| - amplitude reflection coefficient (0 to 1)
@@ -1014,35 +1256,37 @@ interface GroundReflectionCoeff {
 function getGroundReflectionCoeff(
   groundType: 'hard' | 'soft' | 'mixed',
   mixedFactor: number,
-  frequency: number
+  frequency: number,
+  incidenceAngle?: number,
+  model: ImpedanceModel = 'auto'
 ): GroundReflectionCoeff {
-  // Frequency-dependent absorption (higher frequencies absorbed more by soft ground)
-  const freqFactor = Math.min(frequency / 1000, 2); // Normalized, caps at 2kHz behavior
+  // Determine flow resistivity based on ground type
+  let flowResistivity: number;
 
   if (groundType === 'hard') {
-    // Hard ground: ~95% reflection, minimal phase shift
-    // Slight frequency dependence (higher freq slightly more absorbed)
-    return {
-      magnitude: 0.95 - 0.02 * freqFactor,
-      phase: 0,
-    };
+    flowResistivity = FLOW_RESISTIVITY.hard;
   } else if (groundType === 'soft') {
-    // Soft ground: ~60-80% reflection depending on frequency
-    // Phase shift approaches π (180°) - inverts the wave
-    // Lower frequencies penetrate more, higher frequencies reflect more
-    return {
-      magnitude: 0.6 + 0.1 * (1 - freqFactor / 2),
-      phase: Math.PI * (0.8 + 0.15 * freqFactor / 2), // ~0.8π to ~0.95π
-    };
+    flowResistivity = FLOW_RESISTIVITY.soft;
   } else {
-    // Mixed ground: interpolate based on mixedFactor (0 = hard, 1 = soft)
-    const hard = getGroundReflectionCoeff('hard', 0, frequency);
-    const soft = getGroundReflectionCoeff('soft', 0, frequency);
-    return {
-      magnitude: hard.magnitude * (1 - mixedFactor) + soft.magnitude * mixedFactor,
-      phase: hard.phase * (1 - mixedFactor) + soft.phase * mixedFactor,
-    };
+    // Mixed: interpolate flow resistivity
+    flowResistivity = calculateMixedFlowResistivity(mixedFactor);
   }
+
+  // Default incidence angle: near-grazing (typical for outdoor propagation)
+  // Ground reflections usually occur at low grazing angles
+  // We use ~5° from grazing (85° from normal) as typical
+  const theta = incidenceAngle ?? (Math.PI / 2 - 0.087); // ~85° from normal
+
+  // Calculate surface impedance
+  const Zn = calculateSurfaceImpedance(frequency, flowResistivity, model);
+
+  // Calculate reflection coefficient
+  const Gamma = calculateReflectionCoefficient(Zn, theta);
+
+  return {
+    magnitude: complexMagnitude(Gamma),
+    phase: complexPhase(Gamma),
+  };
 }
 
 /**

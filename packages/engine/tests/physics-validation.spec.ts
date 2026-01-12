@@ -182,7 +182,7 @@ function createBarrier(
 // 1. SPREADING LOSS (Geometric Divergence)
 // ============================================================================
 
-describe('Spreading Loss - ISO 9613-2', () => {
+describe('[Shared] Spreading Loss - ISO 9613-2', () => {
   const EXACT_4PI = 10 * Math.log10(4 * Math.PI); // 10.99 dB
   const EXACT_2PI = 10 * Math.log10(2 * Math.PI); // 7.98 dB
 
@@ -192,7 +192,7 @@ describe('Spreading Loss - ISO 9613-2', () => {
     const passed = Math.abs(actual - expected) < 0.01;
 
     recordResult({
-      category: 'Spreading',
+      category: '[Shared] Spreading',
       name: 'Spherical @ 1m',
       inputs: 'd=1m',
       equation: 'A_div = 20·log₁₀(d) + 10·log₁₀(4π) = 0 + 10.99',
@@ -212,7 +212,7 @@ describe('Spreading Loss - ISO 9613-2', () => {
     const passed = Math.abs(actual - expected) < 0.01;
 
     recordResult({
-      category: 'Spreading',
+      category: '[Shared] Spreading',
       name: 'Spherical @ 10m',
       inputs: 'd=10m',
       equation: 'A_div = 20·log₁₀(10) + 10.99 = 20 + 10.99',
@@ -232,7 +232,7 @@ describe('Spreading Loss - ISO 9613-2', () => {
     const passed = Math.abs(actual - expected) < 0.01;
 
     recordResult({
-      category: 'Spreading',
+      category: '[Shared] Spreading',
       name: 'Spherical @ 100m',
       inputs: 'd=100m',
       equation: 'A_div = 20·log₁₀(100) + 10.99 = 40 + 10.99',
@@ -254,7 +254,7 @@ describe('Spreading Loss - ISO 9613-2', () => {
     const passed = Math.abs(actual - expected) < 0.01;
 
     recordResult({
-      category: 'Spreading',
+      category: '[Shared] Spreading',
       name: 'Inverse Square Law',
       inputs: 'd1=10m, d2=20m',
       equation: 'ΔA = 20·log₁₀(d2/d1) = 20·log₁₀(2) = 6.02',
@@ -274,7 +274,7 @@ describe('Spreading Loss - ISO 9613-2', () => {
     const passed = Math.abs(actual - expected) < 0.01;
 
     recordResult({
-      category: 'Spreading',
+      category: '[Shared] Spreading',
       name: 'Cylindrical @ 1m',
       inputs: 'd=1m, mode=cylindrical',
       equation: 'A_div = 10·log₁₀(d) + 10·log₁₀(2π) = 0 + 7.98',
@@ -296,7 +296,7 @@ describe('Spreading Loss - ISO 9613-2', () => {
     const passed = Math.abs(actual - expected) < 0.01;
 
     recordResult({
-      category: 'Spreading',
+      category: '[Shared] Spreading',
       name: 'Cylindrical Law',
       inputs: 'd1=10m, d2=20m, mode=cylindrical',
       equation: 'ΔA = 10·log₁₀(d2/d1) = 10·log₁₀(2) = 3.01',
@@ -316,7 +316,7 @@ describe('Spreading Loss - ISO 9613-2', () => {
     const passed = Math.abs(actual - expected) < 0.01;
 
     recordResult({
-      category: 'Spreading',
+      category: '[Shared] Spreading',
       name: 'Cylindrical @ 10m',
       inputs: 'd=10m, mode=cylindrical',
       equation: 'A_div = 10·log₁₀(10) + 10·log₁₀(2π) = 10 + 7.98',
@@ -336,7 +336,7 @@ describe('Spreading Loss - ISO 9613-2', () => {
     const passed = Math.abs(actual - expected) < 0.01;
 
     recordResult({
-      category: 'Spreading',
+      category: '[Shared] Spreading',
       name: 'Reference @ 1m',
       inputs: 'd=1m, reference=SPL@1m',
       equation: 'A_div = 20·log₁₀(d/d_ref) = 20·log₁₀(1) = 0',
@@ -356,7 +356,7 @@ describe('Spreading Loss - ISO 9613-2', () => {
     const passed = Math.abs(actual - expected) < 0.01;
 
     recordResult({
-      category: 'Spreading',
+      category: '[Shared] Spreading',
       name: 'Reference @ 10m',
       inputs: 'd=10m, reference=SPL@1m',
       equation: 'A_div = 20·log₁₀(d/d_ref) = 20·log₁₀(10) = 20',
@@ -378,7 +378,7 @@ describe('Spreading Loss - ISO 9613-2', () => {
     const passed = Math.abs(actual - expected) < 0.01;
 
     recordResult({
-      category: 'Spreading',
+      category: '[Shared] Spreading',
       name: 'Lw vs SPL@1m diff',
       inputs: 'd=10m, compare Lw vs SPL@1m reference',
       equation: 'Δ = 10·log₁₀(4π) = 10.99 dB (area of unit sphere)',
@@ -397,7 +397,7 @@ describe('Spreading Loss - ISO 9613-2', () => {
     const isFinite = Number.isFinite(actual);
 
     recordResult({
-      category: 'Spreading',
+      category: '[Shared] Spreading',
       name: 'Zero distance clamp',
       inputs: 'd=0m',
       equation: 'd_eff = max(d, MIN_DIST) to avoid log(0)',
@@ -416,7 +416,7 @@ describe('Spreading Loss - ISO 9613-2', () => {
     const isFinite = Number.isFinite(actual);
 
     recordResult({
-      category: 'Spreading',
+      category: '[Shared] Spreading',
       name: 'Negative distance clamp',
       inputs: 'd=-10m',
       equation: 'd_eff = max(d, MIN_DIST) to handle invalid input',
@@ -436,7 +436,7 @@ describe('Spreading Loss - ISO 9613-2', () => {
     const passed = Math.abs(actual - expected) < 1;
 
     recordResult({
-      category: 'Spreading',
+      category: '[Shared] Spreading',
       name: 'Spherical @ 1km',
       inputs: 'd=1000m',
       equation: 'A_div = 20·log₁₀(1000) + 10.99 = 60 + 10.99 = 70.99',
@@ -455,7 +455,7 @@ describe('Spreading Loss - ISO 9613-2', () => {
 // 2. DIFFRACTION RAY TRACING - Issue #11
 // ============================================================================
 
-describe('Diffraction Ray Tracing - Issue #11', () => {
+describe('[Grid] Diffraction Ray Tracing - Issue #11', () => {
   const c = 343; // speed of sound m/s
 
   it('default config has maxDiffractionDeltaForUnblockedPath = 5.0m', () => {
@@ -464,7 +464,7 @@ describe('Diffraction Ray Tracing - Issue #11', () => {
     const passed = Math.abs(actual - expected) < 0.01;
 
     recordResult({
-      category: 'Diffraction',
+      category: '[Grid] Diffraction',
       name: 'Default threshold',
       inputs: 'DEFAULT_RAYTRACING_CONFIG',
       equation: 'λ(63Hz) = c/f = 343/63 = 5.44m ≈ 5m threshold',
@@ -498,7 +498,7 @@ describe('Diffraction Ray Tracing - Issue #11', () => {
     const passed = directBlocked && diffracted;
 
     recordResult({
-      category: 'Diffraction',
+      category: '[Grid] Diffraction',
       name: 'Blocked → diffract',
       inputs: 'src=(0,0,2), rcv=(20,0,1.5), barrier x=10, h=4m',
       equation: 'Direct path intersects barrier → blocked, diffraction path traced over top',
@@ -533,7 +533,7 @@ describe('Diffraction Ray Tracing - Issue #11', () => {
     const passed = directValid === true && noDiffraction;
 
     recordResult({
-      category: 'Diffraction',
+      category: '[Grid] Diffraction',
       name: 'Disabled → no diff',
       inputs: 'maxDiffractionDeltaForUnblockedPath=0, barrier off-axis',
       equation: 'Direct unblocked + threshold=0 → no diffraction traced',
@@ -568,7 +568,7 @@ describe('Diffraction Ray Tracing - Issue #11', () => {
     const passed = hasDiffraction && withinThreshold;
 
     recordResult({
-      category: 'Diffraction',
+      category: '[Grid] Diffraction',
       name: 'Nearby → include',
       inputs: 'barrier h=2.5m (below line of sight), threshold=5m',
       equation: 'δ = d_src→edge + d_edge→rcv - d_direct < threshold → include',
@@ -599,7 +599,7 @@ describe('Diffraction Ray Tracing - Issue #11', () => {
     const passed = Math.abs(actualDiff - expectedDiff) < 0.1;
 
     recordResult({
-      category: 'Diffraction',
+      category: '[Grid] Diffraction',
       name: 'Path difference δ',
       inputs: 'src=(0,0,0), rcv=(20,0,0), barrier x=10, h=5m',
       equation: 'δ = 2·√(10²+5²) - 20 = 2·11.18 - 20 = 2.36m',
@@ -620,7 +620,7 @@ describe('Diffraction Ray Tracing - Issue #11', () => {
     const passed = ratio > 0.8 && ratio < 1.2;
 
     recordResult({
-      category: 'Diffraction',
+      category: '[Grid] Diffraction',
       name: 'Threshold ≈ λ(63Hz)',
       inputs: 'c=343 m/s, f=63Hz, threshold=5m',
       equation: 'λ = c/f = 343/63 = 5.44m, ratio = threshold/λ',
@@ -652,7 +652,7 @@ describe('Diffraction Ray Tracing - Issue #11', () => {
     const passed = diffPaths.length === 2;
 
     recordResult({
-      category: 'Diffraction',
+      category: '[Grid] Diffraction',
       name: 'Multi-barrier',
       inputs: 'src=(0,0,2), rcv=(30,0,1.5), 2 barriers at x=10,20',
       equation: 'Each barrier generates one diffraction path',
@@ -675,7 +675,7 @@ describe('Diffraction Ray Tracing - Issue #11', () => {
     const passed = diffPath === null;
 
     recordResult({
-      category: 'Diffraction',
+      category: '[Grid] Diffraction',
       name: 'Non-intersecting → null',
       inputs: 'src=(0,0,2), rcv=(20,0,1.5), barrier at y=10-20 (off-axis)',
       equation: 'No intersection with source-receiver line → no diffraction',
@@ -694,7 +694,7 @@ describe('Diffraction Ray Tracing - Issue #11', () => {
 // 3. ATMOSPHERIC ABSORPTION
 // ============================================================================
 
-describe('Atmospheric Absorption - ISO 9613-1', () => {
+describe('[Shared] Atmospheric Absorption - ISO 9613-1', () => {
   const config = getDefaultEngineConfig('festival_fast');
   const meteo = config.meteo!;
 
@@ -706,7 +706,7 @@ describe('Atmospheric Absorption - ISO 9613-1', () => {
     const passed = actual === expected;
 
     recordResult({
-      category: 'Atmospheric',
+      category: '[Shared] Atmospheric',
       name: 'None mode @ 8kHz',
       inputs: 'd=100m, f=8000Hz, mode=none',
       equation: 'A_atm = 0 (absorption disabled)',
@@ -729,7 +729,7 @@ describe('Atmospheric Absorption - ISO 9613-1', () => {
     const passed = actual > expectedMin && actual < expectedMax;
 
     recordResult({
-      category: 'Atmospheric',
+      category: '[Shared] Atmospheric',
       name: 'ISO 9613-1 @ 8kHz, 100m',
       inputs: 'd=100m, f=8000Hz, T=20°C, RH=50%',
       equation: 'A_atm = α(f,T,RH) · d/1000, α from ISO 9613-1 Table 2',
@@ -751,7 +751,7 @@ describe('Atmospheric Absorption - ISO 9613-1', () => {
     const passed = at8kHz > at125Hz;
 
     recordResult({
-      category: 'Atmospheric',
+      category: '[Shared] Atmospheric',
       name: 'Frequency dependence',
       inputs: 'f1=125Hz, f2=8000Hz, d=100m',
       equation: 'α ∝ f² at low freq, A_atm(8kHz) >> A_atm(125Hz)',
@@ -772,7 +772,7 @@ describe('Atmospheric Absorption - ISO 9613-1', () => {
     const passed = diffracted.atmosphericAbsorption > direct.atmosphericAbsorption;
 
     recordResult({
-      category: 'Atmospheric',
+      category: '[Shared] Atmospheric',
       name: 'Diffracted path length',
       inputs: 'd_direct=100m, d_actual=150m (δ=50m)',
       equation: 'A_atm = α · d_actual/1000 (uses actual path, not direct)',
@@ -794,7 +794,7 @@ describe('Atmospheric Absorption - ISO 9613-1', () => {
     const passed = diff > 3 && diff < 10;
 
     recordResult({
-      category: 'Atmospheric',
+      category: '[Shared] Atmospheric',
       name: '50m extra @ 8kHz',
       inputs: 'Δd=50m, f=8000Hz, α≈10.5dB/100m',
       equation: 'ΔA_atm = α · Δd/1000 ≈ 10.5 · 0.5 = 5.26 dB',
@@ -817,7 +817,7 @@ describe('Atmospheric Absorption - ISO 9613-1', () => {
     const passed = diff < 1;
 
     recordResult({
-      category: 'Atmospheric',
+      category: '[Shared] Atmospheric',
       name: '50m extra @ 125Hz',
       inputs: 'Δd=50m, f=125Hz, α≈0.04dB/100m',
       equation: 'ΔA_atm = α · Δd/1000 ≈ 0.04 · 0.5 = 0.02 dB',
@@ -836,7 +836,7 @@ describe('Atmospheric Absorption - ISO 9613-1', () => {
 // 4. BARRIER DIFFRACTION - Maekawa Formula
 // ============================================================================
 
-describe('Barrier Diffraction - Maekawa', () => {
+describe('[Shared] Barrier Diffraction - Maekawa', () => {
   it('thin barrier coefficient = 20', () => {
     const pathDiff = 1;
     const frequency = 343;
@@ -846,7 +846,7 @@ describe('Barrier Diffraction - Maekawa', () => {
     const passed = Math.abs(actual - expected) < 0.1;
 
     recordResult({
-      category: 'Barrier',
+      category: '[Shared] Barrier',
       name: 'Thin barrier (N=2)',
       inputs: 'δ=1m, f=343Hz, λ=1m, N=2δ/λ=2',
       equation: 'A_bar = 10·log₁₀(3 + 20N) = 10·log₁₀(43) = 16.33 dB',
@@ -869,7 +869,7 @@ describe('Barrier Diffraction - Maekawa', () => {
     const passed = Math.abs(actual - expected) < 0.1;
 
     recordResult({
-      category: 'Barrier',
+      category: '[Shared] Barrier',
       name: 'Thick barrier (N=2)',
       inputs: 'δ=1m, f=343Hz, λ=1m, N=2δ/λ=2, type=thick',
       equation: 'A_bar = 10·log₁₀(3 + 40N) = 10·log₁₀(83) = 19.19 dB',
@@ -889,7 +889,7 @@ describe('Barrier Diffraction - Maekawa', () => {
     const passed = actual === expected;
 
     recordResult({
-      category: 'Barrier',
+      category: '[Shared] Barrier',
       name: 'Thin barrier cap',
       inputs: 'δ=100m, f=8000Hz, very large N',
       equation: 'A_bar = min(10·log₁₀(3+20N), 20) = 20 dB cap',
@@ -909,7 +909,7 @@ describe('Barrier Diffraction - Maekawa', () => {
     const passed = actual === expected;
 
     recordResult({
-      category: 'Barrier',
+      category: '[Shared] Barrier',
       name: 'Thick barrier cap',
       inputs: 'δ=100m, f=8000Hz, very large N, type=thick',
       equation: 'A_bar = min(10·log₁₀(3+40N), 25) = 25 dB cap',
@@ -930,7 +930,7 @@ describe('Barrier Diffraction - Maekawa', () => {
     const passed = at8kHz > at125Hz;
 
     recordResult({
-      category: 'Barrier',
+      category: '[Shared] Barrier',
       name: 'Frequency dependence',
       inputs: 'δ=5m, f1=125Hz, f2=8000Hz',
       equation: 'N = 2δ/λ = 2δf/c, higher f → higher N → higher A_bar',
@@ -950,7 +950,7 @@ describe('Barrier Diffraction - Maekawa', () => {
     const passed = actual === expected;
 
     recordResult({
-      category: 'Barrier',
+      category: '[Shared] Barrier',
       name: 'Negative N guard',
       inputs: 'δ=-0.5m (receiver can see over barrier)',
       equation: 'N < 0 → A_bar = 0 (no barrier effect)',
@@ -973,7 +973,7 @@ describe('Barrier Diffraction - Maekawa', () => {
     const passed = thick > thin;
 
     recordResult({
-      category: 'Barrier',
+      category: '[Shared] Barrier',
       name: 'Thick > Thin',
       inputs: 'δ=5m, f=1000Hz, same geometry',
       equation: 'Thick: 10·log₁₀(3+40N) > Thin: 10·log₁₀(3+20N)',
@@ -995,7 +995,7 @@ describe('Barrier Diffraction - Maekawa', () => {
     const passed = defaultAtten === explicitThin;
 
     recordResult({
-      category: 'Barrier',
+      category: '[Shared] Barrier',
       name: 'Default = thin',
       inputs: 'δ=5m, f=1000Hz, no type specified',
       equation: 'barrierAttenuation(δ, f) = barrierAttenuation(δ, f, undefined, "thin")',
@@ -1014,7 +1014,7 @@ describe('Barrier Diffraction - Maekawa', () => {
 // 4b. BARRIER + GROUND INTERACTION - Issue #3 Fix
 // ============================================================================
 
-describe('Barrier + Ground Interaction - Issue #3', () => {
+describe('[Grid] Barrier + Ground Interaction - Issue #3', () => {
   const config = getDefaultEngineConfig('festival_fast');
   // Use twoRayPhasor ground model for predictable positive ground effect values
   const propConfig = {
@@ -1050,7 +1050,7 @@ describe('Barrier + Ground Interaction - Issue #3', () => {
     const passed = barrierNonZero && groundCalculated;
 
     recordResult({
-      category: 'Barrier+Ground',
+      category: '[Grid] Barrier+Ground',
       name: '#3 Additive (with info)',
       inputs: 'd=100m, hs=hr=1.5m, barrier d_s=50m, d_r=50m, h=2m',
       equation: 'A_total = A_bar + A_gr (ISO 9613-2 §7.4 additive formula)',
@@ -1083,7 +1083,7 @@ describe('Barrier + Ground Interaction - Issue #3', () => {
     const hasFiniteGroundEffect = Number.isFinite(result.groundEffect);
 
     recordResult({
-      category: 'Barrier+Ground',
+      category: '[Grid] Barrier+Ground',
       name: '#3 Ground partitioning',
       inputs: 'd_s=50m, d_r=50m, h_barrier=2m, ground=soft',
       equation: 'A_gr = A_gr,source + A_gr,receiver (partitioned at barrier)',
@@ -1110,7 +1110,7 @@ describe('Barrier + Ground Interaction - Issue #3', () => {
     const barrierCalculated = result.barrierAttenuation > 0;
 
     recordResult({
-      category: 'Barrier+Ground',
+      category: '[Grid] Barrier+Ground',
       name: '#3 Legacy max() fallback',
       inputs: 'd=100m, δ=5m, f=1000Hz, no barrierInfo',
       equation: 'A_combined = max(A_bar, A_gr) when barrierInfo not provided',
@@ -1147,7 +1147,7 @@ describe('Barrier + Ground Interaction - Issue #3', () => {
     const different = Math.abs(withInfo.totalAttenuation - withoutInfo.totalAttenuation) > 0.01;
 
     recordResult({
-      category: 'Barrier+Ground',
+      category: '[Grid] Barrier+Ground',
       name: '#3 Additive vs Max comparison',
       inputs: 'd=100m, barrierInfo vs no barrierInfo',
       equation: 'A_bar + A_gr differs from max(A_bar, A_gr)',
@@ -1191,7 +1191,7 @@ describe('Barrier + Ground Interaction - Issue #3', () => {
     const different = Math.abs(lowResult.groundEffect - highResult.groundEffect) > 0.01;
 
     recordResult({
-      category: 'Barrier+Ground',
+      category: '[Grid] Barrier+Ground',
       name: '#3 Height affects partitioning',
       inputs: 'h1=1.6m (low), h2=5m (high), same d_s, d_r',
       equation: 'A_gr varies with barrier height (geometry-dependent)',
@@ -1236,7 +1236,7 @@ describe('Barrier + Ground Interaction - Issue #3', () => {
     const different = Math.abs(nearSourceResult.groundEffect - nearReceiverResult.groundEffect) > 0.01;
 
     recordResult({
-      category: 'Barrier+Ground',
+      category: '[Grid] Barrier+Ground',
       name: '#3 Asymmetric positioning',
       inputs: 'near-src: d_s=20m/d_r=80m, near-rcv: d_s=80m/d_r=20m',
       equation: 'A_gr = f(d_s, d_r, h_s, h_r) - asymmetric inputs yield different A_gr',
@@ -1255,7 +1255,7 @@ describe('Barrier + Ground Interaction - Issue #3', () => {
 // 5. SPEED OF SOUND
 // ============================================================================
 
-describe('Speed of Sound', () => {
+describe('[Shared] Speed of Sound', () => {
   const speedFormula = (T: number) => 331.3 + 0.606 * T;
 
   it('c at 0°C = 331.3 m/s', () => {
@@ -1264,7 +1264,7 @@ describe('Speed of Sound', () => {
     const passed = Math.abs(actual - expected) < 0.1;
 
     recordResult({
-      category: 'Speed of Sound',
+      category: '[Shared] Speed of Sound',
       name: 'At 0°C',
       inputs: 'T=0°C',
       equation: 'c = 331.3 + 0.606·T = 331.3 + 0 = 331.3',
@@ -1284,7 +1284,7 @@ describe('Speed of Sound', () => {
     const passed = Math.abs(actual - expected) < 0.1;
 
     recordResult({
-      category: 'Speed of Sound',
+      category: '[Shared] Speed of Sound',
       name: 'At 20°C',
       inputs: 'T=20°C',
       equation: 'c = 331.3 + 0.606·20 = 331.3 + 12.12 = 343.42',
@@ -1306,7 +1306,7 @@ describe('Speed of Sound', () => {
     const passed = Math.abs(actual - expected) < 0.001;
 
     recordResult({
-      category: 'Speed of Sound',
+      category: '[Shared] Speed of Sound',
       name: 'Temperature coefficient',
       inputs: 'T1=15°C, T2=25°C',
       equation: 'Δc/ΔT = (c(25) - c(15)) / 10 = 0.606 m/s/°C',
@@ -1326,7 +1326,7 @@ describe('Speed of Sound', () => {
     const passed = Math.abs(actual - expected) < 0.1;
 
     recordResult({
-      category: 'Speed of Sound',
+      category: '[Shared] Speed of Sound',
       name: 'At 15°C',
       inputs: 'T=15°C',
       equation: 'c = 331.3 + 0.606·15 = 331.3 + 9.09 = 340.39',
@@ -1346,7 +1346,7 @@ describe('Speed of Sound', () => {
     const passed = Math.abs(actual - expected) < 0.1;
 
     recordResult({
-      category: 'Speed of Sound',
+      category: '[Shared] Speed of Sound',
       name: 'At 25°C',
       inputs: 'T=25°C',
       equation: 'c = 331.3 + 0.606·25 = 331.3 + 15.15 = 346.45',
@@ -1367,7 +1367,7 @@ describe('Speed of Sound', () => {
     const passed = diff < 1;
 
     recordResult({
-      category: 'Speed of Sound',
+      category: '[Shared] Speed of Sound',
       name: 'Constant vs formula',
       inputs: 'SPEED_OF_SOUND_20C=343, formula(20)=343.42',
       equation: 'Δ = |formula - constant| = |343.42 - 343| = 0.42',
@@ -1386,7 +1386,7 @@ describe('Speed of Sound', () => {
 // 6. GROUND REFLECTION - Two-Ray Model
 // ============================================================================
 
-describe('Ground Reflection - Two-Ray', () => {
+describe('[Grid] Ground Reflection - Two-Ray', () => {
   it('complex arithmetic: addition', () => {
     const a = complex(1, 2);
     const b = complex(3, -4);
@@ -1394,7 +1394,7 @@ describe('Ground Reflection - Two-Ray', () => {
     const passed = sum.re === 4 && sum.im === -2;
 
     recordResult({
-      category: 'Ground',
+      category: '[Grid] Ground',
       name: 'Complex addition',
       inputs: 'a=(1,2), b=(3,-4)',
       equation: '(a+b) = (1+3, 2-4) = (4, -2)',
@@ -1416,7 +1416,7 @@ describe('Ground Reflection - Two-Ray', () => {
     const passed = prod.re === 11 && prod.im === 2;
 
     recordResult({
-      category: 'Ground',
+      category: '[Grid] Ground',
       name: 'Complex multiplication',
       inputs: 'a=(1,2), b=(3,-4)',
       equation: 'a·b = (1·3-2·(-4), 1·(-4)+2·3) = (11, 2)',
@@ -1437,7 +1437,7 @@ describe('Ground Reflection - Two-Ray', () => {
                    Math.abs(sqrtI.im - Math.SQRT1_2) < 0.001;
 
     recordResult({
-      category: 'Ground',
+      category: '[Grid] Ground',
       name: 'Complex sqrt(i)',
       inputs: 'z = (0,1) = i',
       equation: '√i = e^(iπ/4) = (cos45°, sin45°) = (0.707, 0.707)',
@@ -1457,7 +1457,7 @@ describe('Ground Reflection - Two-Ray', () => {
     const passed = Number.isFinite(zeta.re) && Number.isFinite(zeta.im) && zeta.re > 0;
 
     recordResult({
-      category: 'Ground',
+      category: '[Grid] Ground',
       name: 'Delany-Bazley finite',
       inputs: 'f=1000Hz, σ=20000 Pa·s/m²',
       equation: 'ζ = 1 + 9.08(f/σ)^-0.75 - j11.9(f/σ)^-0.73',
@@ -1477,7 +1477,7 @@ describe('Ground Reflection - Two-Ray', () => {
     const passed = gamma.re > 0.9 && Math.abs(gamma.im) < 0.1;
 
     recordResult({
-      category: 'Ground',
+      category: '[Grid] Ground',
       name: 'Hard ground R ≈ 1',
       inputs: 'f=1000Hz, ground=hard, σ=20000, θ=0.5rad',
       equation: 'Γ = (ζcosθ-1)/(ζcosθ+1), hard→ζ→∞→Γ≈1',
@@ -1497,7 +1497,7 @@ describe('Ground Reflection - Two-Ray', () => {
     const passed = Number.isFinite(low) && Number.isFinite(high) && Math.abs(low - high) > 0.001;
 
     recordResult({
-      category: 'Ground',
+      category: '[Grid] Ground',
       name: 'Two-ray frequency variation',
       inputs: 'd=10m, hs=hr=1.5m, ground=hard',
       equation: 'φ = 2πfΔr/c varies with f → interference varies',
@@ -1517,7 +1517,7 @@ describe('Ground Reflection - Two-Ray', () => {
     const passed = actual === 0;
 
     recordResult({
-      category: 'Ground',
+      category: '[Grid] Ground',
       name: 'Zero distance → 0',
       inputs: 'd=0m',
       equation: 'd=0 → no path difference → A_gr=0',
@@ -1541,7 +1541,7 @@ describe('Ground Reflection - Two-Ray', () => {
     const passed = actual === -3;
 
     recordResult({
-      category: 'Ground',
+      category: '[Grid] Ground',
       name: 'Hard ground (ISO per-band)',
       inputs: 'd=20m, hs=hr=1.5m, ground=hard',
       equation: 'ISO 9613-2: A_gr for hard ground (G=0), clamped to min -3 dB',
@@ -1560,7 +1560,7 @@ describe('Ground Reflection - Two-Ray', () => {
     const passed = actual === 0;
 
     recordResult({
-      category: 'Ground',
+      category: '[Grid] Ground',
       name: 'ISO Eq.10 near field',
       inputs: 'd=0.5m, hs=hr=1.5m',
       equation: 'd < 30(hs+hr) → A_gr=0 (near field)',
@@ -1579,7 +1579,7 @@ describe('Ground Reflection - Two-Ray', () => {
     const passed = actual > 4.4 && actual < 4.8;
 
     recordResult({
-      category: 'Ground',
+      category: '[Grid] Ground',
       name: 'ISO Eq.10 far field',
       inputs: 'd=200m, hs=hr=1.5m, G=1',
       equation: 'A_gr = 4.77 - 2.77·G·[1-e^(-d/50)] ≈ 4.77 for soft ground',
@@ -1599,7 +1599,7 @@ describe('Ground Reflection - Two-Ray', () => {
 // 6b. ISO 9613-2 PER-BAND GROUND EFFECT - Issue #20
 // ============================================================================
 
-describe('ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
+describe('[Grid] ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
   /**
    * Issue #20: ISO 9613-2 Tables 3-4 Per-Band Ground Effect
    *
@@ -1623,7 +1623,7 @@ describe('ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
     const passed = Math.abs(agr) < 5 || agr > -5;
 
     recordResult({
-      category: 'Ground (ISO)',
+      category: '[Grid] Ground (ISO)',
       name: '#20 Hard ground (G=0)',
       inputs: 'd=100m, hs=hr=1.5m, G=0, f=1000Hz',
       equation: 'Agr = As + Ar + Am, G=0 → G-terms vanish',
@@ -1648,7 +1648,7 @@ describe('ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
     const passed = difference > 0.5;
 
     recordResult({
-      category: 'Ground (ISO)',
+      category: '[Grid] Ground (ISO)',
       name: '#20 Soft ground (G=1)',
       inputs: 'd=100m, hs=hr=1.5m, G=1, f=1000Hz',
       equation: 'Agr = As + Ar + Am, G=1 → full G-terms',
@@ -1674,7 +1674,7 @@ describe('ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
     const passed = agrMixed >= min - 0.1 && agrMixed <= max + 0.1;
 
     recordResult({
-      category: 'Ground (ISO)',
+      category: '[Grid] Ground (ISO)',
       name: '#20 Mixed ground (G=0.5)',
       inputs: 'd=100m, hs=hr=1.5m, G=0.5, f=1000Hz',
       equation: 'Agr(0.5) between Agr(0) and Agr(1)',
@@ -1706,7 +1706,7 @@ describe('ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
     const passed = Number.isFinite(min) && Number.isFinite(max);
 
     recordResult({
-      category: 'Ground (ISO)',
+      category: '[Grid] Ground (ISO)',
       name: '#20 Frequency dependency',
       inputs: 'd=100m, hs=hr=1.5m, G=1, f=[63-8000]Hz',
       equation: 'Agr varies with frequency per Tables 3-4',
@@ -1729,7 +1729,7 @@ describe('ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
     const different = Math.abs(agrLow - agrHigh) > 0.01;
 
     recordResult({
-      category: 'Ground (ISO)',
+      category: '[Grid] Ground (ISO)',
       name: '#20 Source height affects As',
       inputs: 'd=100m, hs=[1.5, 10]m, hr=1.5m, G=1, f=1000Hz',
       equation: 'As = a + b·G·log(hs) + c·G·log(dp) + d·G',
@@ -1751,7 +1751,7 @@ describe('ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
     const different = Math.abs(agrLow - agrHigh) > 0.01;
 
     recordResult({
-      category: 'Ground (ISO)',
+      category: '[Grid] Ground (ISO)',
       name: '#20 Receiver height affects Ar',
       inputs: 'd=100m, hs=1.5m, hr=[1.5, 10]m, G=1, f=1000Hz',
       equation: 'Ar = a + b·G·log(hr) + c·G·log(dp) + d·G',
@@ -1773,7 +1773,7 @@ describe('ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
     const different = Math.abs(agrNear - agrFar) > 0.01;
 
     recordResult({
-      category: 'Ground (ISO)',
+      category: '[Grid] Ground (ISO)',
       name: '#20 Distance affects Am',
       inputs: 'd=[50, 500]m, hs=hr=1.5m, G=1, f=1000Hz',
       equation: 'Am = a·q + b·(1-G)·q, where q = max(0, 1-30(hs+hr)/d)',
@@ -1797,7 +1797,7 @@ describe('ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
     const isFinite = Number.isFinite(agrNearField);
 
     recordResult({
-      category: 'Ground (ISO)',
+      category: '[Grid] Ground (ISO)',
       name: '#20 Near field (q≈0)',
       inputs: 'd=10m, hs=hr=1.5m, G=1, f=1000Hz',
       equation: 'q = max(0, 1-30×3/10) = max(0, -8) = 0 → Am=0',
@@ -1819,7 +1819,7 @@ describe('ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
     const passed = agr >= -3;
 
     recordResult({
-      category: 'Ground (ISO)',
+      category: '[Grid] Ground (ISO)',
       name: '#20 Minimum clamp (-3 dB)',
       inputs: 'd=100m, hs=hr=0.5m, G=1, f=1000Hz',
       equation: 'Agr = max(-3, As + Ar + Am)',
@@ -1842,7 +1842,7 @@ describe('ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
     const equal = Math.abs(agrDirect - agrWrapped) < 0.001;
 
     recordResult({
-      category: 'Ground (ISO)',
+      category: '[Grid] Ground (ISO)',
       name: '#20 groundEffect() integration',
       inputs: 'd=100m, hs=hr=1.5m, GroundType.Soft, f=1000Hz',
       equation: 'groundEffect() calls agrISO9613PerBand() with G=1 for soft',
@@ -1873,7 +1873,7 @@ describe('ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
     const passed = hardMatch && mixedMatch && softMatch;
 
     recordResult({
-      category: 'Ground (ISO)',
+      category: '[Grid] Ground (ISO)',
       name: '#20 GroundType → G mapping',
       inputs: 'd=100m, all ground types, f=1000Hz',
       equation: 'Hard→G=0, Mixed→G=0.5, Soft→G=1',
@@ -1900,7 +1900,7 @@ describe('ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
     }
 
     recordResult({
-      category: 'Ground (ISO)',
+      category: '[Grid] Ground (ISO)',
       name: '#20 Finite across octave bands',
       inputs: 'd=100m, hs=hr=1.5m, G=1, f=[63-8000]Hz',
       equation: 'All bands use Tables 3-4 coefficients',
@@ -1923,7 +1923,7 @@ describe('ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
     const longFinite = Number.isFinite(agrLong);
 
     recordResult({
-      category: 'Ground (ISO)',
+      category: '[Grid] Ground (ISO)',
       name: '#20 Edge case distances',
       inputs: 'd=[0.5, 5000]m, hs=hr=1.5m, G=1, f=1000Hz',
       equation: 'Handle extreme near and far field',
@@ -1947,7 +1947,7 @@ describe('ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
     const highFinite = Number.isFinite(agrHigh);
 
     recordResult({
-      category: 'Ground (ISO)',
+      category: '[Grid] Ground (ISO)',
       name: '#20 Edge case heights',
       inputs: 'd=100m, hs=hr=[0.1, 50]m, G=1, f=1000Hz',
       equation: 'Handle very low and high geometries',
@@ -1967,7 +1967,7 @@ describe('ISO 9613-2 Per-Band Ground Effect - Issue #20', () => {
 // 7. PHASOR ARITHMETIC - Coherent Summation
 // ============================================================================
 
-describe('Phasor Arithmetic', () => {
+describe('[Probe] Phasor Arithmetic', () => {
   const c = 343;
   const P_REF = 2e-5;
 
@@ -1977,7 +1977,7 @@ describe('Phasor Arithmetic', () => {
     const passed = Math.abs(actual - expected) < 0.01;
 
     recordResult({
-      category: 'Phasor',
+      category: '[Probe] Phasor',
       name: 'dB to pressure (94 dB)',
       inputs: 'L=94 dB, P_ref=20µPa',
       equation: 'p = P_ref · 10^(L/20) = 2e-5 · 10^4.7 = 1.0 Pa',
@@ -1997,7 +1997,7 @@ describe('Phasor Arithmetic', () => {
     const passed = Math.abs(actual - expected) < 0.1;
 
     recordResult({
-      category: 'Phasor',
+      category: '[Probe] Phasor',
       name: 'Pressure to dB (1 Pa)',
       inputs: 'p=1.0 Pa, P_ref=20µPa',
       equation: 'L = 20·log₁₀(p/P_ref) = 20·log₁₀(50000) = 93.98 dB',
@@ -2019,7 +2019,7 @@ describe('Phasor Arithmetic', () => {
     const passed = Math.abs(actual - expected) < 0.1;
 
     recordResult({
-      category: 'Phasor',
+      category: '[Probe] Phasor',
       name: 'Constructive (in-phase)',
       inputs: 'p1=p2=P_ref×10, φ1=φ2=0',
       equation: '|p1+p2| = 2p, L = 20·log₁₀(2) + 20 = 6 + 20 = 26 dB',
@@ -2040,7 +2040,7 @@ describe('Phasor Arithmetic', () => {
     const passed = actual < -100;
 
     recordResult({
-      category: 'Phasor',
+      category: '[Probe] Phasor',
       name: 'Destructive (anti-phase)',
       inputs: 'p1=p2=P_ref×10, φ1=0, φ2=π',
       equation: '|p·e^0 + p·e^(jπ)| = |p - p| = 0 → -∞ dB',
@@ -2062,7 +2062,7 @@ describe('Phasor Arithmetic', () => {
     const passed = Math.abs(actual - expected) < 0.2;
 
     recordResult({
-      category: 'Phasor',
+      category: '[Probe] Phasor',
       name: 'Quadrature (90°)',
       inputs: 'p1=p2=P_ref×10, φ1=0, φ2=π/2',
       equation: '|p + jp| = p√2, L = 20 + 10·log₁₀(2) = 23 dB',
@@ -2085,7 +2085,7 @@ describe('Phasor Arithmetic', () => {
     const passed = Math.abs(actual - expected) < 0.01;
 
     recordResult({
-      category: 'Phasor',
+      category: '[Probe] Phasor',
       name: 'Phase from λ/2 path diff',
       inputs: 'f=1000Hz, c=343m/s, Δd=λ/2=0.1715m',
       equation: 'φ = -2πΔd/λ = -2π·0.5 = -π rad',
@@ -2105,7 +2105,7 @@ describe('Phasor Arithmetic', () => {
     const passed = Math.abs(actual - expected) < 0.01;
 
     recordResult({
-      category: 'Phasor',
+      category: '[Probe] Phasor',
       name: 'Wavelength @ 343 Hz',
       inputs: 'f=343Hz, c=343m/s',
       equation: 'λ = c/f = 343/343 = 1.0 m',
@@ -2129,7 +2129,7 @@ describe('Phasor Arithmetic', () => {
     const passed = Math.abs(actual - expected) < 0.01;
 
     recordResult({
-      category: 'Phasor',
+      category: '[Probe] Phasor',
       name: 'Fresnel radius @ midpoint',
       inputs: 'd1=d2=50m, f=1000Hz, c=343m/s',
       equation: 'r_F = √(λ·d1·d2/(d1+d2)) = √(0.343·50·50/100) = 2.93m',
@@ -2148,7 +2148,7 @@ describe('Phasor Arithmetic', () => {
 // 8. FREQUENCY WEIGHTING (A/C/Z) - IEC 61672-1
 // ============================================================================
 
-describe('Frequency Weighting - IEC 61672-1', () => {
+describe('[Shared] Frequency Weighting - IEC 61672-1', () => {
   const A_WEIGHTS = [-26.2, -16.1, -8.6, -3.2, 0, 1.2, 1.0, -1.1, -6.6];
   const C_WEIGHTS = [-0.8, -0.2, 0, 0, 0, -0.2, -0.8, -3.0, -8.5];
   const Z_WEIGHTS = [0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -2161,7 +2161,7 @@ describe('Frequency Weighting - IEC 61672-1', () => {
     const passed = actual === expected;
 
     recordResult({
-      category: 'Weighting',
+      category: '[Shared] Weighting',
       name: 'A @ 1kHz = 0',
       inputs: 'f=1000Hz',
       equation: 'IEC 61672-1 A-weight reference: A(1000Hz) = 0 dB',
@@ -2181,7 +2181,7 @@ describe('Frequency Weighting - IEC 61672-1', () => {
     const passed = actual === expected;
 
     recordResult({
-      category: 'Weighting',
+      category: '[Shared] Weighting',
       name: 'A @ 63Hz',
       inputs: 'f=63Hz',
       equation: 'IEC 61672-1 Table 1: A(63Hz) = -26.2 dB',
@@ -2201,7 +2201,7 @@ describe('Frequency Weighting - IEC 61672-1', () => {
     const passed = at2k > 0 && at4k > 0;
 
     recordResult({
-      category: 'Weighting',
+      category: '[Shared] Weighting',
       name: 'A boost 2-4kHz',
       inputs: 'f=2000Hz, 4000Hz',
       equation: 'IEC 61672-1: slight boost at 2-4kHz (ear sensitivity peak)',
@@ -2223,7 +2223,7 @@ describe('Frequency Weighting - IEC 61672-1', () => {
     const passed = at250 === 0 && at500 === 0 && at1k === 0;
 
     recordResult({
-      category: 'Weighting',
+      category: '[Shared] Weighting',
       name: 'C flat 250-1kHz',
       inputs: 'f=250, 500, 1000Hz',
       equation: 'IEC 61672-1: C-weight is flat (0 dB) in mid-band',
@@ -2243,7 +2243,7 @@ describe('Frequency Weighting - IEC 61672-1', () => {
     const allZero = Z_WEIGHTS.every(w => w === 0);
 
     recordResult({
-      category: 'Weighting',
+      category: '[Shared] Weighting',
       name: 'Z = 0 all bands',
       inputs: 'f=all bands',
       equation: 'Z-weighting = 0 dB (unweighted, flat response)',
@@ -2262,7 +2262,7 @@ describe('Frequency Weighting - IEC 61672-1', () => {
 // 9. COMBINED PROPAGATION
 // ============================================================================
 
-describe('Combined Propagation', () => {
+describe('[Grid] Combined Propagation', () => {
   const config = getDefaultEngineConfig('festival_fast');
   const propConfig = config.propagation!;
   const meteo = config.meteo!;
@@ -2277,7 +2277,7 @@ describe('Combined Propagation', () => {
     const passed = Math.abs(actual - expected) < 1;
 
     recordResult({
-      category: 'Combined',
+      category: '[Grid] Combined',
       name: 'SPL at 10m (spreading)',
       inputs: 'Lw=100dB, d=10m, no atm/ground',
       equation: 'SPL = Lw - A_div = 100 - 30.99 = 69 dB',
@@ -2301,7 +2301,7 @@ describe('Combined Propagation', () => {
     const passed = Math.abs(actual - expected) < 1;
 
     recordResult({
-      category: 'Combined',
+      category: '[Grid] Combined',
       name: 'SPL at 100m (spreading)',
       inputs: 'Lw=100dB, d=100m, no atm/ground',
       equation: 'SPL = Lw - A_div = 100 - 50.99 = 49 dB',
@@ -2328,7 +2328,7 @@ describe('Combined Propagation', () => {
     }
 
     recordResult({
-      category: 'Combined',
+      category: '[Grid] Combined',
       name: 'Monotonic decrease',
       inputs: 'd = [5, 10, 20, 40, 80] m',
       equation: 'SPL(d1) > SPL(d2) when d1 < d2 (always)',
@@ -2357,7 +2357,7 @@ describe('Combined Propagation', () => {
     const passed = actual === expected;
 
     recordResult({
-      category: 'Combined',
+      category: '[Grid] Combined',
       name: 'Blocked → MIN_LEVEL',
       inputs: 'blocked=true',
       equation: 'If blocked, return MIN_LEVEL = -100 dB',
@@ -2376,7 +2376,7 @@ describe('Combined Propagation', () => {
     const passed = result.blocked === true;
 
     recordResult({
-      category: 'Combined',
+      category: '[Grid] Combined',
       name: 'MAX_DISTANCE → blocked',
       inputs: 'd=15000m (> MAX_DISTANCE)',
       equation: 'd > MAX_DISTANCE → blocked=true',
@@ -2401,7 +2401,7 @@ describe('Combined Propagation', () => {
 // They use .skip() to not break CI, but appear in the report as gaps.
 // ============================================================================
 
-describe('KNOWN GAPS - Critical Physics Issues', () => {
+describe('[Grid] KNOWN GAPS - Critical Physics Issues', () => {
   // Issue #5: Side Diffraction Geometry - NOW IMPLEMENTED
   describe('Issue #5: Side Diffraction Geometry (RESOLVED)', () => {
     /**
@@ -2474,7 +2474,7 @@ describe('KNOWN GAPS - Critical Physics Issues', () => {
 
       const passed = aroundLeftDelta > overTopDelta; // Side paths are longer due to going to ground
       recordResult({
-        category: 'Issue #5',
+        category: '[Grid] Issue #5',
         name: '#5 Side diffraction at ground level',
         inputs: 'src=(0,0,1.5), rcv=(0,20,1.5), barrier 10m wide, 4m tall',
         equation: 'δ_side = d(src→edge@z=0) + d(edge→rcv) - d_direct',
@@ -2528,7 +2528,7 @@ describe('KNOWN GAPS - Critical Physics Issues', () => {
 
       const passed = aroundRightDelta < overTopDelta;
       recordResult({
-        category: 'Issue #5',
+        category: '[Grid] Issue #5',
         name: '#5 Around-ends vs over-top comparison',
         inputs: 'src=(-50,0,1.5), rcv=(50,0,1.5), barrier 2m wide, 10m tall',
         equation: 'δ_around = d(src→edge@ground) + d(edge→rcv) - d_direct',
@@ -2583,7 +2583,7 @@ describe('KNOWN GAPS - Critical Physics Issues', () => {
 
       // Record as passing since the implementation now uses ground level
       recordResult({
-        category: 'Issue #5',
+        category: '[Grid] Issue #5',
         name: '#5 Side diffraction at ground level',
         inputs: 'src=(0,0,2), rcv=(10,0,2), edge=(5,5,z)',
         equation: 'δ_side = d(src→edge@z=0) + d(edge@z=0→rcv) - d_direct',
@@ -2607,7 +2607,7 @@ describe('KNOWN GAPS - Critical Physics Issues', () => {
       const useSideForLong = longBarrierLength < 50;
 
       recordResult({
-        category: 'Issue #5',
+        category: '[Grid] Issue #5',
         name: '#5 Auto mode threshold (50m)',
         inputs: 'shortBarrierLength=30m, longBarrierLength=80m, threshold=50m',
         equation: 'useSide = barrierLength < 50m',
@@ -2668,7 +2668,7 @@ describe('KNOWN GAPS - Critical Physics Issues', () => {
 
       const passed = minDelta === topDelta && topDelta > 0;
       recordResult({
-        category: 'Issue #5',
+        category: '[Grid] Issue #5',
         name: '#5 Minimum path selection',
         inputs: 'S=(-4,0,1.5), R=(4,20,1.5), barrier=(-5,10)-(5,10) h=5m',
         equation: 'δ = d_source-edge + d_edge-receiver - d_direct; select min(δ_left, δ_right, δ_top)',
@@ -2684,7 +2684,7 @@ describe('KNOWN GAPS - Critical Physics Issues', () => {
   });
 });
 
-describe('KNOWN GAPS - Moderate Physics Issues', () => {
+describe('[Shared] KNOWN GAPS - Moderate Physics Issues', () => {
   // Issue #6: Delany-Bazley Extrapolation - NOW IMPLEMENTED
   describe('Issue #6: Delany-Bazley Range (RESOLVED)', () => {
     /**
@@ -2713,7 +2713,7 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       const passed = hasHighRealPart && hasLowImagPart && ratio < 0.01;
 
       recordResult({
-        category: 'Issue #6',
+        category: '[Shared] Issue #6',
         name: '#6 Low f/σ ratio (hard surface)',
         inputs: 'f=125Hz, σ=200000 Pa·s/m², f/σ=0.000625',
         equation: 'ζ = 1 + 9.08(f/σ)^-0.75 - j·11.9(f/σ)^-0.73, low f/σ → high Re(ζ)',
@@ -2745,7 +2745,7 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       const passed = Math.abs(impedance.re - expectedRe) < 0.1 && ratio > 1.0;
 
       recordResult({
-        category: 'Issue #6',
+        category: '[Shared] Issue #6',
         name: '#6 High f/σ ratio (Miki extension)',
         inputs: 'f=8000Hz, σ=5000 Pa·s/m², f/σ=1.6',
         equation: 'ζ = 1 + 5.50(f/σ)^-0.632 - j·8.43(f/σ)^-0.632 (Miki 1990)',
@@ -2779,7 +2779,7 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       const passed = withinRange && Math.abs(impedance.re - expectedRe) < 1;
 
       recordResult({
-        category: 'Issue #6',
+        category: '[Shared] Issue #6',
         name: '#6 Valid range (standard D-B)',
         inputs: 'f=1000Hz, σ=20000 Pa·s/m², f/σ=0.05',
         equation: 'ζ = 1 + 9.08(f/σ)^-0.75 - j·11.9(f/σ)^-0.73 (Delany-Bazley 1970)',
@@ -2815,7 +2815,7 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       }
 
       recordResult({
-        category: 'Issue #6',
+        category: '[Shared] Issue #6',
         name: '#6 Finite for all inputs',
         inputs: 'f/σ ∈ {0.000063, 16, 0.05, 0.01}',
         equation: 'All ζ must be finite: Re(ζ)≠±∞, Im(ζ)≠±∞, no NaN',
@@ -2838,7 +2838,7 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       const passed = gammaMag > 0.9;
 
       recordResult({
-        category: 'Issue #6',
+        category: '[Shared] Issue #6',
         name: '#6 Hard surface |Γ| ≈ 1',
         inputs: 'f=1000Hz, σ=500000 (very hard), θ=0.5rad',
         equation: '|Γ| = |(ζcosθ-1)/(ζcosθ+1)|, ζ→∞ → |Γ|→1',
@@ -2859,7 +2859,7 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       // Current: groundZ = 0 (hardcoded)
       // Correct: groundZ = getTerrainHeight(x, y)
       recordResult({
-        category: 'GAP-Moderate',
+        category: '[Shared] GAP-Moderate',
         name: '#7 Terrain elevation',
         inputs: 'Ground reflection point (x,y)',
         equation: 'z_ground = terrainHeight(x,y) instead of z_ground = 0',
@@ -2879,7 +2879,7 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       // Current: z = min(wallHeight, max(sourceZ, receiverZ))  ← WRONG
       // Correct: z = interpolate along R→S' line
       recordResult({
-        category: 'GAP-Moderate',
+        category: '[Shared] GAP-Moderate',
         name: '#9 Wall reflection Z',
         inputs: 'Wall reflection geometry',
         equation: 'Z should interpolate along R→S\' image line',
@@ -2913,7 +2913,7 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       const passed = sigmaISO === sigmaSoft && sigmaLog === sigmaSoft;
 
       recordResult({
-        category: 'Issue #12',
+        category: '[Shared] Issue #12',
         name: '#12 Soft ground = σ_soft',
         inputs: 'groundType=soft, σ_soft=20000',
         equation: 'σ_eff = σ_soft (no interpolation needed)',
@@ -2937,7 +2937,7 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       const passed = sigmaISO >= 1e8 && sigmaLog >= 1e8;
 
       recordResult({
-        category: 'Issue #12',
+        category: '[Shared] Issue #12',
         name: '#12 Hard ground = σ → ∞',
         inputs: 'groundType=hard, σ_hard=1e9',
         equation: 'σ_eff = σ_hard ≈ ∞ (rigid surface approximation)',
@@ -2962,7 +2962,7 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       const passed = Math.abs(sigma - expected) < 1;
 
       recordResult({
-        category: 'Issue #12',
+        category: '[Shared] Issue #12',
         name: '#12 ISO model (σ/G)',
         inputs: 'σ_soft=20000, G=0.5',
         equation: 'ISO 9613-2: σ_eff = σ_soft / G = 20000 / 0.5 = 40000',
@@ -2987,7 +2987,7 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       const passed = Math.abs(sigma - expected) / expected < 0.01;
 
       recordResult({
-        category: 'Issue #12',
+        category: '[Shared] Issue #12',
         name: '#12 Log model (geometric mean)',
         inputs: 'σ_soft=20000, σ_hard=1e9, G=0.5',
         equation: 'σ = σ_soft^G · σ_hard^(1-G) = √(σ_soft·σ_hard)',
@@ -3012,7 +3012,7 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       const different = Math.abs(sigmaISO - sigmaLog) > 1000;
 
       recordResult({
-        category: 'Issue #12',
+        category: '[Shared] Issue #12',
         name: '#12 Models produce different σ',
         inputs: 'G=0.5, σ_soft=20000, σ_hard=1e9',
         equation: 'ISO: σ/G=40k vs Log: √(σ_soft·σ_hard)=4.47e6',
@@ -3037,7 +3037,7 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       const passed = Math.abs(sigmaISO - sigmaSoft) < 1 && Math.abs(sigmaLog - sigmaSoft) < 1;
 
       recordResult({
-        category: 'Issue #12',
+        category: '[Shared] Issue #12',
         name: '#12 G=1 gives σ_soft',
         inputs: 'G=1.0 (100% soft), σ_soft=20000',
         equation: 'ISO: σ_soft/1=σ_soft, Log: σ_soft^1·σ_hard^0=σ_soft',
@@ -3063,7 +3063,7 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
       const passed = sigmaISO >= 1e6 && sigmaLog >= 1e8;
 
       recordResult({
-        category: 'Issue #12',
+        category: '[Shared] Issue #12',
         name: '#12 G≈0 gives high σ',
         inputs: 'G=0.01 (99% hard), σ_soft=20000',
         equation: 'ISO: σ_soft/0.01=2e6, Log: σ_soft^0.01·σ_hard^0.99≈σ_hard',
@@ -3084,7 +3084,7 @@ describe('KNOWN GAPS - Moderate Physics Issues', () => {
 // Issue #2: Two-Ray Ground Model Sign Consistency (VERIFIED)
 // ============================================================================
 
-describe('Issue #2: Two-Ray Ground Model Sign Consistency', () => {
+describe('[Grid] Issue #2: Two-Ray Ground Model Sign Consistency', () => {
   /**
    * Issue #2: Two-Ray Ground Model Sign Inconsistency
    *
@@ -3120,7 +3120,7 @@ describe('Issue #2: Two-Ray Ground Model Sign Consistency', () => {
     }
 
     recordResult({
-      category: 'Issue #2',
+      category: '[Grid] Issue #2',
       name: '#2 Negative A_gr possible',
       inputs: `d=50m, hs=1.5m, hr=1.5m, ground=hard, σ=20000`,
       equation: 'A_gr = -20·log₁₀|1 + Γ·(r₁/r₂)·e^(jφ)|, when |...| > 1 → A_gr < 0',
@@ -3153,7 +3153,7 @@ describe('Issue #2: Two-Ray Ground Model Sign Consistency', () => {
     }
 
     recordResult({
-      category: 'Issue #2',
+      category: '[Grid] Issue #2',
       name: '#2 Positive A_gr possible',
       inputs: `d=50m, hs=1.5m, hr=1.5m, ground=soft, σ=20000`,
       equation: 'A_gr = -20·log₁₀|1 + Γ·(r₁/r₂)·e^(jφ)|, when |...| < 1 → A_gr > 0',
@@ -3199,7 +3199,7 @@ describe('Issue #2: Two-Ray Ground Model Sign Consistency', () => {
     const passed = range > 3; // Expect at least 3 dB variation across frequencies
 
     recordResult({
-      category: 'Issue #2',
+      category: '[Grid] Issue #2',
       name: '#2 Comb filtering pattern',
       inputs: `d=${d}m, hs=${hs}m, hr=${hr}m, Δr=${pathDiff.toFixed(3)}m`,
       equation: 'φ = 2πfΔr/c, constructive when φ≈2πn, destructive when φ≈(2n+1)π',
@@ -3236,7 +3236,7 @@ describe('Issue #2: Two-Ray Ground Model Sign Consistency', () => {
     const passed = hardRange > softRange || (hardRange > 0 && softRange > 0);
 
     recordResult({
-      category: 'Issue #2',
+      category: '[Grid] Issue #2',
       name: '#2 Hard vs Soft interference',
       inputs: 'd=50m, hs=2m, hr=1.5m, f=[125..2000]Hz',
       equation: 'Hard: |Γ|≈1 → stronger interference, Soft: |Γ|<1 → weaker',
@@ -3259,7 +3259,7 @@ describe('Issue #2: Two-Ray Ground Model Sign Consistency', () => {
     const passed = Math.abs(agr) < 5;
 
     recordResult({
-      category: 'Issue #2',
+      category: '[Grid] Issue #2',
       name: '#2 Near-field minimal effect',
       inputs: 'd=1m, hs=hr=1.5m, f=1000Hz',
       equation: 'Near field: Δr ≈ 0, phase diff ≈ 0 → minimal interference',
@@ -3277,7 +3277,7 @@ describe('Issue #2: Two-Ray Ground Model Sign Consistency', () => {
     const agr = agrTwoRayDb(1000, 0, 1.5, 1.5, 'hard', 20000, 0.5, 343);
 
     recordResult({
-      category: 'Issue #2',
+      category: '[Grid] Issue #2',
       name: '#2 Zero distance guard',
       inputs: 'd=0m',
       equation: 'd=0 → degenerate geometry → return 0',
@@ -3323,7 +3323,7 @@ describe('Issue #2: Two-Ray Ground Model Sign Consistency', () => {
     }
 
     recordResult({
-      category: 'Issue #2',
+      category: '[Grid] Issue #2',
       name: '#2 Finite across parameter sweep',
       inputs: 'd=[1..500]m, hs=[0.1..10]m, f=[63..4000]Hz, ground=[hard,mixed,soft]',
       equation: 'All combinations must return finite A_gr (no NaN/Infinity)',
@@ -3342,7 +3342,7 @@ describe('Issue #2: Two-Ray Ground Model Sign Consistency', () => {
 // Issue #14: Diffraction Phase Shift (VERIFIED)
 // ============================================================================
 
-describe('Issue #14: Diffraction Phase Shift', () => {
+describe('[Probe] Issue #14: Diffraction Phase Shift', () => {
   /**
    * Issue #14: Hardcoded Diffraction Phase Shift
    *
@@ -3368,7 +3368,7 @@ describe('Issue #14: Diffraction Phase Shift', () => {
     const passed = Math.abs(actualPhase - expectedPhase) < 0.001;
 
     recordResult({
-      category: 'Issue #14',
+      category: '[Probe] Issue #14',
       name: '#14 Diffraction phase = -π/4',
       inputs: 'Barrier blocks direct path, any geometry',
       equation: 'GTD/UTD knife-edge: Ψ_diff = -π/4 rad = -45°',
@@ -3399,7 +3399,7 @@ describe('Issue #14: Diffraction Phase Shift', () => {
     const passed = lowPhase === highPhase;
 
     recordResult({
-      category: 'Issue #14',
+      category: '[Probe] Issue #14',
       name: '#14 Phase independent of barrier height',
       inputs: 'h_low=3m, h_high=10m, same src/rcv geometry',
       equation: 'ψ = -π/4 (constant, does not vary with barrier height)',
@@ -3430,7 +3430,7 @@ describe('Issue #14: Diffraction Phase Shift', () => {
     const passed = nearPhase === farPhase;
 
     recordResult({
-      category: 'Issue #14',
+      category: '[Probe] Issue #14',
       name: '#14 Phase independent of path diff',
       inputs: 'rcv_near=12m, rcv_far=50m from source',
       equation: 'ψ = -π/4 (constant, does not vary with path difference)',
@@ -3450,7 +3450,7 @@ describe('Issue #14: Diffraction Phase Shift', () => {
     const passed = Math.abs(phaseDeg + 45) < 0.1;
 
     recordResult({
-      category: 'Issue #14',
+      category: '[Probe] Issue #14',
       name: '#14 Phase is -45°',
       inputs: 'ψ = -π/4 rad',
       equation: 'ψ_deg = ψ_rad × 180/π = -π/4 × 180/π = -45°',
@@ -3492,7 +3492,7 @@ describe('Issue #14: Diffraction Phase Shift', () => {
     const passed = Math.abs(sumLevel - expectedLevel) < 1;
 
     recordResult({
-      category: 'Issue #14',
+      category: '[Probe] Issue #14',
       name: '#14 Phase in coherent sum',
       inputs: 'p1=P_REF×10 @ φ=0, p2=P_REF×10 @ φ=-π/4',
       equation: 'p_sum = |p·e^0 + p·e^(-jπ/4)| = p·|1 + 0.707 - j0.707| = 1.85p → +5.3dB',
@@ -3534,7 +3534,7 @@ describe('Issue #14: Diffraction Phase Shift', () => {
     const samePhase = shallowPhase === deepPhase;
 
     recordResult({
-      category: 'Issue #14',
+      category: '[Probe] Issue #14',
       name: '#14 Limitation: constant phase',
       inputs: 'shallow shadow vs deep shadow geometry',
       equation: 'ψ = -π/4 always (UTD would use ψ = f(shadow_angle))',
@@ -3551,14 +3551,14 @@ describe('Issue #14: Diffraction Phase Shift', () => {
   });
 });
 
-describe('KNOWN GAPS - Minor Physics Issues', () => {
+describe('[Shared] KNOWN GAPS - Minor Physics Issues', () => {
   // Issue #13: Sommerfeld Discontinuity
   describe('Issue #13: Sommerfeld Correction (NOT IMPLEMENTED)', () => {
     it('should have smooth transition at |w|=4 threshold', () => {
       // Current: Abrupt switch between plane-wave and asymptotic at |w|=4
       // Correct: Smooth Hermite blend across transition region
       recordResult({
-        category: 'GAP-Minor',
+        category: '[Shared] GAP-Minor',
         name: '#13 Sommerfeld continuity',
         inputs: 'Numerical distance w, transition region 0.5≤|w|≤6',
         equation: 'F(w) should blend smoothly between plane-wave and asymptotic forms',
@@ -3578,7 +3578,7 @@ describe('KNOWN GAPS - Minor Physics Issues', () => {
       // Current: absorption = 0.2 (single value for soft ground)
       // Correct: absorption varies from 0.10 (63 Hz) to 0.60 (8 kHz)
       recordResult({
-        category: 'GAP-Minor',
+        category: '[Shared] GAP-Minor',
         name: '#17 Spectral ground absorption',
         inputs: 'f=[63..8000]Hz, ISO 9613-2 Table 2',
         equation: 'a_gr(f) varies: 0.10@63Hz to 0.60@8kHz',
@@ -3598,7 +3598,7 @@ describe('KNOWN GAPS - Minor Physics Issues', () => {
       // Current: diffractionLoss = 0 (placeholder, computed downstream)
       // Correct: Pre-compute spectralDiffractionLoss[] in traceDiffractionPath
       recordResult({
-        category: 'GAP-Minor',
+        category: '[Shared] GAP-Minor',
         name: '#19 Pre-computed diffraction',
         inputs: 'RayPath.diffractionLoss field',
         equation: 'A_bar[f] = 10·log₁₀(3 + C·N), pre-computed per band',
@@ -3617,7 +3617,7 @@ describe('KNOWN GAPS - Minor Physics Issues', () => {
 // 10. PROBE COMPUTATION
 // ============================================================================
 
-describe('Probe Computation', () => {
+describe('[Probe] Probe Computation', () => {
   it('simple probe at 10m reasonable level', () => {
     const source = createSource('s1', 0, 0, 2);
     const probePos: Point3D = { x: 10, y: 0, z: 1.5 };
@@ -3626,7 +3626,7 @@ describe('Probe Computation', () => {
     const passed = aWeighted > 60 && aWeighted < 90;
 
     recordResult({
-      category: 'Probe',
+      category: '[Probe] Probe',
       name: 'Simple @ 10m',
       inputs: 'Lw=100dB flat, d=10m',
       equation: 'SPL ≈ Lw - 20·log₁₀(d) - 11 = 100 - 20 - 11 = 69 dB + weighting',
@@ -3649,7 +3649,7 @@ describe('Probe Computation', () => {
     const passed = aWeighted > 40 && aWeighted < 70;
 
     recordResult({
-      category: 'Probe',
+      category: '[Probe] Probe',
       name: 'Simple @ 100m',
       inputs: 'Lw=100dB flat, d=100m',
       equation: 'SPL ≈ Lw - 20·log₁₀(d) - 11 = 100 - 40 - 11 = 49 dB + weighting',
@@ -3674,7 +3674,7 @@ describe('Probe Computation', () => {
     const passed = diff > 5 && diff < 7;
 
     recordResult({
-      category: 'Probe',
+      category: '[Probe] Probe',
       name: 'Inverse square law',
       inputs: 'd1=10m, d2=20m',
       equation: 'ΔL = 20·log₁₀(d2/d1) = 20·log₁₀(2) = 6.02 dB',
@@ -3695,7 +3695,7 @@ describe('Probe Computation', () => {
     const passed = spectrum[0] === 35;
 
     recordResult({
-      category: 'Probe',
+      category: '[Probe] Probe',
       name: 'Zero sources → floor',
       inputs: 'sources=[]',
       equation: 'No sources → return ambient floor (35 dB)',
@@ -3722,7 +3722,7 @@ describe('Probe Computation', () => {
     const passed = Math.abs(diff - 3) < 1;
 
     recordResult({
-      category: 'Probe',
+      category: '[Probe] Probe',
       name: 'Two sources +3 dB',
       inputs: '2 equal sources equidistant from probe',
       equation: 'L_sum = L_single + 10·log₁₀(2) = L + 3.01 dB',
@@ -3748,7 +3748,7 @@ describe('Probe Computation', () => {
     const passed = result.LAeq > 50 && result.LAeq < 90;
 
     recordResult({
-      category: 'Probe',
+      category: '[Probe] Probe',
       name: 'Coherent @ 10m',
       inputs: 'Lw=100dB, d=10m, coherent mode',
       equation: 'Coherent sum includes phase: p_total = Σ p_i·e^(jφ_i)',
@@ -3782,7 +3782,7 @@ describe('Probe Computation', () => {
     const passed = withGround.pathCount > noGround.pathCount;
 
     recordResult({
-      category: 'Probe',
+      category: '[Probe] Probe',
       name: 'Ground adds paths',
       inputs: 'ground=true vs ground=false',
       equation: 'Ground reflection adds 1 path per source (two-ray model)',
@@ -3804,7 +3804,7 @@ describe('Probe Computation', () => {
                    config.temperature === 20;
 
     recordResult({
-      category: 'Probe',
+      category: '[Probe] Probe',
       name: 'Default config',
       inputs: 'DEFAULT_PROBE_CONFIG',
       equation: 'Factory defaults for probe computation',
