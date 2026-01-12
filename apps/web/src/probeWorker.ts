@@ -1042,13 +1042,6 @@ interface Complex {
   im: number;  // Imaginary part
 }
 
-function complexMultiply(a: Complex, b: Complex): Complex {
-  return {
-    re: a.re * b.re - a.im * b.im,
-    im: a.re * b.im + a.im * b.re,
-  };
-}
-
 function complexDivide(a: Complex, b: Complex): Complex {
   const denom = b.re * b.re + b.im * b.im;
   if (denom < EPSILON) {
