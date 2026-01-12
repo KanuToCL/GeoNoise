@@ -21,6 +21,43 @@ This document contains planned features and enhancements for GeoNoise. For compl
 
 ## Status Summary
 
+### 🚨 Critical Bugs
+
+#### Ray Visualization Only Shows One First-Order Wall Reflection
+
+**Status:** 🔴 Open
+**Discovered:** 2026-01-12
+**File:** `apps/web/src/probeWorker.ts`
+
+**Problem:** The probe ray visualization only displays a single first-order wall reflection when there should be multiple reflections from all nearby building walls. The physics computation appears correct (multiple wall paths ARE being traced), but only one is being passed to the visualization.
+
+**Symptoms:**
+- Toggle "Show Traced Rays" in probe inspector
+- Only ONE "Wall Reflection" path appears in the list and on the map
+- Multiple buildings are in range that should produce valid reflections
+
+**Suspected Cause:**
+- The `collectedPaths` array may not be collecting all valid wall paths
+- Possible filtering or early-exit in the wall path collection loop
+- May be related to the `blockedBySameBuilding` check being too aggressive
+- Most wall reflections may be geometrically invalid (image source method geometry constraints)
+- Many paths may be correctly filtered by blocking checks (paths through buildings)
+
+**Code Verification (2026-01-12):**
+✅ **Coherent summation is CONFIRMED CORRECT** - Code review verified that:
+1. `traceWallReflectionPaths()` iterates ALL building segments (line 1392)
+2. ALL valid paths are pushed to `wallPaths` array (lines 1664-1672)
+3. ALL wall paths are added to phasors for coherent summation (lines 1824-1833)
+4. Phasor summation uses correct complex addition: `Σ p_i * e^(j*φ_i)` (lines 1848-1860)
+
+The physics computation appears correct. The issue is isolated to the visualization/filtering layer, not the acoustic calculation itself.
+
+**Impact:** Visualization doesn't accurately represent all computed paths, making it difficult to debug and understand multi-path propagation. **Physics results are unaffected.**
+
+**Mitigation:** Feature flag `ENABLE_RAY_VISUALIZATION` set to `false` to hide from production until fixed.
+
+---
+
 ### ✅ Recently Completed
 
 - **Settings Panel UI Redesign** (v0.5.0) - Tabbed category selection with animated slide-out panels
@@ -822,26 +859,36 @@ Add a toggle in the probe inspector to visualize all rays traced by the Probe en
 
 ### Inspector Panel: Path Breakdown
 
-Show each traced path with its individual contribution:
+The toggle and path breakdown are contained in a **raised neumorphic element** inside the probe panel. When the toggle is enabled, path data is fetched and displayed:
 
 ```
 ┌─ Probe Inspector ─────────────────────────────────┐
 │  L_eq: 72.3 dB(A)                                 │
 │                                                   │
-│  ☑ Show Traced Rays                               │
-│                                                   │
-│  Path Contributions:                              │
-│  ┌───────────────────────────────────────────┐   │
-│  │ ━━━ Direct              68.2 dB  ████████ │   │
-│  │ ┅┅┅ Ground Bounce       64.1 dB  ██████   │   │
-│  │ ••• Wall Reflection     52.3 dB  ███      │   │
-│  │ ━•━ Roof Diffraction    48.7 dB  ██       │   │
-│  └───────────────────────────────────────────┘   │
-│                                                   │
-│  Dominant: Direct path (68.2 dB)                  │
-│  Interference: Destructive at 500 Hz             │
+│  ┌─────────────────────────────────────────────┐  │
+│  │  ☑ Show Traced Rays         (raised card)   │  │
+│  │                                             │  │
+│  │  Path Contributions:                        │  │
+│  │  ━━━ Direct              68.2 dB  ████████  │  │
+│  │  ┅┅┅ Ground Bounce       64.1 dB  ██████    │  │
+│  │  ••• Wall Reflection     52.3 dB  ███       │  │
+│  │  ━•━ Roof Diffraction    48.7 dB  ██        │  │
+│  │                                             │  │
+│  │  Phase Info:                                │  │
+│  │  🔵 Constructive: Direct + Ground (Δφ=12°)  │  │
+│  │  🔴 Destructive: Direct + Wall (Δφ=168°)    │  │
+│  │                                             │  │
+│  │  Dominant: Direct path (68.2 dB)            │  │
+│  └─────────────────────────────────────────────┘  │
 └───────────────────────────────────────────────────┘
 ```
+
+#### Toggle Design (per NEUMORPHIC_STYLE_GUIDE.md)
+
+The toggle follows the standard neumorphic toggle switch pattern:
+- **Track (OFF)**: Sunken inset with `box-shadow: inset 3px 3px 6px #b8c4d0, inset -2px -2px 4px #ffffff`
+- **Track (ON)**: Solid `var(--active-blue)` background
+- **Thumb**: Raised circle (28px) extending 2px beyond track height, with dual shadows
 
 ### Map Visualization
 
@@ -871,6 +918,40 @@ When toggle enabled, render ray paths on the map canvas:
 
 **Color/opacity:** Based on path contribution level (brighter = higher dB)
 
+### Behavior: Scene Changes Auto-Disable Toggle
+
+When the scene changes (sources move, barriers move, probe moves), the ray visualization toggle is **automatically turned OFF**. The user must manually toggle it back on to re-fetch and display updated ray data.
+
+**Rationale:**
+- Avoids expensive re-renders on every scene change
+- Path data is only fetched when explicitly requested
+- Canvas doesn't need to continuously redraw path overlays
+
+### Worker Communication Optimization
+
+Path geometry is **only sent from the worker when the toggle is enabled**:
+
+```typescript
+// In main thread - request with visualization flag
+probeWorker.postMessage({
+  type: 'compute',
+  probeId,
+  position,
+  includePathGeometry: showRaysToggle.checked  // Only when enabled
+});
+
+// In worker - conditionally include path data
+if (request.includePathGeometry) {
+  result.paths = tracedPaths.map(p => ({
+    type: p.type,
+    points: p.points.map(v => ({ x: v.x, y: v.y })),  // 2D only for map
+    level_dB: p.level_dB,
+    phase_rad: p.phase_rad,
+    sourceId: p.sourceId
+  }));
+}
+```
+
 ### Use Cases
 
 1. **Debug** - Understand why probe level differs from expected
@@ -883,18 +964,58 @@ When toggle enabled, render ray paths on the map canvas:
 ```typescript
 interface TracedPath {
   type: 'direct' | 'ground' | 'wall' | 'diffraction';
-  points: Vec3[];           // Path vertices (for drawing)
+  points: Vec2[];           // Path vertices (2D for map drawing)
   level_dB: number;         // Contribution level
   phase_rad: number;        // Phase at receiver
-  reflectionPoint?: Vec3;   // For ground/wall paths
-  diffractionEdge?: Vec3;   // For diffraction paths
+  sourceId: string;         // Which source this path is from
+  reflectionPoint?: Vec2;   // For ground/wall paths
+  diffractionEdge?: Vec2;   // For diffraction paths
+}
+
+interface PhaseRelationship {
+  path1Type: string;
+  path2Type: string;
+  phaseDelta_deg: number;
+  isConstructive: boolean;  // |Δφ| < 90°
 }
 
 interface ProbeRayVisualization {
   enabled: boolean;
   paths: TracedPath[];
+  phaseRelationships: PhaseRelationship[];  // Pairwise phase info
   showLabels: boolean;      // Show dB labels on paths
   colorByLevel: boolean;    // Color intensity by contribution
+}
+```
+
+### Raised Card Styling
+
+The ray visualization container uses neumorphic raised styling:
+
+```css
+.ray-viz-card {
+  background: var(--bg);
+  border-radius: 16px;
+  padding: 12px 16px;
+  margin-top: 12px;
+  box-shadow: 3px 3px 6px rgba(100, 110, 130, 0.3),
+              -2px -2px 5px rgba(255, 255, 255, 0.7);
+}
+
+.ray-viz-card .path-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.ray-viz-card .phase-info {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(100, 110, 130, 0.15);
+  font-size: 11px;
+  color: var(--text-muted);
 }
 ```
 
@@ -902,10 +1023,10 @@ interface ProbeRayVisualization {
 
 | File | Changes |
 |------|---------|
-| `apps/web/src/probeWorker.ts` | Return path geometry with results |
-| `apps/web/src/main.ts` | Render paths on canvas, update inspector |
-| `apps/web/index.html` | Add toggle and path breakdown UI |
-| `apps/web/src/style.css` | Path breakdown styling |
+| `apps/web/src/probeWorker.ts` | Conditionally return path geometry with results |
+| `apps/web/src/main.ts` | Render paths on canvas, update inspector, auto-disable on scene change |
+| `apps/web/index.html` | Add raised card with toggle and path breakdown UI |
+| `apps/web/src/style.css` | Raised card and path breakdown styling per neumorphic guide |
 
 ---
 

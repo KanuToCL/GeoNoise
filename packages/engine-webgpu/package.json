@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "@geonoise/shared": "*",
-    "@geonoise/core": "*"
+    "@geonoise/core": "*",
+    "@geonoise/engine": "*"
   },
   "devDependencies": {
     "typescript": "^5.3.0",

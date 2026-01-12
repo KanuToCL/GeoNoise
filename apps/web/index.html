@@ -787,6 +787,30 @@
             <span>Frequency (Hz)</span>
             <span>Amplitude (dB)</span>
           </div>
+          <!-- Ray Visualization Card -->
+          <div class="ray-viz-card" id="rayVizCard">
+            <div class="ray-viz-header">
+              <label class="ray-viz-toggle-label">
+                <span>Show Traced Rays</span>
+                <div class="ray-viz-toggle">
+                  <input type="checkbox" id="rayVizToggle" />
+                  <span class="ray-viz-toggle-track"></span>
+                  <span class="ray-viz-toggle-thumb"></span>
+                </div>
+              </label>
+            </div>
+            <div class="ray-viz-content" id="rayVizContent">
+              <div class="ray-viz-paths" id="rayVizPaths">
+                <!-- Path rows will be populated dynamically -->
+              </div>
+              <div class="ray-viz-phase-info" id="rayVizPhaseInfo">
+                <!-- Phase relationships will be populated dynamically -->
+              </div>
+              <div class="ray-viz-dominant" id="rayVizDominant">
+                <!-- Dominant path info will be shown here -->
+              </div>
+            </div>
+          </div>
         </aside>
       </div>
     </div>

@@ -1374,14 +1374,19 @@ function traceDirectPath(
   };
 }
 
+/** Wall reflection path with geometry for visualization */
+interface WallReflectionPath extends RayPath {
+  reflectionPoint2D: Point2D;
+}
+
 function traceWallReflectionPaths(
   source: Point3D,
   receiver: Point3D,
   segments: WallSegment[],
   barriers: WallSegment[],
   buildings: BuildingFootprint[]
-): RayPath[] {
-  const paths: RayPath[] = [];
+): WallReflectionPath[] {
+  const paths: WallReflectionPath[] = [];
   const buildingSegments = segments.filter(s => s.type === 'building');
 
   for (const segment of buildingSegments) {
@@ -1420,17 +1425,50 @@ function traceWallReflectionPaths(
     // Leg 2: Reflection point → Receiver
     const leg2Block = findBlockingBuilding(reflPoint3D, receiver, otherBuildings);
 
-    // Also check if the reflection path is blocked by the SAME building
-    // (i.e., the path from source to reflection point or reflection point to receiver
-    // goes through the building's interior)
+    // Check if the reflection path goes through the SAME building's interior.
+    // This is important for non-convex buildings or when reflecting off one wall
+    // but the path to source/receiver would pass through another part of the building.
+    //
+    // We use a slightly inset check point (moved away from the wall) to avoid
+    // floating-point precision issues at the exact reflection point.
     const sameBuilding = buildings.find(b => b.id === segment.id);
     let blockedBySameBuilding = false;
     if (sameBuilding) {
-      // Check if source→reflPoint goes through the building
-      const srcToRefl = findBlockingBuilding(source, reflPoint3D, [sameBuilding]);
-      // Check if reflPoint→receiver goes through the building
-      const reflToRecv = findBlockingBuilding(reflPoint3D, receiver, [sameBuilding]);
-      blockedBySameBuilding = srcToRefl.blocked || reflToRecv.blocked;
+      // Check if source or receiver is inside the building (invalid)
+      const srcInside = pointInPolygon({ x: source.x, y: source.y }, sameBuilding.vertices);
+      const recvInside = pointInPolygon({ x: receiver.x, y: receiver.y }, sameBuilding.vertices);
+
+      if (srcInside || recvInside) {
+        blockedBySameBuilding = true;
+      } else {
+        // Check if the path legs go through the building interior
+        // Use a point slightly offset from the reflection point (away from wall) for checking
+        const wallDx = segment.p2.x - segment.p1.x;
+        const wallDy = segment.p2.y - segment.p1.y;
+        const wallLen = Math.sqrt(wallDx * wallDx + wallDy * wallDy);
+        if (wallLen > EPSILON) {
+          // Normal pointing outward (perpendicular to wall)
+          const nx = -wallDy / wallLen;
+          const ny = wallDx / wallLen;
+          // Determine which side source is on
+          const toSrcX = source.x - reflPoint.x;
+          const toSrcY = source.y - reflPoint.y;
+          const dot = toSrcX * nx + toSrcY * ny;
+          const sign = dot >= 0 ? 1 : -1;
+          // Offset point slightly away from wall on the source side
+          const offsetDist = 0.01; // 1cm offset
+          const checkPoint: Point3D = {
+            x: reflPoint.x + sign * nx * offsetDist,
+            y: reflPoint.y + sign * ny * offsetDist,
+            z: reflPoint3D.z,
+          };
+
+          // Now check if paths from offset point go through building
+          const srcToCheck = findBlockingBuilding(source, checkPoint, [sameBuilding]);
+          const checkToRecv = findBlockingBuilding(checkPoint, receiver, [sameBuilding]);
+          blockedBySameBuilding = srcToCheck.blocked || checkToRecv.blocked;
+        }
+      }
     }
 
     if (leg1Block.blocked || leg2Block.blocked || blockedBySameBuilding) continue;
@@ -1448,6 +1486,7 @@ function traceWallReflectionPaths(
       reflectionPhaseChange: 0,
       absorptionFactor: 0.9,
       valid: reflPoint3D.z <= segment.height,
+      reflectionPoint2D: reflPoint,
     });
   }
 
@@ -1465,6 +1504,19 @@ function applyGainToSpectrum(spectrum: number[], gain: number): number[] {
 interface SourcePhasorResult {
   spectrum: Spectrum9;
   pathTypes: Set<string>;
+  /** Collected paths for ray visualization */
+  collectedPaths?: CollectedPath[];
+}
+
+/** Internal path collection during computation */
+interface CollectedPath {
+  type: 'direct' | 'ground' | 'wall' | 'diffraction';
+  points: Point2D[];
+  level_dB: number;
+  phase_rad: number;
+  sourceId: string;
+  reflectionPoint?: Point2D;
+  diffractionEdge?: Point2D;
 }
 
 function computeSourceCoherent(
@@ -1473,16 +1525,20 @@ function computeSourceCoherent(
   segments: WallSegment[],
   barriers: WallSegment[],
   buildings: BuildingFootprint[],
-  config: ProbeConfig
+  config: ProbeConfig,
+  collectPaths: boolean = false
 ): SourcePhasorResult {
   const spectrum = applyGainToSpectrum(
     source.spectrum as number[],
     source.gain ?? 0
   );
   const pathTypes = new Set<string>();
+  const collectedPaths: CollectedPath[] = [];
   const c = config.speedOfSound;
 
   const srcPos: Point3D = source.position;
+  const src2D: Point2D = { x: srcPos.x, y: srcPos.y };
+  const probe2D: Point2D = { x: probePos.x, y: probePos.y };
 
   // Trace direct path (barrier blocking)
   const directPath = traceDirectPath(srcPos, probePos, barriers);
@@ -1605,7 +1661,7 @@ function computeSourceCoherent(
   }
 
   // Trace wall reflection paths (check for blocking by OTHER buildings)
-  const wallPaths: RayPath[] = [];
+  const wallPaths: WallReflectionPath[] = [];
   if (config.wallReflections) {
     const reflPaths = traceWallReflectionPaths(srcPos, probePos, segments, barriers, buildings);
     for (const path of reflPaths) {
@@ -1633,6 +1689,17 @@ function computeSourceCoherent(
       const level = sourceLevel - atten - atm;
       const phase = -k * directPath.totalDistance;
       phasors.push({ pressure: dBToPressure(level), phase });
+
+      // Collect direct path for visualization (only on first band to avoid duplicates)
+      if (collectPaths && bandIdx === 0) {
+        collectedPaths.push({
+          type: 'direct',
+          points: [src2D, probe2D],
+          level_dB: level,
+          phase_rad: phase,
+          sourceId: source.id,
+        });
+      }
     }
 
     // Building diffraction contributions (per-band frequency dependence)
@@ -1667,7 +1734,7 @@ function computeSourceCoherent(
       const hr = probePos.z;
 
       // Calculate path geometry - get BOTH r1 and r2 for proper two-ray model
-      const { r1: directDistance, r2: groundPathDistance } = calculateGroundReflectionGeometry(d, hs, hr);
+      const { r1: directDistance, r2: groundPathDistance, reflectionPointX } = calculateGroundReflectionGeometry(d, hs, hr);
 
       // Get frequency-dependent ground reflection coefficient
       const groundCoeff = getGroundReflectionCoeff(
@@ -1701,10 +1768,32 @@ function computeSourceCoherent(
 
       phasors.push({ pressure: dBToPressure(groundLevel), phase: groundPhase });
       pathTypes.add('ground');
+
+      // Collect ground reflection path for visualization (only on first band)
+      if (collectPaths && bandIdx === 0) {
+        // Calculate reflection point in world coordinates
+        const dx = probePos.x - srcPos.x;
+        const dy = probePos.y - srcPos.y;
+        const dHoriz = Math.sqrt(dx * dx + dy * dy);
+        const reflPoint: Point2D = dHoriz > EPSILON ? {
+          x: srcPos.x + (dx / dHoriz) * reflectionPointX,
+          y: srcPos.y + (dy / dHoriz) * reflectionPointX,
+        } : src2D;
+
+        collectedPaths.push({
+          type: 'ground',
+          points: [src2D, reflPoint, probe2D],
+          level_dB: groundLevel,
+          phase_rad: groundPhase,
+          sourceId: source.id,
+          reflectionPoint: reflPoint,
+        });
+      }
     }
 
     // Barrier diffraction contributions
-    for (const path of barrierDiffractionPaths) {
+    for (let i = 0; i < barrierDiffractionPaths.length; i++) {
+      const path = barrierDiffractionPaths[i];
       const atten = spreadingLoss(path.totalDistance);
       const atm = config.atmosphericAbsorption !== 'none'
         ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity, config.pressure, config.atmosphericAbsorption) * path.totalDistance
@@ -1713,6 +1802,23 @@ function computeSourceCoherent(
       const level = sourceLevel - atten - atm - diffLoss;
       const phase = -k * path.totalDistance + path.reflectionPhaseChange;
       phasors.push({ pressure: dBToPressure(level), phase });
+
+      // Collect barrier diffraction path for visualization (only on first band)
+      if (collectPaths && bandIdx === 0) {
+        // Calculate approximate diffraction point (midpoint for simplicity)
+        const diffPoint: Point2D = {
+          x: (srcPos.x + probePos.x) / 2,
+          y: (srcPos.y + probePos.y) / 2,
+        };
+        collectedPaths.push({
+          type: 'diffraction',
+          points: [src2D, diffPoint, probe2D],
+          level_dB: level,
+          phase_rad: phase,
+          sourceId: source.id,
+          diffractionEdge: diffPoint,
+        });
+      }
     }
 
     // Wall reflection contributions
@@ -1725,6 +1831,18 @@ function computeSourceCoherent(
       const level = sourceLevel - atten - atm - absLoss;
       const phase = -k * path.totalDistance + path.reflectionPhaseChange;
       phasors.push({ pressure: dBToPressure(level), phase });
+
+      // Collect wall reflection path for visualization (only on first band)
+      if (collectPaths && bandIdx === 0) {
+        collectedPaths.push({
+          type: 'wall',
+          points: [src2D, path.reflectionPoint2D, probe2D],
+          level_dB: level,
+          phase_rad: phase,
+          sourceId: source.id,
+          reflectionPoint: path.reflectionPoint2D,
+        });
+      }
     }
 
     // Sum phasors coherently
@@ -1752,6 +1870,7 @@ function computeSourceCoherent(
   return {
     spectrum: resultSpectrum as Spectrum9,
     pathTypes,
+    collectedPaths: collectPaths ? collectedPaths : undefined,
   };
 }
 
@@ -1805,11 +1924,18 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
 
   const sourceSpectra: number[][] = [];
   let totalGhostCount = 0;
+  const allCollectedPaths: CollectedPath[] = [];
+  const collectPaths = req.includePathGeometry ?? false;
 
   for (const source of req.sources) {
-    const result = computeSourceCoherent(source, probePos, segments, barriers, buildings, config);
+    const result = computeSourceCoherent(source, probePos, segments, barriers, buildings, config, collectPaths);
 
     sourceSpectra.push(result.spectrum);
+
+    // Collect paths for visualization
+    if (result.collectedPaths) {
+      allCollectedPaths.push(...result.collectedPaths);
+    }
 
     for (const pathType of result.pathTypes) {
       if (pathType === 'wall' || pathType === 'diffracted' || pathType === 'building-diffraction') {
@@ -1820,6 +1946,52 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
 
   // Sum all source spectra energetically
   const totalSpectrum = sumMultipleSpectra(sourceSpectra);
+
+  // Build traced paths and phase relationships for response
+  let tracedPaths: import('@geonoise/engine').TracedPath[] | undefined;
+  let phaseRelationships: import('@geonoise/engine').PhaseRelationship[] | undefined;
+
+  if (collectPaths && allCollectedPaths.length > 0) {
+    // Convert CollectedPath to TracedPath
+    tracedPaths = allCollectedPaths.map(p => ({
+      type: p.type,
+      points: p.points,
+      level_dB: p.level_dB,
+      phase_rad: p.phase_rad,
+      sourceId: p.sourceId,
+      reflectionPoint: p.reflectionPoint,
+      diffractionEdge: p.diffractionEdge,
+    }));
+
+    // Compute phase relationships between pairs of paths from same source
+    phaseRelationships = [];
+    const pathsBySource = new Map<string, CollectedPath[]>();
+    for (const p of allCollectedPaths) {
+      const arr = pathsBySource.get(p.sourceId) || [];
+      arr.push(p);
+      pathsBySource.set(p.sourceId, arr);
+    }
+
+    for (const [, paths] of pathsBySource) {
+      // Compare each pair of paths
+      for (let i = 0; i < paths.length; i++) {
+        for (let j = i + 1; j < paths.length; j++) {
+          const p1 = paths[i];
+          const p2 = paths[j];
+          const phaseDelta_rad = Math.abs(p1.phase_rad - p2.phase_rad);
+          // Normalize to [0, π]
+          const normalized = phaseDelta_rad % (2 * Math.PI);
+          const phaseDelta_deg = (normalized > Math.PI ? 2 * Math.PI - normalized : normalized) * (180 / Math.PI);
+          phaseRelationships.push({
+            path1Type: p1.type,
+            path2Type: p2.type,
+            phaseDelta_deg,
+            isConstructive: phaseDelta_deg < 90,
+          });
+        }
+      }
+    }
+  }
 
   // Return actual calculated spectrum - display floor is applied in the UI
   // after frequency weighting to avoid A-curve artifacts on silence.
@@ -1834,6 +2006,8 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
       interferenceDetails: {
         ghostCount: totalGhostCount,
       },
+      tracedPaths,
+      phaseRelationships,
     },
   };
 }

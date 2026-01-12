@@ -817,6 +817,208 @@ body {
   color: var(--text-muted);
 }
 
+/* ============================================================================
+   RAY VISUALIZATION CARD
+   ============================================================================
+   Raised neumorphic card inside probe panel for showing traced ray paths.
+   Toggle follows NEUMORPHIC_STYLE_GUIDE.md specifications.
+   ========================================================================= */
+
+.ray-viz-card {
+  background: var(--bg);
+  border-radius: 16px;
+  padding: 12px 16px;
+  margin-top: 12px;
+  box-shadow: 3px 3px 6px rgba(100, 110, 130, 0.3),
+              -2px -2px 5px rgba(255, 255, 255, 0.7);
+}
+
+.ray-viz-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ray-viz-toggle-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* Toggle switch container */
+.ray-viz-toggle {
+  position: relative;
+  width: 48px;
+  height: 24px;
+}
+
+.ray-viz-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* Track (OFF state) - sunken inset */
+.ray-viz-toggle-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #d8dfe8;
+  box-shadow:
+    inset 3px 3px 6px #b8c4d0,
+    inset -2px -2px 4px #ffffff;
+  transition: background 200ms ease, box-shadow 200ms ease;
+}
+
+/* Track (ON state) - solid blue */
+.ray-viz-toggle input:checked + .ray-viz-toggle-track {
+  background: var(--active-blue);
+  box-shadow: none;
+}
+
+/* Thumb - raised circle extending beyond track */
+.ray-viz-toggle-thumb {
+  position: absolute;
+  top: -2px;
+  left: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #ffffff, #f0f4f8);
+  box-shadow:
+    4px 4px 10px #a3b1c6,
+    -3px -3px 8px #ffffff;
+  transition: left 200ms ease, transform 200ms ease;
+  pointer-events: none;
+}
+
+.ray-viz-toggle input:checked ~ .ray-viz-toggle-thumb {
+  left: 20px;
+}
+
+/* Content area - hidden when toggle is off */
+.ray-viz-content {
+  display: none;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(100, 110, 130, 0.15);
+}
+
+.ray-viz-card.is-active .ray-viz-content {
+  display: block;
+}
+
+/* Path rows */
+.ray-viz-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ray-viz-path-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.ray-viz-path-icon {
+  width: 24px;
+  font-family: monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.ray-viz-path-type {
+  flex: 1;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.ray-viz-path-level {
+  font-weight: 600;
+  color: var(--text);
+  min-width: 60px;
+  text-align: right;
+}
+
+.ray-viz-path-bar {
+  width: 60px;
+  height: 8px;
+  background: rgba(100, 110, 130, 0.15);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.ray-viz-path-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--active-blue), #4aa3ff);
+  border-radius: 4px;
+  transition: width 200ms ease;
+}
+
+/* Phase info section */
+.ray-viz-phase-info {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(100, 110, 130, 0.15);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ray-viz-phase-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+}
+
+.ray-viz-phase-indicator {
+  font-size: 10px;
+}
+
+.ray-viz-phase-indicator.constructive {
+  color: #4CAF50;
+}
+
+.ray-viz-phase-indicator.destructive {
+  color: #f44336;
+}
+
+.ray-viz-phase-text {
+  flex: 1;
+}
+
+.ray-viz-phase-delta {
+  font-weight: 500;
+  color: var(--text-soft);
+}
+
+/* Dominant path info */
+.ray-viz-dominant {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(100, 110, 130, 0.15);
+  font-size: 11px;
+  color: var(--text-soft);
+  font-weight: 500;
+}
+
+/* Empty state */
+.ray-viz-empty {
+  text-align: center;
+  padding: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .context-header {
   display: flex;
   align-items: center;

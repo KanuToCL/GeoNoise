@@ -17,7 +17,7 @@
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "clean": "turbo clean && rm -rf node_modules",
-    "clean:cache": "rm -rf .turbo node_modules/.cache node_modules/.vite apps/*/dist packages/*/dist apps/*/.vite && echo '✓ Caches cleared'",
+    "clean:cache": "rm -rf .turbo node_modules/.cache node_modules/.vite apps/*/dist packages/*/dist apps/*/.vite packages/*/*.tsbuildinfo packages/*/tsconfig.tsbuildinfo apps/*/*.tsbuildinfo apps/*/tsconfig.tsbuildinfo && echo '✓ Caches cleared'",
     "rebuild": "npm run clean:cache && npx tsc -b --clean && npx tsc -b && echo '✓ Full rebuild complete'",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "perf:baseline": "turbo perf:baseline"

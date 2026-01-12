@@ -196,6 +196,38 @@ export interface ProbeRequest {
   sources: ProbeSource[];
   walls: ProbeWall[];
   config?: ProbeConfig;
+  /** When true, include path geometry in response for ray visualization */
+  includePathGeometry?: boolean;
+}
+
+/** Traced path geometry for ray visualization */
+export interface TracedPath {
+  /** Path type identifier */
+  type: 'direct' | 'ground' | 'wall' | 'diffraction';
+  /** Path vertices for map drawing (2D) */
+  points: Array<{ x: number; y: number }>;
+  /** Contribution level in dB */
+  level_dB: number;
+  /** Phase at receiver in radians */
+  phase_rad: number;
+  /** Source ID this path originates from */
+  sourceId: string;
+  /** For ground/wall paths: reflection point */
+  reflectionPoint?: { x: number; y: number };
+  /** For diffraction paths: edge/corner point */
+  diffractionEdge?: { x: number; y: number };
+}
+
+/** Phase relationship between two paths */
+export interface PhaseRelationship {
+  /** First path type */
+  path1Type: string;
+  /** Second path type */
+  path2Type: string;
+  /** Phase difference in degrees */
+  phaseDelta_deg: number;
+  /** True if |Δφ| < 90° (constructive interference) */
+  isConstructive: boolean;
 }
 
 /** Response received from a probe worker */
@@ -208,6 +240,10 @@ export interface ProbeResult {
     interferenceDetails?: {
       ghostCount: number;
     };
+    /** Traced paths for ray visualization (only when includePathGeometry is true) */
+    tracedPaths?: TracedPath[];
+    /** Phase relationships between paths */
+    phaseRelationships?: PhaseRelationship[];
   };
 }
 
