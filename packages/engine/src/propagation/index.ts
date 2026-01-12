@@ -297,6 +297,8 @@ function calculateRegionEffect(
     + coeffs.c * G * Math.log10(dpClamped)
     + coeffs.d * G;
 
+  // Note: ISO 9613-2 does NOT specify per-region clamping.
+  // Only the total A_gr is subject to practical limits.
   return A;
 }
 
@@ -328,6 +330,8 @@ function calculateMiddleRegionEffect(
   // Am = a(f)·q + b(f)·(1-Gm)·q
   const Am = coeffs.a * q + coeffs.b * (1 - G) * q;
 
+  // Note: ISO 9613-2 does NOT specify per-region clamping.
+  // Only the total A_gr is subject to practical limits.
   return Am;
 }
 
@@ -364,12 +368,16 @@ export function agrISO9613PerBand(
   // Middle region (Am)
   const Am = calculateMiddleRegionEffect(sourceHeight, receiverHeight, d, G, frequency);
 
-  // Total ground effect
+  // Total ground effect: A_gr = A_s + A_r + A_m
+  //
+  // ISO 9613-2 Notes:
+  // - The standard does NOT specify per-region clamping
+  // - A_gr can be negative (typically down to ~-3 dB for hard ground)
+  // - Negative values represent sound level increase from ground reflections
+  // - The -3 dB floor is a practical limit to avoid unrealistic amplification
   const Agr = As + Ar + Am;
 
-  // ISO 9613-2 notes that Agr should be clamped for certain conditions
-  // For very short distances or tall source/receiver, clamp to reasonable range
-  return Math.max(-3, Agr); // Allow up to 3 dB boost (constructive interference)
+  return Math.max(-3, Agr);
 }
 
 /**

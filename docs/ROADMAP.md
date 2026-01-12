@@ -207,134 +207,266 @@ type SettingsPanelState = {
 
 > **Status:** 📋 Planned
 > **Priority:** High
-> **Target:** v0.5.0
+> **Target:** v0.6.0
 
-### Rationale
+### Overview
 
-GeoNoise currently offers many physics settings (ground model, atmospheric absorption, barrier diffraction, etc.) that users must configure individually. This creates two problems:
+GeoNoise currently offers many physics settings that users must configure individually. A **profile-based system** offers validated presets while preserving full customization.
 
-1. **For engineers needing ISO compliance:** They must manually ensure all settings match ISO 9613-2 requirements
-2. **For users wanting accuracy:** They may not know which combination of settings produces physically correct results
-3. **For power users:** Custom configurations may unknowingly mix incompatible models
+The two primary profiles target different versions of ISO 9613-2:
+- **ISO 9613-2:1996** - Original standard (current implementation)
+- **ISO 9613-2:2024** - Updated standard with K_geo, barrier cancellation, etc.
 
-A **profile-based system** solves this by offering validated presets while preserving full customization.
+---
 
-### Proposed Profiles
+## ISO 9613-2:1996 Profile ✅
 
-#### 1. ISO 9613-2 Compliant
-For regulatory compliance, environmental impact assessments, and engineering reports.
+> **Status:** ✅ Fully Implemented
+> **All features are currently working in the Grid Engine**
 
-| Setting | Value | Rationale |
-|---------|-------|-----------|
-| Ground Model | `iso9613-eq10` | ISO 9613-2 Eq. 10 empirical formula |
-| Ground Effect | Clamped ≥ 0 | ISO does not model constructive interference |
-| Atmospheric Absorption | `iso9613-1` | Full ISO 9613-1 calculation |
-| Barrier Model | `iso9613-2` | ISO compliant diffraction |
-| Barrier + Ground | `max(Abar, Agr)` | ISO 9613-2 Section 7.4 |
-| Side Diffraction | `off` | ISO assumes infinite barriers |
-| Max Reflections | 0 | Conservative (no reflections) |
-| Source Level Convention | Sound Power Level (Lw) | ISO standard |
+### Profile Settings
 
-#### 2. Physically Accurate
+| Setting | Value | Status |
+|---------|-------|--------|
+| Ground Model | `iso9613-tables` (Tables 3-4 per-band) | ✅ Implemented |
+| Ground Effect Formula | A_gr = A_s + A_r + A_m | ✅ Implemented |
+| Ground Effect Clamp | Total A_gr ≥ -3 dB | ✅ Implemented |
+| Barrier Diffraction | Maekawa formula | ✅ Implemented |
+| Thin Barrier | Coefficient 20, cap 20 dB | ✅ Implemented |
+| Thick Barrier | Coefficient 40, cap 25 dB | ✅ Implemented |
+| Barrier + Ground (blocked) | Partitioned A_gr additive with D_z | ✅ Implemented |
+| Atmospheric Absorption | ISO 9613-1 | ✅ Implemented |
+| Atmospheric Path | Uses actual diffracted path length | ✅ Implemented |
+| Source Summation | Incoherent (power sum) | ✅ Implemented |
+| Side Diffraction | Off (infinite barrier assumption) | ✅ Configurable |
+
+### Remaining Work for 1996 Profile
+
+| Task | Priority | Description |
+|------|----------|-------------|
+| Create profile dropdown in UI | HIGH | Settings → Profile selector |
+| Define profile type in schema | HIGH | `CalculationProfile` enum |
+| Auto-detect when settings match profile | MEDIUM | Show "Custom" when user deviates |
+| Profile persistence in scene JSON | LOW | Save/restore selected profile |
+
+---
+
+## ISO 9613-2:2024 Profile 🔶
+
+> **Status:** 🔶 Partially Implemented (3 features pending)
+
+### Profile Settings
+
+| Setting | Value | Status |
+|---------|-------|--------|
+| Ground Model | `iso9613-tables` + K_geo | 🔶 K_geo TODO |
+| Ground Effect Formula | A_gr = A_s + A_r + A_m | ✅ Implemented |
+| Ground Effect Clamp | Total A_gr ≥ -3 dB | ✅ Implemented |
+| **Barrier Cancellation** | A_gr > 0 → set to 0 when blocked | ❌ TODO |
+| Barrier Diffraction | Updated D_z formula | 🔶 D_z+K_met TODO |
+| Thin Barrier | Coefficient 20, cap 20 dB | ✅ Implemented |
+| Thick Barrier | Coefficient 40, cap 25 dB | ✅ Implemented |
+| Barrier + Ground (blocked) | A_gr cancelled when positive | ❌ TODO |
+| Atmospheric Absorption | ISO 9613-1 | ✅ Implemented |
+| Source Summation | Incoherent (power sum) | ✅ Implemented |
+
+### Implementation Roadmap for 2024 Profile
+
+#### Phase 1: Barrier Cancellation Rule (HIGH Priority)
+
+**The most significant change from 1996 to 2024.**
+
+```typescript
+// File: packages/engine/src/propagation/index.ts
+
+// CURRENT (ISO 9613-2:1996):
+if (barrierBlocked && barrierInfo) {
+  Agr = Agr_source + Agr_receiver;  // Partitioned ground effect
+  totalAttenuation = Adiv + Aatm + Abar + Agr;  // Additive
+}
+
+// NEW (ISO 9613-2:2024):
+if (barrierBlocked && barrierInfo) {
+  const Agr_partitioned = Agr_source + Agr_receiver;
+
+  // 2024 Rule: If ground would attenuate (positive), cancel it
+  if (Agr_partitioned > 0) {
+    Agr = 0;  // Ground attenuation cancelled
+  } else {
+    Agr = Agr_partitioned;  // Boost still applies
+  }
+
+  totalAttenuation = Adiv + Aatm + Abar + Agr;
+}
+```
+
+**Tasks:**
+- [ ] Add `isoVersion: '1996' | '2024'` to PropagationConfig schema
+- [ ] Implement barrier cancellation logic in `calculatePropagation()`
+- [ ] Add UI toggle for ISO version (or include in profile)
+- [ ] Update tests for 2024 behavior
+- [ ] Document behavior difference
+
+**Impact:** Blocked paths over soft ground will show **higher receiver levels** (less attenuation) in 2024 mode because positive A_gr is cancelled.
+
+---
+
+#### Phase 2: K_geo Geometric Correction (HIGH Priority)
+
+**New in 2024:** Corrects A_gr at short distances and low heights.
+
+```typescript
+// File: packages/engine/src/propagation/index.ts
+
+/**
+ * ISO 9613-2:2024 K_geo correction factor.
+ * Reduces ground effect at small distance-to-height ratios.
+ */
+function calculateKgeo(
+  distance: number,
+  sourceHeight: number,
+  receiverHeight: number
+): number {
+  // TODO: Implement exact formula from ISO 9613-2:2024
+  // K_geo approaches 0 as d/(h_s + h_r) decreases
+  // K_geo approaches 1 for large distance-to-height ratios
+  const hSum = sourceHeight + receiverHeight;
+  const ratio = distance / Math.max(hSum, 0.1);
+
+  // Placeholder - need exact formula from standard
+  if (ratio < 10) {
+    return ratio / 10;  // Linear taper
+  }
+  return 1.0;
+}
+
+// In agrISO9613PerBand():
+export function agrISO9613PerBand(
+  distance: number, sourceHeight: number, receiverHeight: number,
+  groundFactor: number, frequency: number,
+  options: { enable2024Kgeo?: boolean } = {}
+): number {
+  // ... existing calculation ...
+  const Agr = As + Ar + Am;
+
+  // ISO 9613-2:2024 K_geo correction
+  if (options.enable2024Kgeo) {
+    const Kgeo = calculateKgeo(distance, sourceHeight, receiverHeight);
+    return Math.max(-3, Agr * Kgeo);
+  }
+
+  return Math.max(-3, Agr);
+}
+```
+
+**Tasks:**
+- [ ] Research exact K_geo formula from ISO 9613-2:2024 document
+- [ ] Implement `calculateKgeo()` function
+- [ ] Add `enable2024Kgeo` option to propagation config
+- [ ] Wire through to `agrISO9613PerBand()`
+- [ ] Add tests for K_geo behavior
+
+---
+
+#### Phase 3: D_z + K_met Updates (MEDIUM Priority)
+
+**New in 2024:** Fixes errors with low barriers at large distances.
+
+**Tasks:**
+- [ ] Research updated D_z + K_met combination rules from ISO 9613-2:2024
+- [ ] Implement modified barrier attenuation calculation
+- [ ] Implement modified meteorological correction
+- [ ] Add tests for new behavior
+
+---
+
+#### Phase 4: Profile UI (HIGH Priority)
+
+**Create unified profile selection in Settings panel.**
+
+```typescript
+// File: packages/core/src/schema/index.ts
+
+export const CalculationProfileSchema = z.enum([
+  'iso-9613-2-1996',    // Original ISO standard
+  'iso-9613-2-2024',    // Updated ISO standard
+  'physically-accurate', // Two-ray phasor, coherent summation
+  'custom'              // User-modified settings
+]);
+
+export type CalculationProfile = z.infer<typeof CalculationProfileSchema>;
+```
+
+**Tasks:**
+- [ ] Define `CalculationProfile` type in schema
+- [ ] Create `ISO_9613_1996_SETTINGS` constant
+- [ ] Create `ISO_9613_2024_SETTINGS` constant
+- [ ] Create `PHYSICALLY_ACCURATE_SETTINGS` constant
+- [ ] Add `applyProfile(profile)` function
+- [ ] Add profile dropdown to Settings UI
+- [ ] Implement `detectProfile(config)` for auto-detection
+- [ ] Show "Custom" when user modifies any setting
+
+---
+
+### Full Profile Comparison Table
+
+| Feature | ISO 9613-2:1996 | ISO 9613-2:2024 |
+|---------|-----------------|-----------------|
+| **Ground effect (A_gr)** | Tables 3-4 per-band | Same + K_geo correction for short distances/low heights |
+| **Barrier + Ground** | Partitioned A_gr additive with D_z | **Cancellation rule:** If A_gr > 0 & barrier present, A_gr is set to 0 |
+| **D_z + K_met** | Original formulas | Modified to fix under-prediction for low barriers at large distances |
+| **Method harmonization** | General vs Simplified separate | Unified approach (harmonized §7.3.1 & §7.3.2) |
+| **Wind turbines** | Not covered | **Annex D** - Methodology aligning with IOA |
+| **Advanced foliage** | Simple method only | **Annex A** - Detailed method with forestal parameters |
+| **Reflections** | First-order only | Higher-order + reflections from vertical cylindrical bodies |
+| **Meteorology** | Standard K_met | **Annex C** - Correction based on local wind climatology |
+| **Source Directivity** | General | Improved classification + specific D_c for chimney stacks (Annex B) |
+| **Extended Sources** | General | Improved subdivision rules to reduce software uncertainty |
+| **Ground Factor (G)** | General | More detailed definition for horizontal plane projection |
+| **Housing Attenuation** | General | **Annex A** - More specific for industrial sites/housing |
+| **Simplified Method h_m** | Original definition | Modified mean height (h_m) definition in §7.3.2 |
+
+---
+
+### Physically Accurate Profile (Non-ISO)
+
 For research, detailed analysis, and scenarios where interference effects matter.
 
-| Setting | Value | Rationale |
-|---------|-------|-----------|
-| Ground Model | `twoRayPhasor` | Full wave interference model |
-| Ground Effect | Allows negative (boost) | Physically correct interference |
-| Atmospheric Absorption | `iso9613-1` | Most accurate available |
-| Barrier Model | `maekawa` | Well-validated diffraction model |
-| Barrier + Ground | Additive (partitioned) | Correct physics |
-| Side Diffraction | `auto` | Include for short barriers |
-| Max Reflections | 1 | First-order reflections |
-| Coherent Summation | Enabled | Capture interference patterns |
-| Source Level Convention | Configurable | Support both Lw and SPL@1m |
+| Setting | Value | Notes |
+|---------|-------|-------|
+| Ground Model | Two-ray phasor | Full wave interference model |
+| A_gr Boost | Yes (allows negative) | Physically correct interference |
+| Barrier+Ground | Coherent summation | Full phasor combination |
+| Wall Reflections | On (first-order) | Included in phasor sum |
+| Side Diffraction | Auto | Include for short barriers |
+| Source Summation | Incoherent* | *Coherent available but not default |
+| Phase Modeling | Yes | Full k·d phase calculation |
 
-#### 3. Custom
-User has full control. Profile dropdown auto-switches to "Custom" when any setting deviates from a preset.
+---
 
-### UI Design
+### New 2024 Annexes & Features (LOW Priority)
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  Calculation Profile                                    │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │ ▼ Physically Accurate                           │   │
-│  │   ○ ISO 9613-2 Compliant                        │   │
-│  │   ● Physically Accurate                         │   │
-│  │   ○ Custom                                      │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-│  ⓘ Using two-ray phasor ground model with coherent     │
-│    summation. Ground interference effects are modeled.  │
-│                                                         │
-│  ▸ Advanced Settings                                    │
-│    (Expanding this shows individual settings and        │
-│     auto-switches profile to "Custom" if changed)       │
-└─────────────────────────────────────────────────────────┘
-```
+These are optional extensions introduced in ISO 9613-2:2024:
 
-### Settings Affected by Profile
-
-| Category | Setting | ISO Profile | Accurate Profile |
-|----------|---------|-------------|------------------|
-| **Ground** | Model | `iso9613-eq10` | `twoRayPhasor` |
-| | Allow boost | No | Yes |
-| | Type | User choice | User choice |
-| **Atmosphere** | Model | `iso9613-1` | `iso9613-1` |
-| | Use actual path length | No (direct) | Yes (diffracted) |
-| **Barriers** | Model | `iso9613-2` | `maekawa` |
-| | Side diffraction | Off | Auto |
-| | Thick barrier formula | N=20, cap 20dB | N=40, cap 25dB |
-| **Barrier+Ground** | Interaction | `max(Abar, Agr)` | Additive |
-| **Propagation** | Coherent summation | No | Yes |
-| | Max reflections | 0 | 1 |
-| **Sources** | Level convention | Lw (power) | Configurable |
-
-### Implementation Plan
-
-#### Phase 1: Core Profile System
-- [ ] Define `CalculationProfile` type in schema
-- [ ] Create `ISO_9613_PROFILE` and `ACCURATE_PROFILE` constants
-- [ ] Add `applyProfile(profile)` function that sets all config values
-- [ ] Add profile dropdown to Settings panel
-
-#### Phase 2: Auto-Detection
-- [ ] Implement `detectProfile(config)` that returns matching profile or 'custom'
-- [ ] Auto-switch dropdown to "Custom" when user changes any setting
-- [ ] Show info tooltip explaining current profile behavior
-
-#### Phase 3: Profile Persistence
-- [ ] Save selected profile in scene JSON
-- [ ] Restore profile on scene load
-- [ ] Handle profile migration for older scenes
-
-#### Phase 4: Documentation
-- [ ] Add profile descriptions to PHYSICS_REFERENCE.md
-- [ ] Create comparison table showing expected differences
-- [ ] Add "Which profile should I use?" guidance
-
-### Technical Notes
-
-1. **Profile is a shortcut, not a constraint:** User can always override individual settings (which switches to Custom)
-
-2. **Backward compatibility:** Existing scenes without a profile field default to behavior matching their current settings
-
-3. **Validation on save:** When exporting for regulatory purposes, warn if profile is not ISO-compliant
-
-4. **Future profiles:** Could add more profiles later (e.g., "CNOSSOS-EU", "FHWA TNM", "Nord2000")
-
-### Related Issues from Physics Audit
-
-This feature addresses the root cause of Issue #2 (Two-Ray Ground Model Sign Inconsistency):
-- ISO profile: Uses legacy model with `max(0, Agr)` - compliant with standard
-- Accurate profile: Uses two-ray model with negative values allowed - physically correct
-- Both behaviors are intentional and correct for their respective use cases
+| Feature | Annex | Description | Priority |
+|---------|-------|-------------|----------|
+| **Wind turbines** | Annex D | IOA-aligned SPL calculation for wind turbines | LOW |
+| **Advanced foliage** | Annex A | Detailed forestal parameters beyond simple attenuation | LOW |
+| **Higher-order reflections** | — | Multiple reflections + vertical cylindrical bodies | MEDIUM |
+| **Local meteorology** | Annex C | K_met from local wind-climatology data | LOW |
+| **Chimney stack directivity** | Annex B | Specific D_c correction for chimney stacks | LOW |
+| **Extended source subdivision** | — | Improved rules for industrial plants, traffic lines | LOW |
+| **Housing attenuation** | Annex A | More specific for industrial sites/housing | LOW |
+| **Ground factor (G) projection** | — | More detailed horizontal plane projection rules | MEDIUM |
+| **Simplified method h_m** | §7.3.2 | Modified mean height definition | MEDIUM |
 
 ---
 
 ## 🔮 Future Enhancements
-- **ISO 9613-2 Ground Effect (Agr) Per-Band Compliance** - ✅ COMPLETED: Implemented Tables 3-4 with frequency-dependent coefficients for each octave band
+- **ISO 9613-2 Ground Effect (Agr) Per-Band Compliance** - ✅ COMPLETED: Implemented Tables 3-4 with frequency-dependent coefficients (A_gr = A_s + A_r + A_m)
+- **ISO 9613-2 A_gr Clamping Clarification** - ✅ COMPLETED: ISO 9613-2 does NOT specify per-region clamping. Only total A_gr is clamped at -3 dB as a practical floor to avoid unrealistic amplification. Individual regions (A_s, A_r, A_m) compute freely.
+- **Sommerfeld Ground Wave Correction** - ✅ COMPLETED: Implemented in reflectionCoeff() (smooth transition at |w|=4 still pending)
 - **Rename "Ground Reflection" toggle to "Ground Effects"** - ✅ COMPLETED: Toggle now labeled "Ground Effects" to reflect both two-ray reflection model AND ISO Agr absorption
 - Configurable diffraction model selection (Maekawa / Kurze-Anderson / ISO 9613-2)
 - Higher-order reflections (2nd, 3rd order bounces)
@@ -377,6 +509,10 @@ A comprehensive physics consistency audit identified several issues. See [physic
 
 ### 🟠 Moderate Priority - Pending (2)
 
+> **Note on Wall Reflections:** Wall reflections are NOT required for ISO 9613-2 compliance. They are a ray-tracing enhancement for the Probe engine only.
+
+> **Note on Coherent Summation:** The Grid engine correctly uses incoherent (energetic) summation per ISO 9613-2. Coherent phasor summation is only used in the Probe engine for interference modeling.
+
 #### #7. Ground Reflection Assumes Flat Ground (z=0)
 
 **File:** `packages/engine/src/raytracing/index.ts:312-317`
@@ -403,10 +539,10 @@ A comprehensive physics consistency audit identified several issues. See [physic
 
 #### #13. Sommerfeld Correction Discontinuity at |w|=4
 
-**File:** `packages/engine/src/propagation/ground.ts:59`
-**Status:** ⬜ Open
+**File:** `packages/engine/src/propagation/ground.ts:192-200`
+**Status:** ⬜ Open (Sommerfeld IS implemented, smooth transition pending)
 
-**Problem:** Discontinuity in ground wave function at threshold. Should use smooth transition.
+**Problem:** Hard threshold at |w|=4 causes small discontinuity. Should use smooth Hermite transition.
 
 ---
 

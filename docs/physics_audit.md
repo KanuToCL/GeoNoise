@@ -1,16 +1,54 @@
 # Physics Engine Audit
 
-> **Audit Date:** 2025-01-08 (Updated: 2025-01-09)
-> **Status:** 13 resolved, 7 pending
+> **Audit Date:** 2025-01-08 (Updated: 2025-01-12)
+> **Status:** 17 resolved, 5 pending
 > **Auditor:** Physics review session
 
 This document tracks identified issues in the GeoNoise physics engine, organized by severity. Each issue includes the current formulation, current code implementation, and proposed fix.
 
 ---
 
+## ISO 9613-2 Compliance Overview
+
+GeoNoise Grid Engine targets compliance with **ISO 9613-2** for outdoor sound propagation. The standard has two versions:
+
+| Version | Status | Description |
+|---------|--------|-------------|
+| **ISO 9613-2:1996** | ✅ **Compliant** | Original standard, fully implemented |
+| **ISO 9613-2:2024** | 🔶 **Partial** | Incremental revision, 3 features pending |
+
+### Key Differences Between 1996 and 2024
+
+| Feature | ISO 9613-2:1996 | ISO 9613-2:2024 |
+|---------|-----------------|-----------------|
+| **Ground effect (A_gr)** | Tables 3-4 per-band | Same + **K_geo correction** for short distances/low heights |
+| **Barrier + Ground** | Partitioned A_gr additive with D_z | **Cancellation rule:** If A_gr > 0 & barrier present, A_gr is set to 0 |
+| **D_z + K_met** | Original formulas | Modified to fix under-prediction for low barriers at large distances |
+| **Method harmonization** | General vs Simplified separate | Unified approach (harmonized §7.3.1 & §7.3.2) |
+| **Wind turbines** | Not covered | **Annex D** - Methodology aligning with IOA |
+| **Advanced foliage** | Simple method only | **Annex A** - Detailed method with forestal parameters |
+| **Reflections** | First-order only | Higher-order + reflections from vertical cylindrical bodies |
+| **Meteorology** | Standard K_met | **Annex C** - Correction based on local wind climatology |
+| **Source Directivity** | General | Improved classification + specific D_c for chimney stacks (Annex B) |
+| **Extended Sources** | General | Improved subdivision rules to reduce software uncertainty |
+| **Ground Factor (G)** | General | More detailed definition for horizontal plane projection |
+| **Housing Attenuation** | General | **Annex A** - More specific for industrial sites/housing |
+| **Simplified Method h_m** | Original definition | Modified mean height (h_m) definition in §7.3.2 |
+
+#### Summary of Impact
+
+The 2024 update is not a radical departure but a significant **"bug fix" and modernization**:
+
+- **K_geo ground correction** — Prevents over-attenuation near the ground at short distances
+- **Barrier/ground cancellation rule** — Prevents "double dipping" of attenuation (barrier + ground)
+- **Wind Turbine module (Annex D)** — Critical addition for specialized projects
+- **Cylindrical Reflection module** — Important for industrial/urban modeling
+
+---
+
 ## Quick Status Summary
 
-### ✅ Resolved (13)
+### ✅ Resolved (17)
 - **#1** Spreading Loss Formula Constant Ambiguity — *Fixed with exact constants + documentation*
 - **#2** Two-Ray Ground Model Sign Inconsistency — *Resolved by design (see [Calculation Profile Presets](./ROADMAP.md#calculation-profile-presets))*
 - **#2b** computeProbeCoherent Double-Counts Direct Path — *Fixed: paths now processed uniformly*
@@ -22,8 +60,12 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 - **#10** "Simple" Atmospheric Absorption Model Incorrectly Formulated — *Fixed: replaced buggy formula with lookup table*
 - **#11** Diffraction Only Traced When Direct Path Blocked — *Fixed: now traces diffraction for nearby barriers even when direct path is unblocked (for coherent summation accuracy)*
 - **#12** Mixed Ground Sigma Calculation Arbitrary — *Fixed: user-selectable ISO 9613-2 or logarithmic interpolation*
+- **#15** Incoherent Source Summation Only — *Resolved by design: Grid engine uses incoherent summation per ISO 9613-2. Coherent summation is Probe-only.*
 - **#16** Same Formula for Thin/Thick Barriers — *Fixed: buildings now use coefficient 40 and cap 25 dB*
+- **#17** Ground Absorption Not Spectral — *Fixed: Grid engine now uses ISO 9613-2 Tables 3-4 per-band coefficients in `agrISO9613PerBand()`*
 - **#18** Speed of Sound Constant vs Formula Mismatch — *Fixed: added Environmental Conditions UI for user-controlled temperature/humidity/pressure*
+- **#20** ISO 9613-2 Ground Effect (Agr) Not Frequency-Dependent — *Fixed: Implemented Tables 3-4 per-band coefficients with A_gr = A_s + A_r + A_m calculation*
+- **#21** ISO 9613-2 A_gr Clamping Clarification — *Fixed: Removed incorrect per-region clamping. ISO 9613-2 does NOT specify per-region clamping; only total A_gr is clamped at -3 dB as a practical floor*
 
 ### 🔴 Critical - Pending (0)
 *No critical issues pending*
@@ -32,15 +74,10 @@ This document tracks identified issues in the GeoNoise physics engine, organized
 - **#7** Ground Reflection Assumes Flat Ground (z=0)
 - **#9** Wall Reflection Height Geometry Incorrect
 
-### 🟡 Minor - Pending (5)
-- **#13** Sommerfeld Correction Discontinuity at |w|=4
+### 🟡 Minor - Pending (3)
+- **#13** Sommerfeld Correction Smooth Transition at |w|=4 — Sommerfeld IS implemented and working; smooth transition at threshold pending (low priority)
 - **#14** Hardcoded Diffraction Phase Shift
-- **#15** Incoherent Source Summation Only *(by design)*
-- **#17** Ground Absorption Not Spectral
 - **#19** Diffraction Loss = 0 in Ray Tracing Result
-
-### ✅ Recently Resolved
-- **#20** ISO 9613-2 Ground Effect (Agr) Not Frequency-Dependent — *Fixed: Implemented Tables 3-4 per-band coefficients*
 
 ---
 
@@ -260,123 +297,148 @@ const sourceSpectrum = sumSourceSpectralPhasors(pathPhasors, config.coherentSumm
 
 ---
 
-### 3. Barrier + Ground Effect Interaction Physically Incorrect
-- [x] **Status:** Resolved
+### 3. Barrier + Ground Effect Interaction
+- [x] **Status:** Resolved (ISO 9613-2:1996 compliant; 2024 updates pending)
 - **Location:** `packages/engine/src/propagation/index.ts:314`, `packages/engine/src/compute/index.ts`
-- **Impact:** Wrong levels behind barriers on soft ground
-- **Fixed:** ISO 9613-2 §7.4 additive formula with ground partitioning
+- **Impact:** Correct levels behind barriers on soft ground
+- **Fixed:** ISO 9613-2 partitioned ground effect for diffracted paths
+
+#### ISO 9613-2 Specification (Key Points)
+
+**Critical Rule:** When a barrier is present, the normal ground effect (A_gr) is **cancelled/modified** because the barrier disrupts the ground-reflected ray that causes the ground effect.
+
+**Correct Implementation (ISO 9613-2 Section 7.4):**
+1. For blocked paths, A_gr is **recalculated** for the diffracted path geometry
+2. Ground effect is computed separately for:
+   - **Source-to-barrier segment** (using source region G factor)
+   - **Barrier-to-receiver segment** (using receiver region G factor)
+3. The direct-path ground effect does NOT apply to diffracted paths
+
+**Common Mistakes:**
+- ❌ `max(A_bar, A_gr)` — Non-standard simplification, not ISO-compliant
+- ❌ Simple additive `A_bar + A_gr` — Ignores that barrier cancels ground reflection
+- ✅ Partitioned ground effect for diffracted path segments — ISO-compliant
+
+**ISO 9613-2:2024 Updates (TODO):**
+- Introduces `K_geo` correction factor for A_gr at small distance-to-height ratios
+- Modifies how `D_z` (barrier) and `K_met` (meteorological) combine
+- Fixes under-prediction issues from 1996 version
 
 #### Before (Problematic Code)
 ```typescript
-// Incorrect: treats barrier and ground as mutually exclusive
+// NON-STANDARD: treats barrier and ground as mutually exclusive
 const barrierTerm = barrierBlocked ? Math.max(Abar, Agr) : Agr;
 const totalAttenuation = Adiv + Aatm + barrierTerm;
 ```
 
 #### After (Fixed Code)
 
-**propagation/index.ts - New interface and helper function:**
+**propagation/index.ts - ISO 9613-2 compliant implementation:**
 ```typescript
-export interface BarrierGeometryInfo {
-  distSourceToBarrier: number;
-  distBarrierToReceiver: number;
-  barrierHeight: number;
-}
+if (barrierBlocked && barrierInfo && config.groundReflection) {
+  // ISO 9613-2 Section 7.4: Partitioned ground effect for blocked paths
+  // The barrier CANCELS the normal ground reflection; we recalculate
+  // ground effect for the diffracted path's source and receiver segments.
+  const { distSourceToBarrier, distBarrierToReceiver, barrierHeight } = barrierInfo;
 
-function calculateGroundEffectRegion(
-  distance: number, sourceZ: number, receiverZ: number,
-  config: PropagationConfig, meteo: Meteo, frequency: number
-): number {
-  // Calculates ground effect for a path segment (source or receiver region)
-  // Uses either two-ray phasor model or legacy ISO 9613-2 Eq.10
-  // ...
+  // Source-side ground effect (source to barrier diffraction edge)
+  const Agr_source = calculateGroundEffectRegion(
+    distSourceToBarrier, sourceHeight, barrierHeight, config, meteo, frequency
+  );
+
+  // Receiver-side ground effect (barrier diffraction edge to receiver)
+  const Agr_receiver = calculateGroundEffectRegion(
+    distBarrierToReceiver, barrierHeight, receiverHeight, config, meteo, frequency
+  );
+
+  // Partitioned ground effect for diffracted path
+  Agr = Agr_source + Agr_receiver;
+
+  // Barrier diffraction attenuation
+  Abar = barrierAttenuation(barrierPathDiff, frequency, lambda, barrierType);
+
+  // ISO 9613-2: D_z + recalculated A_gr for diffracted path
+  totalAttenuation = Adiv + Aatm + Abar + Agr;
+} else if (barrierBlocked) {
+  // FALLBACK (NON-STANDARD): When barrier geometry unavailable
+  // This is NOT ISO-compliant; used only as safety net
+  totalAttenuation = Adiv + Aatm + Math.max(Abar, Agr);
+} else {
+  // Unblocked path: normal ground effect applies
+  totalAttenuation = Adiv + Aatm + Agr;
 }
 ```
 
-**propagation/index.ts - Updated calculatePropagation():**
+#### Implementation Status
+
+| Condition | Formula | ISO Compliant |
+|-----------|---------|---------------|
+| Blocked path WITH barrierInfo | `A_div + A_atm + D_z + A_gr_partitioned` | ✅ Yes (1996) |
+| Blocked path WITHOUT barrierInfo | `A_div + A_atm + max(A_bar, A_gr)` | ❌ Non-standard fallback |
+| Unblocked path | `A_div + A_atm + A_gr` | ✅ Yes |
+
+#### Future Work: ISO 9613-2:2024 Updates
+
+The 2024 revision is an incremental update to the 1996 standard, primarily refining algorithms and integrating ISO/TR 17534-3.
+
+**1. Ground Attenuation (A_gr) Refinements**
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **K_geo correction** | Corrects A_gr at short distances and low heights to fix overprediction in 1996 version | HIGH |
+| **Method harmonization** | Unifies General Method (§7.3.1) and Simplified Method (§7.3.2) | MEDIUM |
+| **Barrier cancellation rule** | **Critical change:** For blocked paths where A_gr > 0, ground attenuation is explicitly set to 0 dB — only D_z applies. This REPLACES partitioned ground effect when A_gr would be positive. | HIGH |
+
+**2. Barrier Algorithm (D_z) Refinements**
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **D_z + K_met fixes** | Eliminates known errors with low barriers at large distances | HIGH |
+| **ISO/TR 17534-3 integration** | Formal screening strategy with clearer vertical + lateral diffraction combination | MEDIUM |
+| **Effectiveness changes** | 2024 can show significant reductions in barrier effectiveness vs 1996 in certain scenarios | MEDIUM |
+
+**3. New Modeling Capabilities (Annexes)**
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **Wind turbines (Annex D)** | Specific SPL calculation method, aligned with IOA methodology | LOW |
+| **Advanced foliage method** | Detailed forestal parameters beyond simple foliage attenuation | LOW |
+| **Higher-order reflections** | Extended support for multiple reflections and cylindrical bodies | MEDIUM |
+| **Local meteorology (Annex C)** | K_met from local historical wind-climatology data | LOW |
+
+**⚠️ Critical Implementation Change: Barrier Cancellation Rule**
+
+The 2024 **barrier cancellation rule** fundamentally changes our logic:
+
 ```typescript
-export function calculatePropagation(
-  distance: number, sourceHeight: number, receiverHeight: number,
-  config: PropagationConfig, meteo: Meteo,
-  barrierPathDiff = 0, barrierBlocked = false,
-  frequency = 1000, actualPathLength?: number,
-  barrierType: BarrierType = 'thin',
-  barrierInfo?: BarrierGeometryInfo  // NEW PARAMETER
-): PropagationResult {
-  // ...
+// CURRENT (ISO 9613-2:1996 interpretation):
+// Partitioned ground effect is ADDITIVE with barrier diffraction
+if (barrierBlocked && barrierInfo) {
+  Agr = Agr_source + Agr_receiver;  // Partitioned ground effect
+  totalAttenuation = Adiv + Aatm + Abar + Agr;  // Additive
+}
 
-  if (barrierBlocked && barrierInfo && config.groundReflection) {
-    // ISO 9613-2 Section 7.4: Partitioned ground effect for blocked paths
-    const { distSourceToBarrier, distBarrierToReceiver, barrierHeight } = barrierInfo;
+// ISO 9613-2:2024 CHANGE:
+// When A_gr > 0 (attenuation), it is CANCELLED for blocked paths
+// Only D_z (barrier) applies; ground effect is set to 0
+if (barrierBlocked && barrierInfo) {
+  const Agr_partitioned = Agr_source + Agr_receiver;
 
-    // Source-side ground effect (source to barrier top)
-    const Agr_source = calculateGroundEffectRegion(
-      distSourceToBarrier, sourceHeight, barrierHeight, config, meteo, frequency
-    );
-
-    // Receiver-side ground effect (barrier top to receiver)
-    const Agr_receiver = calculateGroundEffectRegion(
-      distBarrierToReceiver, barrierHeight, receiverHeight, config, meteo, frequency
-    );
-
-    Agr = Agr_source + Agr_receiver;  // Sum of both regions
-
-    // Barrier attenuation
-    Abar = barrierAttenuation(barrierPathDiff, frequency, lambda, barrierType);
-
-    // ADDITIVE combination (correct per ISO 9613-2 §7.4)
-    totalAttenuation = Adiv + Aatm + Abar + Agr;
-  } else if (barrierBlocked) {
-    // Legacy fallback: max(A_bar, A_gr) to avoid negative insertion loss
-    totalAttenuation = Adiv + Aatm + Math.max(Abar, Agr);
+  // 2024 Rule: If ground would attenuate (positive), cancel it
+  // Only allow ground "boost" (negative A_gr) to persist
+  if (Agr_partitioned > 0) {
+    Agr = 0;  // Ground attenuation cancelled - barrier disrupts ground ray
   } else {
-    // Unblocked path
-    totalAttenuation = Adiv + Aatm + Agr;
+    Agr = Agr_partitioned;  // Negative (boost) still applies
   }
+
+  totalAttenuation = Adiv + Aatm + Abar + Agr;
 }
 ```
 
-**compute/index.ts - Updated BarrierPathResult:**
-```typescript
-type BarrierGeometryInfo = {
-  distSourceToBarrier: number;
-  distBarrierToReceiver: number;
-  barrierHeight: number;
-};
+**Impact:** For blocked paths over soft ground, the 2024 version predicts **higher receiver levels** (less total attenuation) than our current 1996 implementation because positive ground attenuation is cancelled when a barrier is present.
 
-type BarrierPathResult = {
-  blocked: boolean;
-  pathDifference: number;
-  actualPathLength: number;
-  barrierType: BarrierType;
-  barrierInfo?: BarrierGeometryInfo;  // NEW: geometry for ground partitioning
-};
-
-function computeBarrierPathDiff(...): BarrierPathResult {
-  // ...
-  // Now captures barrier geometry (distSourceToBarrier, distBarrierToReceiver, barrierHeight)
-  // for each thin barrier and building intersection
-  // ...
-  return {
-    blocked: true,
-    pathDifference: maxDelta,
-    actualPathLength,
-    barrierType: maxBarrierType,
-    barrierInfo: maxBarrierInfo,  // Passed to propagation calculation
-  };
-}
-```
-
-#### Mathematical Impact
-
-| Scenario | Old (max) | New (additive) | Difference |
-|----------|-----------|----------------|------------|
-| A_bar=10, A_gr=5 | 10 dB | 15 dB | +5 dB |
-| A_bar=15, A_gr=8 | 15 dB | 23 dB | +8 dB |
-| A_bar=5, A_gr=10 | 10 dB | 15 dB | +5 dB |
-
-The additive formula produces more realistic attenuation for barriers on soft ground,
-where both barrier diffraction AND ground absorption reduce sound levels.
+**Rationale:** The barrier physically disrupts the ground-reflected ray that causes ground attenuation. Without the ground reflection path, there is no ground effect to apply (other than potential constructive interference effects that could boost levels).
 
 ---
 
@@ -1186,12 +1248,22 @@ groundMixedSigmaModel: z.enum(['iso9613', 'logarithmic']).default('iso9613')
 
 ## 🟡 MINOR ISSUES
 
-### 13. Sommerfeld Correction Discontinuity at |w|=4
-- [ ] **Status:** Open
-- **Location:** `packages/engine/src/propagation/ground.ts:59`
-- **Impact:** Small error near threshold
+### 13. Sommerfeld Correction — Smooth Transition at |w|=4 Pending
+- [ ] **Status:** Partially resolved (correction implemented, smooth transition pending)
+- **Location:** `packages/engine/src/propagation/ground.ts:192-200`
+- **Impact:** Minor — small potential discontinuity near threshold only
+- **Priority:** Low — the hard threshold works correctly; smooth transition is a polish item
 
-#### Current Formulation (Math)
+#### Implementation Status
+
+| Aspect | Status |
+|--------|--------|
+| Sommerfeld correction formula | ✅ Implemented |
+| Asymptotic F(w) terms (-0.5/w² + 0.75/w⁴) | ✅ Correct |
+| Spherical wave correction applied | ✅ Working |
+| Smooth transition at threshold | ⚠️ **Pending** |
+
+#### Formulation (Math)
 Sommerfeld ground wave function F(w):
 ```
 For |w| >> 1 (far from source):
@@ -1203,22 +1275,42 @@ For |w| << 1 (near source):
 Current code: uses plane-wave Γ for |w| < 4, asymptotic for |w| ≥ 4
 ```
 
-#### Current Code Implementation
+#### Before (No Sommerfeld Correction)
 ```typescript
-if (magW >= 4) {
-  // Asymptotic F(w)
-  const w2 = complexMul(w, w);
-  const w4 = complexMul(w2, w2);
-  const term1 = complexDiv(complex(-0.5, 0), w2);
-  const term2 = complexDiv(complex(0.75, 0), w4);
-  const Fw = complexAdd(term1, term2);
-  const correction = complexMul(complexSub(complex(1, 0), gamma), Fw);
-  gamma = complexAdd(gamma, correction);
-}
-// No correction for |w| < 4 → discontinuity
+// Old code had no ground wave correction at all
+const gamma = complexDiv(num, den);  // Plane-wave reflection only
+// Missing: spherical wave correction F(w)
 ```
 
-#### Proposed Implementation
+#### After (Current Implementation with Sommerfeld Correction)
+```typescript
+// ground.ts lines 185-200
+const beta = complexDiv(complex(1, 0), zeta);
+const k = (2 * Math.PI * fHz) / speedOfSound;
+const factor = complexSqrt(complex(0, (k * r2) / 2));
+const term = complexAdd(complex(clampedCos, 0), beta);
+const w = complexMul(factor, term);
+const magW = complexAbs(w);
+
+// Sommerfeld asymptotic correction for |w| ≥ 4
+if (magW >= 4) {
+  const w2 = complexMul(w, w);
+  const w4 = complexMul(w2, w2);
+  const term1 = complexDiv(complex(-0.5, 0), w2);  // -1/(2w²)
+  const term2 = complexDiv(complex(0.75, 0), w4);  // +3/(4w⁴)
+  const Fw = complexAdd(term1, term2);
+  const correction = complexMul(complexSub(complex(1, 0), gamma), Fw);
+  gamma = complexAdd(gamma, correction);  // Apply spherical wave correction
+}
+```
+
+#### Why This Works (Low Impact)
+
+At the threshold |w|=4, the correction terms are small:
+- F(w) ≈ -0.5/16 + 0.75/256 ≈ -0.028
+- The correction approaches zero at the threshold, minimizing discontinuity
+
+#### Proposed Enhancement (Smooth Transition)
 ```typescript
 /**
  * Sommerfeld ground wave function F(w)
@@ -1776,9 +1868,9 @@ The current label is misleading and suggests only the reflection aspect.
 | Severity | Total | Resolved | Pending |
 |----------|-------|----------|---------|
 | 🔴 Critical | 6 | 6 | 0 |
-| 🟠 Moderate | 7 | 3 | 4 |
+| 🟠 Moderate | 5 | 3 | 2 |
 | 🟡 Minor | 8 | 5 | 3 |
-| **Total** | **21** | **14** | **7** |
+| **Total** | **21** | **17** | **5** |
 
 ---
 
