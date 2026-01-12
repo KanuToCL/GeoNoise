@@ -21,6 +21,7 @@ Updated version to 0.7.0 and created an impressive demo scene for first-time use
 | **Pre-placed Probe** | Probe positioned inside courtyard, auto-pinned on startup |
 | **Barrier Demo** | Noise barrier to the left of the source |
 | **Measure Grid** | Large grid covering the courtyard to show noise gradients |
+| **Measuring Tape Tool** | Added M button to dock for distance measurement tool |
 
 #### Demo Scene Layout
 
@@ -33,12 +34,23 @@ Updated version to 0.7.0 and created an impressive demo scene for first-time use
 | Probe | 1 | Auto-pinned on startup |
 | Receivers | 2 | Inside and outside courtyard |
 
+#### Measuring Tape Tool
+
+The measuring tape tool allows users to measure distances on the canvas:
+
+| Feature | Description |
+|---------|-------------|
+| **Dock Button** | M button added to dock toolbar after Grid (G) |
+| **Keyboard Shortcut** | Press M to activate |
+| **Usage** | Click to set start point, click again to lock measurement |
+| **Display** | Shows distance in meters with line connecting points |
+
 #### Files Modified
 
 | File | Changes |
 |------|---------|
 | `package.json` | Version 0.4.0 → 0.7.0 |
-| `apps/web/index.html` | About modal version updated to 0.7.0 |
+| `apps/web/index.html` | About modal version, added M button to dock |
 | `apps/web/src/main.ts` | New demo scene, auto-pin probe on init |
 
 ---
