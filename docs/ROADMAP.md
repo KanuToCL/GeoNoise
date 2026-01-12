@@ -1034,6 +1034,7 @@ The ray visualization container uses neumorphic raised styling:
 
 | Feature | Priority | Effort | Status |
 |---------|----------|--------|--------|
+| LaTeX equation rendering | High | Low | ✅ Complete |
 | Probe calculating indicator | High | Low | In Progress |
 | Expose maxReflections UI | Medium | Low | Planned |
 | Configurable diffraction models | Medium | High | Future |

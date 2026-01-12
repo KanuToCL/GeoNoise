@@ -22,6 +22,16 @@ import {
   type ProbeRequest,
   type ProbeResult,
 } from '@geonoise/engine';
+
+// KaTeX auto-render function (loaded from CDN)
+declare function renderMathInElement(
+  element: HTMLElement,
+  options?: {
+    delimiters?: Array<{ left: string; right: string; display: boolean }>;
+    throwOnError?: boolean;
+  }
+): void;
+
 import {
   panelId,
   MIN_LEVEL,
@@ -5006,11 +5016,13 @@ function wireSettingsPopover() {
       }
     });
 
-    // Open the slide popup
+// Open the slide popup
     if (slidePopup) {
       slidePopup.classList.add('is-open');
       slidePopup.setAttribute('aria-hidden', 'false');
       updateSlidePopupPosition();
+      // Re-render KaTeX equations in the visible panel
+      rerenderKatex(slidePopup);
     }
   };
 
@@ -5118,7 +5130,7 @@ function wireEquationCollapsibles() {
     const header = collapsible.querySelector('.equation-header') as HTMLDivElement | null;
     const content = collapsible.querySelector('.equation-content') as HTMLDivElement | null;
 
-    if (!header || !content) return;
+if (!header || !content) return;
 
     const toggle = () => {
       const isExpanded = collapsible.classList.contains('is-expanded');
@@ -5128,6 +5140,8 @@ function wireEquationCollapsibles() {
       } else {
         collapsible.classList.add('is-expanded');
         content.hidden = false;
+        // Re-render KaTeX in the expanded content
+        rerenderKatex(content);
       }
     };
 
@@ -5170,10 +5184,11 @@ function updateGroundModelEquation() {
   const model = propagationGroundModel?.value ?? 'twoRayPhasor';
 
   if (model === 'legacy') {
-    groundModelEquation.textContent = 'A_gr = A_s + A_r + A_m';
+    groundModelEquation.textContent = '$A_{gr} = A_s + A_r + A_m$';
   } else {
-    groundModelEquation.textContent = 'A_gr = -20·log₁₀|1 + Γ·(r₁/r₂)·e^(jk(r₂-r₁))|';
+    groundModelEquation.textContent = '$A_{gr} = -20\\log_{10}|1 + \\Gamma \\cdot (r_1/r_2) \\cdot e^{jk(r_2-r_1)}|$';
   }
+  rerenderKatex(groundModelEquation);
 }
 
 function updateSpreadingEquation() {
@@ -5186,10 +5201,11 @@ function updateSpreadingEquation() {
   const spreading = propagationSpreading?.value ?? 'spherical';
 
   if (spreading === 'cylindrical') {
-    mainEq.textContent = 'A_div = 10·log₁₀(d) + 10·log₁₀(2π)';
+    mainEq.textContent = '$A_{div} = 10\\log_{10}(d) + 10\\log_{10}(2\\pi)$';
   } else {
-    mainEq.textContent = 'A_div = 20·log₁₀(d) + 10·log₁₀(4π)';
+    mainEq.textContent = '$A_{div} = 20\\log_{10}(d) + 10\\log_{10}(4\\pi)$';
   }
+  rerenderKatex(mainEq);
 }
 
 function updateImpedanceEquation() {
@@ -5197,10 +5213,11 @@ function updateImpedanceEquation() {
   const model = probeImpedanceModel?.value ?? 'delanyBazleyMiki';
 
   if (model === 'delanyBazley') {
-    impedanceEquation.textContent = 'Z_n = 1 + 9.08(f/σ)^(-0.75) - j·11.9(f/σ)^(-0.73)';
+    impedanceEquation.textContent = '$Z_n = 1 + 9.08(f/\\sigma)^{-0.75} - j \\cdot 11.9(f/\\sigma)^{-0.73}$';
   } else {
-    impedanceEquation.textContent = 'Z_n = 1 + 9.08(f/σ)^(-0.75) - j·11.9(f/σ)^(-0.73)';
+    impedanceEquation.textContent = '$Z_n = 1 + 9.08(f/\\sigma)^{-0.75} - j \\cdot 11.9(f/\\sigma)^{-0.73}$';
   }
+  rerenderKatex(impedanceEquation);
 }
 
 function updateMixedInterpEquation() {
@@ -5209,10 +5226,11 @@ function updateMixedInterpEquation() {
   const model = propagationGroundMixedSigmaModel?.value ?? 'iso9613';
 
   if (model === 'logarithmic') {
-    mixedInterpEquation.textContent = 'σ_eff = σ_soft^G × σ_hard^(1-G)';
+    mixedInterpEquation.textContent = '$\\sigma_{eff} = \\sigma_{soft}^G \\times \\sigma_{hard}^{1-G}$';
   } else {
-    mixedInterpEquation.textContent = 'σ_eff = σ_soft / G';
+    mixedInterpEquation.textContent = '$\\sigma_{eff} = \\sigma_{soft} / G$';
   }
+  rerenderKatex(mixedInterpEquation);
 }
 
 function updateSideDiffractionEquation() {
@@ -5221,10 +5239,11 @@ function updateSideDiffractionEquation() {
   const mode = propagationBarrierSideDiffraction?.value ?? 'auto';
 
   if (mode === 'off') {
-    sideDiffractionEquation.textContent = 'δ = A + B - d_direct';
+    sideDiffractionEquation.textContent = '$\\delta = A + B - d_{direct}$';
   } else {
-    sideDiffractionEquation.textContent = 'δ = min(δ_top, δ_left, δ_right)';
+    sideDiffractionEquation.textContent = '$\\delta = \\min(\\delta_{top}, \\delta_{left}, \\delta_{right})$';
   }
+  rerenderKatex(sideDiffractionEquation);
 }
 
 function updateAtmAbsorptionEquation() {
@@ -5232,13 +5251,43 @@ function updateAtmAbsorptionEquation() {
   if (!atmAbsorptionEquation) return;
   const model = propagationAbsorption?.value ?? 'iso9613';
 
-  if (model === 'none') {
-    atmAbsorptionEquation.textContent = 'A_atm = 0';
+if (model === 'none') {
+    atmAbsorptionEquation.textContent = '$A_{atm} = 0$';
   } else if (model === 'simple') {
-    atmAbsorptionEquation.textContent = 'A_atm = α(f) · d / 1000';
+    atmAbsorptionEquation.textContent = '$A_{atm} = \\alpha(f) \\cdot d / 1000$';
   } else {
-    atmAbsorptionEquation.textContent = 'A_atm = α(f,T,RH,p) · d / 1000';
+    atmAbsorptionEquation.textContent = '$A_{atm} = \\alpha(f, T, RH, p) \\cdot d / 1000$';
   }
+  rerenderKatex(atmAbsorptionEquation);
+}
+
+/**
+ * Re-render KaTeX for a specific element after content change.
+ * Uses the global renderMathInElement from KaTeX auto-render.
+ */
+function rerenderKatex(element: HTMLElement) {
+  if (typeof renderMathInElement === 'function') {
+    renderMathInElement(element, {
+      delimiters: [
+        { left: '$$', right: '$$', display: true },
+        { left: '$', right: '$', display: false },
+      ],
+      throwOnError: false,
+    });
+  }
+}
+
+/**
+ * Update all equation displays to match current dropdown values.
+ * Call this after programmatically changing dropdown values.
+ */
+function updateAllEquations() {
+  updateGroundModelEquation();
+  updateSpreadingEquation();
+  updateImpedanceEquation();
+  updateMixedInterpEquation();
+  updateSideDiffractionEquation();
+  updateAtmAbsorptionEquation();
 }
 
 // Wire up Probe Engine controls (future: connect to probe config)
@@ -7432,11 +7481,10 @@ function wireProbePanel() {
 
       input.addEventListener('blur', finishEditing);
       input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter') finishEditing();
+        if (e.key === 'Escape') {
+          input.value = currentName;
           finishEditing();
-        } else if (e.key === 'Escape') {
-          input.remove();
-          probeTitle.style.display = '';
         }
       });
     });
@@ -7761,6 +7809,16 @@ function openAbout() {
   aboutModal.classList.add('is-open');
   aboutModal.setAttribute('aria-hidden', 'false');
   aboutClose?.focus();
+  // Re-render KaTeX equations now that modal is visible
+  if (typeof renderMathInElement === 'function') {
+    renderMathInElement(aboutModal, {
+      delimiters: [
+        { left: '$$', right: '$$', display: true },
+        { left: '$', right: '$', display: false },
+      ],
+      throwOnError: false,
+    });
+  }
 }
 
 function closeAbout() {
@@ -7970,31 +8028,6 @@ function wirePropagationControls() {
     computeScene();
   });
 
-  propagationGroundType?.addEventListener('change', () => {
-    updatePropagationConfig({ groundType: propagationGroundType.value as PropagationConfig['groundType'] });
-    updatePropagationControls();
-    markDirty();
-    computeScene();
-  });
-
-  propagationGroundMixedSigmaModel?.addEventListener('change', () => {
-    updatePropagationConfig({ groundMixedSigmaModel: propagationGroundMixedSigmaModel.value as PropagationConfig['groundMixedSigmaModel'] });
-    markDirty();
-    computeScene();
-  });
-
-  propagationMaxDistance?.addEventListener('change', () => {
-    const next = Number(propagationMaxDistance.value);
-    if (!Number.isFinite(next) || next <= 0) {
-      updatePropagationControls();
-      return;
-    }
-    updatePropagationConfig({ maxDistance: Math.max(1, Math.round(next)) });
-    updatePropagationControls();
-    markDirty();
-    computeScene();
-  });
-
   propagationBarrierSideDiffraction?.addEventListener('change', () => {
     updatePropagationConfig({ barrierSideDiffraction: propagationBarrierSideDiffraction.value as PropagationConfig['barrierSideDiffraction'] });
     markDirty();
@@ -8095,6 +8128,13 @@ function wirePropagationControls() {
 
     // Update all controls UI
     updatePropagationControls();
+
+    // Update all equation displays to match new dropdown values
+    updateAllEquations();
+
+    // Recalculate scene with new settings
+    markDirty();
+    computeScene();
   }
 
   function getCurrentSettingsAsProfile(): ProfileSettings {

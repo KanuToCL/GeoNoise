@@ -3444,6 +3444,44 @@ textarea:focus-visible,
   letter-spacing: 0.5px;
 }
 
+/* KaTeX equation styling */
+.formula-highlight.formula-katex,
+.equation-pill.equation-katex {
+  font-family: inherit; /* Let KaTeX handle fonts */
+  letter-spacing: normal;
+}
+
+.formula-highlight.formula-katex .katex,
+.equation-pill.equation-katex .katex {
+  font-size: 1.1em;
+  color: var(--text);
+}
+
+/* Inline KaTeX in text */
+.spec-text .katex,
+.spec-list .katex,
+.collapsible-subtitle .katex {
+  font-size: 0.95em;
+}
+
+/* Collapsible subtitle KaTeX styling */
+.collapsible-subtitle .katex {
+  color: var(--text-muted);
+}
+
+/* Ensure KaTeX display equations don't overflow */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0;
+  margin: 0;
+}
+
+/* Style for KaTeX in equation pills */
+.equation-pill .katex {
+  font-size: 1em;
+}
+
 /* Diagram container */
 .physics-diagram {
   padding: 14px;

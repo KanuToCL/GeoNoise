@@ -6,6 +6,64 @@ This document contains the implementation history of completed features. For pla
 
 ## 2026-01-12
 
+### LaTeX Equation Rendering with KaTeX
+
+**Status:** ✅ Complete
+
+Added KaTeX library integration for beautiful LaTeX-style equation rendering throughout the application.
+
+#### Features
+
+| Feature | Description |
+|---------|-------------|
+| **KaTeX CDN Integration** | Added KaTeX 0.16.9 via CDN with auto-render extension |
+| **Display & Inline Math** | `$$...$$` for display equations, `$...$` for inline |
+| **Collapsible Subtitles** | Equations rendered in section subtitle previews |
+| **CSS Styling** | Custom styling for KaTeX within neumorphic UI |
+
+#### Equations Converted to LaTeX
+
+| Section | Equation |
+|---------|----------|
+| Main formula | `$L_p(f) = L_W(f) - A_{div} - A_{atm}(f) - A_{gr}(f) - A_{bar}(f)$` |
+| Geometric Divergence | `$A = 20\log_{10}(d) + 10\log_{10}(4\pi)$` |
+| Atmospheric Absorption | `$A_{atm} = \alpha(f) \cdot d / 1000$` |
+| Ground Effect | `$A_{gr} = A_s + A_r + A_m$` |
+| Barrier Diffraction | `$A_{bar} = 10\log_{10}(3 + 20N)$` |
+| Coherent Summation | `$p_{total} = \sum_i p_i \cdot e^{j\phi_i}$` |
+| Wall Reflection | `$|\Gamma| \approx 0.9$` |
+| Two-Ray Model | `$r_1 = \sqrt{d^2 + (h_s - h_r)^2}$` |
+| Delany-Bazley | `$Z_n = 1 + 9.08(f/\sigma)^{-0.75} + j \cdot 11.9(f/\sigma)^{-0.73}$` |
+| Coherent Ground Effect | `$A_{gr} = -20\log_{10}|1 + \Gamma \cdot (r_1/r_2) \cdot e^{jk(r_2 - r_1)}|$` |
+
+#### Bug Fixes
+
+| Fix | Description |
+|-----|-------------|
+| **Profile equation updates** | `applyProfile()` now calls `updateAllEquations()` to refresh equations when profile changes |
+| **Profile recalculation** | `applyProfile()` now calls `markDirty()` and `computeScene()` to recalculate with new settings |
+| **Corrupted event listener** | Fixed `propagationGroundModel` event listener that had malformed code merged in |
+| **Missing probeClose listener** | Restored `probeClose` button click handler that was accidentally removed |
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `apps/web/index.html` | Added KaTeX CDN links, converted all equations to LaTeX notation |
+| `apps/web/src/style.css` | Added `.formula-katex` and `.equation-katex` CSS classes |
+| `apps/web/src/main.ts` | Added `rerenderKatex()` helper, re-render on modal/panel open and collapsible expand, converted dynamic equation updates to LaTeX, fixed profile application bugs |
+
+#### Technical Details
+
+- **Auto-render on page load**: Uses KaTeX auto-render extension
+- **Re-render on modal open**: `openAbout()` calls `rerenderKatex()` for hidden content
+- **Re-render on settings panel open**: `showPanel()` calls `rerenderKatex()` when slide panel opens
+- **Re-render on collapsible expand**: Equation collapsibles trigger `rerenderKatex()` when expanded
+- **Dynamic equation updates**: All `update*Equation()` functions now use LaTeX syntax and call `rerenderKatex()`
+- **Profile switching**: Switching profiles now properly updates equation displays and recalculates the scene
+
+---
+
 ### Calculation Profile Selector
 
 **Status:** ✅ Complete

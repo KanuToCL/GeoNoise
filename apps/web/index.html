@@ -105,9 +105,20 @@
       ]
     }
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+    <!-- KaTeX for LaTeX equation rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" crossorigin="anonymous"
+      onload="renderMathInElement(document.body, {
+        delimiters: [
+          {left: '$$', right: '$$', display: true},
+          {left: '$', right: '$', display: false}
+        ],
+        throwOnError: false
+      });"></script>
     <link rel="stylesheet" href="./styles/theme.css" />
     <link rel="stylesheet" href="./style.css" />
     <script type="importmap">
@@ -159,7 +170,7 @@
                 ⌘+D: Duplicate selected<br>
                 Delete/Backspace: Remove selected<br>
                 Escape: Deselect / Cancel<br><br>
-                <strong>Tools</strong><br>
+<strong>Tools</strong><br>
                 V: Select &nbsp; S: Source &nbsp; R: Receiver<br>
                 B: Barrier &nbsp; H: Building &nbsp; G: Grid<br>
                 P: Probe
@@ -255,7 +266,7 @@
                         <option value="Z">Z-weighting (dBZ / Linear)</option>
                       </select>
                     </label>
-                    <label class="property-row property-row-stack">
+<label class="property-row property-row-stack">
                       <span>Display Band</span>
                       <select class="ui-inset" id="displayBand">
                         <option value="overall" selected>Overall (Sum)</option>
@@ -337,7 +348,7 @@
                         <span>equation</span>
                       </div>
                       <div class="equation-content" hidden>
-                        <div class="equation-main" id="atmAbsorptionEquation">A_atm = α(f) · d / 1000</div>
+                        <div class="equation-main" id="atmAbsorptionEquation">$A_{atm} = \alpha(f) \cdot d / 1000$</div>
                       </div>
                     </div>
                   </div>
@@ -377,7 +388,7 @@
                         <span>equation</span>
                       </div>
 <div class="equation-content" hidden>
-                        <div class="equation-main">A_div = 20·log₁₀(d) + 10·log₁₀(4π)</div>
+                        <div class="equation-main">$A_{div} = 20\log_{10}(d) + 10\log_{10}(4\pi)$</div>
                       </div>
                     </div>
                     <label class="property-row property-row-stack">
@@ -411,7 +422,7 @@
                         <span>equation</span>
                       </div>
                       <div class="equation-content" hidden>
-                        <div class="equation-main" id="groundModelEquation">A_gr = -20·log₁₀|1 + Γ·(r₁/r₂)·e^(jk(r₂-r₁))|</div>
+                        <div class="equation-main" id="groundModelEquation">$A_{gr} = -20\log_{10}|1 + \Gamma \cdot (r_1/r_2) \cdot e^{jk(r_2-r_1)}|$</div>
                       </div>
                     </div>
 <label class="property-row property-row-stack" id="propagationGroundMixedSigmaModelRow">
@@ -427,7 +438,7 @@
                         <span>equation</span>
                       </div>
                       <div class="equation-content" hidden>
-                        <div class="equation-main" id="mixedInterpEquation">σ_eff = σ_soft / G</div>
+                        <div class="equation-main" id="mixedInterpEquation">$\sigma_{eff} = \sigma_{soft} / G$</div>
                       </div>
                     </div>
 <label class="property-row property-row-stack">
@@ -444,7 +455,7 @@
                         <span>equation</span>
                       </div>
                       <div class="equation-content" hidden>
-                        <div class="equation-main" id="sideDiffractionEquation">δ = min(δ_top, δ_left, δ_right)</div>
+                        <div class="equation-main" id="sideDiffractionEquation">$\delta = \min(\delta_{top}, \delta_{left}, \delta_{right})$</div>
                       </div>
                     </div>
                   </div>
@@ -473,7 +484,7 @@
                           <span>equation</span>
                         </div>
                         <div class="equation-content" hidden>
-                          <div class="equation-main">p = Σ pᵢ · e^(j·φᵢ)</div>
+                          <div class="equation-main">$p = \sum_i p_i \cdot e^{j \phi_i}$</div>
                         </div>
                       </div>
                     </div>
@@ -489,7 +500,7 @@
                           <span>equation</span>
                         </div>
                         <div class="equation-content" hidden>
-                          <div class="equation-main">Γ_sph = Γ_plane + (1 - Γ_plane)·F(w)</div>
+                          <div class="equation-main">$\Gamma_{sph} = \Gamma_{plane} + (1 - \Gamma_{plane}) \cdot F(w)$</div>
                         </div>
                       </div>
                       <label class="property-row property-row-stack">
@@ -505,7 +516,7 @@
                           <span>equation</span>
                         </div>
                         <div class="equation-content" hidden>
-                          <div class="equation-main" id="impedanceEquation">Z_n = 1 + 9.08(f/σ)^(-0.75) - j·11.9(f/σ)^(-0.73)</div>
+                          <div class="equation-main" id="impedanceEquation">$Z_n = 1 + 9.08(f/\sigma)^{-0.75} - j \cdot 11.9(f/\sigma)^{-0.73}$</div>
                         </div>
                       </div>
 </div>
@@ -884,8 +895,8 @@
               GeoNoise implements ISO 9613-based outdoor sound propagation with coherent phasor summation
               for multi-path interference modeling. All calculations are performed per octave band (63 Hz – 16 kHz).
             </p>
-            <div class="formula-highlight">
-              L<sub>p</sub>(f) = L<sub>W</sub>(f) - A<sub>div</sub> - A<sub>atm</sub>(f) - A<sub>gr</sub>(f) - A<sub>bar</sub>(f)
+<div class="formula-highlight formula-katex">
+              $$L_p(f) = L_W(f) - A_{div} - A_{atm}(f) - A_{gr}(f) - A_{bar}(f)$$
             </div>
           </div>
 
@@ -901,7 +912,7 @@
                 <div class="collapsible-header-left">
                   <div class="collapsible-title-group">
                     <span class="collapsible-title">geometric divergence (A<sub>div</sub>)</span>
-                    <span class="collapsible-subtitle">Spherical spreading: A = 20·log₁₀(d) + 10·log₁₀(4π)</span>
+                    <span class="collapsible-subtitle">Spherical spreading: $A = 20\log_{10}(d) + 10\log_{10}(4\pi)$</span>
                   </div>
                 </div>
                 <div class="collapsible-chevron">▼</div>
@@ -910,7 +921,7 @@
 <div class="collapsible-body">
                 <div class="collapsible-content">
                   <p class="spec-text">Point source spherical spreading models how sound energy spreads over an expanding sphere.</p>
-                  <div class="formula-highlight">A<sub>div</sub> = 20·log₁₀(d) + 10·log₁₀(4π)</div>
+                  <div class="formula-highlight formula-katex">$$A_{div} = 20\log_{10}(d) + 10\log_{10}(4\pi)$$</div>
                   <p class="spec-text">where d = 3D distance (m), 10·log₁₀(4π) ≈ 10.99 dB for full spherical radiation.</p>
                   <p class="spec-text"><strong>Derivation:</strong> Power flux Φ = W/(4πr²), therefore L<sub>p</sub> = L<sub>W</sub> - 10·log₁₀(4πr²)</p>
                   <p class="spec-text" style="margin-top: 12px;"><strong>Cylindrical spreading</strong> (line sources): Uses 2π instead of 4π, as energy spreads over a cylinder's circumference rather than a sphere's surface area. Formula: A<sub>div</sub> = 10·log₁₀(d) + 10·log₁₀(2π), where 10·log₁₀(2π) ≈ 7.98 dB.</p>
@@ -924,7 +935,7 @@
                 <div class="collapsible-header-left">
                   <div class="collapsible-title-group">
                     <span class="collapsible-title">atmospheric absorption (A<sub>atm</sub>)</span>
-                    <span class="collapsible-subtitle">ISO 9613-1 frequency-dependent air absorption</span>
+                    <span class="collapsible-subtitle">ISO 9613-1: $A_{atm} = \alpha(f) \cdot d / 1000$</span>
                   </div>
                 </div>
                 <span class="standards-badge standards-badge--iso">ISO 9613-1</span>
@@ -934,13 +945,13 @@
               <div class="collapsible-body">
                 <div class="collapsible-content">
                   <p class="spec-text">Air absorbs sound energy through viscous, thermal, and molecular relaxation processes.</p>
-                    <div class="formula-highlight">A<sub>atm</sub> = α(f) · d / 1000 dB</div>
+                    <div class="formula-highlight formula-katex">$$A_{atm} = \alpha(f) \cdot \frac{d}{1000} \text{ dB}$$</div>
 
                     <p class="spec-text" style="margin-top: 12px;"><strong>ISO 9613-1:</strong> Calculates α from temperature, humidity, and pressure.</p>
                   <div class="equation-pill" style="font-size: 12px;">
                     α = α<sub>cl</sub> + (b<sub>N</sub>·f²)/(f<sub>r,N</sub> + f²/f<sub>r,N</sub>) + (b<sub>O</sub>·f²)/(f<sub>r,O</sub> + f²/f<sub>r,O</sub>)
                   </div>
-                  <p class="spec-text">The coefficient α combines classical losses with N₂ and O₂ molecular relaxation.</p>
+                  <p class="spec-text">The coefficient $\alpha$ combines classical losses with N₂ and O₂ molecular relaxation.</p>
 
                   <p class="spec-text" style="margin-top: 12px;"><strong>Simple:</strong> Uses the lookup table below at standard conditions (20°C, 70% RH).</p>
                   <table class="physics-table">
@@ -958,7 +969,7 @@
                 <div class="collapsible-header-left">
                   <div class="collapsible-title-group">
                     <span class="collapsible-title">ground effect (A<sub>gr</sub>)</span>
-                    <span class="collapsible-subtitle">ISO 9613-2 regions or two-ray interference model</span>
+                    <span class="collapsible-subtitle">$A_{gr} = A_s + A_r + A_m$ or two-ray interference</span>
                   </div>
                 </div>
                 <span class="standards-badge standards-badge--iso">ISO 9613-2</span>
@@ -977,8 +988,8 @@
   │  region  │      region        │  region  │
   └──────────┴────────────────────┴──────────┘
        dp,s         d - dp,s - dp,r      dp,r</pre>
-                  <div class="formula-highlight">
-                    A<sub>gr</sub> = A<sub>s</sub> + A<sub>r</sub> + A<sub>m</sub>
+<div class="formula-highlight formula-katex">
+                    $$A_{gr} = A_s + A_r + A_m$$
                   </div>
                   <p class="spec-text">where:</p>
                   <ul class="spec-list" style="margin-left: 20px;">
@@ -1002,8 +1013,8 @@
 ──────┴──────●─────────────/──────  Ground (z=0)
              reflection point</pre>
                   <p class="spec-text"><strong>Path lengths:</strong></p>
-                  <div class="formula-highlight" style="font-size: 13px;">
-                    r₁ = √(d² + (h<sub>s</sub> - h<sub>r</sub>)²) &nbsp;&nbsp;|&nbsp;&nbsp; r₂ = √(d² + (h<sub>s</sub> + h<sub>r</sub>)²)
+<div class="formula-highlight formula-katex" style="font-size: 13px;">
+                    $$r_1 = \sqrt{d^2 + (h_s - h_r)^2} \quad | \quad r_2 = \sqrt{d^2 + (h_s + h_r)^2}$$
                   </div>
                   <p class="spec-text"><strong>Delany-Bazley normalized impedance:</strong></p>
                   <div class="equation-pill" style="font-size: 12px;">
@@ -1011,8 +1022,8 @@
                   </div>
                   <p class="spec-text">where σ = flow resistivity (hard: 200,000, soft: 20,000 Pa·s/m²)</p>
                   <p class="spec-text"><strong>Coherent ground effect:</strong></p>
-                  <div class="formula-highlight">
-                    A<sub>gr</sub> = -20·log₁₀|1 + γ·(r₁/r₂)·e<sup>jk(r₂-r₁)</sup>|
+<div class="formula-highlight formula-katex">
+                    $$A_{gr} = -20\log_{10}\left|1 + \Gamma \cdot \frac{r_1}{r_2} \cdot e^{jk(r_2 - r_1)}\right|$$
                   </div>
                   <p class="spec-text">This captures constructive/destructive interference (ground dip phenomenon).</p>
 
@@ -1035,7 +1046,7 @@
                 <div class="collapsible-header-left">
                   <div class="collapsible-title-group">
                     <span class="collapsible-title">barrier diffraction</span>
-                    <span class="collapsible-subtitle">Maekawa thin-screen model with side diffraction</span>
+                    <span class="collapsible-subtitle">Maekawa: $A_{bar} = 10\log_{10}(3 + 20N)$</span>
                   </div>
                 </div>
                 <span class="standards-badge standards-badge--empirical">Maekawa</span>
@@ -1053,9 +1064,9 @@
        A ──→ ● ←── B
              │
       ═══════╧══════   Barrier</pre>
-                  <div class="formula-highlight">δ = A + B - d &nbsp;&nbsp;|&nbsp;&nbsp; N = 2δf/c</div>
+                  <div class="formula-highlight formula-katex">$$\delta = A + B - d \quad | \quad N = \frac{2\delta f}{c}$$</div>
                   <p class="spec-text"><strong>Insertion loss:</strong></p>
-                  <div class="formula-highlight">A<sub>bar</sub> = 10·log₁₀(3 + 20·N) &nbsp;&nbsp; capped at 20-25 dB</div>
+                  <div class="formula-highlight formula-katex">$$A_{bar} = 10\log_{10}(3 + 20N) \quad \text{capped at 20-25 dB}$$</div>
 
                   <p class="spec-text" style="margin-top: 16px;"><strong>Side Diffraction (horizontal):</strong></p>
                   <p class="spec-text">Sound can also bend around the ends of finite-length barriers:</p>
@@ -1066,7 +1077,7 @@
      ↑                  ↑
   S ─┘                  └─ R
 (around left)      (around right)</pre>
-                  <p class="spec-text">Path difference for side: δ = |S→Edge| + |Edge→R| - |S→R|</p>
+                  <p class="spec-text">Path difference for side: $\delta = |S \to Edge| + |Edge \to R| - |S \to R|$</p>
                   <p class="spec-text">The path with <strong>minimum δ</strong> (over-top or around sides) determines the effective attenuation.</p>
 
                   <p class="spec-text" style="margin-top: 16px;"><strong>Side Diffraction Toggle:</strong></p>
@@ -1076,10 +1087,23 @@
                     <tr><td><strong>Auto</strong></td><td>Enable side diffraction for barriers &lt; 50m (recommended default).</td></tr>
                     <tr><td><strong>On</strong></td><td>Always compute side diffraction for all barriers.</td></tr>
                   </table>
-                  <p class="spec-text" style="margin-top: 12px;"><em>Low frequencies diffract easily → less attenuation. High frequencies are blocked effectively.</em></p>
+<p class="spec-text" style="margin-top: 12px;"><em>Low frequencies diffract easily → less attenuation. High frequencies are blocked effectively.</em></p>
+                  </div>
                 </div>
               </div>
-<div class="collapsible-divider"></div>
+
+            <!-- Wall Reflections -->
+            <div class="collapsible-section" data-collapsible>
+              <div class="collapsible-header" tabindex="0" role="button" aria-expanded="false">
+                <div class="collapsible-header-left">
+                  <div class="collapsible-title-group">
+                    <span class="collapsible-title">wall reflections</span>
+                    <span class="collapsible-subtitle">Image source method: $|\Gamma| \approx 0.9$</span>
+                  </div>
+                </div>
+                <div class="collapsible-chevron">▼</div>
+              </div>
+              <div class="collapsible-divider"></div>
               <div class="collapsible-body">
                 <div class="collapsible-content">
                   <p class="spec-text">Reflections from building walls computed using virtual image sources:</p>
@@ -1089,7 +1113,7 @@
     \      │      /
      \     │     /
       S'   │   (S' = mirror of S across wall)</pre>
-                  <div class="formula-highlight">|Γ| ≈ 0.9 per reflection (10% absorption)</div>
+                  <div class="formula-highlight formula-katex">$$|\Gamma| \approx 0.9 \text{ per reflection (10% absorption)}$$</div>
                   <p class="spec-text">Reflections are validated for line-of-sight and checked against other buildings.</p>
                 </div>
               </div>
@@ -1101,7 +1125,7 @@
                 <div class="collapsible-header-left">
                   <div class="collapsible-title-group">
                     <span class="collapsible-title">coherent phasor summation</span>
-                    <span class="collapsible-subtitle">Phase-accurate multi-path interference</span>
+                    <span class="collapsible-subtitle">$p_{total} = \sum_i p_i \cdot e^{j\phi_i}$</span>
                   </div>
                 </div>
                 <div class="collapsible-chevron">▼</div>
@@ -1110,9 +1134,9 @@
               <div class="collapsible-body">
                 <div class="collapsible-content">
                   <p class="spec-text">Multiple paths from the <strong>same source</strong> are summed with phase (capturing interference):</p>
-                  <div class="formula-highlight">
-                    p<sub>total</sub> = Σᵢ pᵢ·e<sup>jφᵢ</sup> &nbsp;&nbsp; where φᵢ = -k·dᵢ + φ<sub>reflection</sub>
-                  </div>
+<div class="formula-highlight formula-katex">
+                      $$p_{total} = \sum_i p_i \cdot e^{j\phi_i} \quad \text{where } \phi_i = -k \cdot d_i + \phi_{reflection}$$
+                    </div>
                   <p class="spec-text">This captures:</p>
                   <ul class="spec-list">
                     <li>Constructive interference (paths in-phase → +6 dB)</li>
@@ -1121,7 +1145,7 @@
                     <li>Comb filtering from wall reflections</li>
                   </ul>
                   <p class="spec-text" style="margin-top: 10px;">Multiple <strong>sources</strong> are summed energetically (incoherent):</p>
-                  <div class="formula-highlight">L<sub>p,total</sub> = 10·log₁₀[ Σⱼ 10<sup>(Lp,j/10)</sup> ]</div>
+                  <div class="formula-highlight formula-katex">$$L_{p,total} = 10\log_{10}\left[ \sum_j 10^{L_{p,j}/10} \right]$$</div>
                 </div>
               </div>
             </div>
