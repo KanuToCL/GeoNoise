@@ -376,17 +376,47 @@ export function traceWallPaths(
     const reflectionPoint2D = findReflectionPoint(r2d, img2d, imageSource.surface);
     if (!reflectionPoint2D) continue;
 
-    // Check if reflection point is on the segment
+    // Check if reflection point is on the segment (2D check)
     const seg = imageSource.surface.segment;
     const segLen = distance2D(seg.p1, seg.p2);
     const d1 = distance2D(reflectionPoint2D, seg.p1);
     const d2 = distance2D(reflectionPoint2D, seg.p2);
     if (d1 > segLen + EPSILON || d2 > segLen + EPSILON) continue;
 
-    // 3D reflection point (at surface height or interpolated)
+    // Issue #9 Fix: Calculate reflection Z geometrically from image source method
+    //
+    // The reflection point lies on the line from receiver to image source.
+    // We calculate parameter t along this line where it intersects the wall plane,
+    // then interpolate Z accordingly.
+    //
+    // Old (wrong): z = min(wallHeight, max(source.z, receiver.z))
+    //   - Arbitrary clamping, doesn't follow actual ray geometry
+    //   - Could put reflection point "in space" above the wall
+    //
+    // New (correct): z = receiver.z + t * (imageSource.z - receiver.z)
+    //   - Follows the actual ray path from receiver through reflection to image source
+    //   - Validates that 0 ≤ z ≤ wallHeight (reflection is ON the wall)
+    const dx = imageSource.position.x - receiver.x;
+    const dy = imageSource.position.y - receiver.y;
+    const rx = reflectionPoint2D.x - receiver.x;
+    const ry = reflectionPoint2D.y - receiver.y;
+
+    // Parameter t = how far along the R→S' line the reflection point is (normalized)
+    const lineLenSq = dx * dx + dy * dy;
+    const reflDistSq = rx * rx + ry * ry;
+    const t = lineLenSq > EPSILON * EPSILON ? Math.sqrt(reflDistSq / lineLenSq) : 0.5;
+
+    // Interpolate Z coordinate along the receiver → image source line
+    const reflectionZ = receiver.z + t * (imageSource.position.z - receiver.z);
+
+    // Validate: reflection point must be ON the wall (0 ≤ z ≤ wall height)
+    // If z < 0: ray would hit below ground (impossible)
+    // If z > wallHeight: ray would miss the wall entirely (go over it)
+    if (reflectionZ < 0 || reflectionZ > imageSource.surface.height) continue;
+
     const reflectionPoint3D: Point3D = {
       ...reflectionPoint2D,
-      z: Math.min(imageSource.surface.height, Math.max(source.z, receiver.z)),
+      z: reflectionZ,
     };
 
     // Calculate path distances
@@ -402,8 +432,8 @@ export function traceWallPaths(
       isPathBlocked(s2d, reflectionPoint2D, surfacesToCheck) ||
       isPathBlocked(reflectionPoint2D, r2d, surfacesToCheck);
 
-    // Check height clearance (simple model - reflection point must be below surface top)
-    const heightValid = reflectionPoint3D.z <= imageSource.surface.height;
+    // Height validation is now done above (skip paths that miss the wall)
+    const heightValid = true;
 
     paths.push({
       type: 'wall',

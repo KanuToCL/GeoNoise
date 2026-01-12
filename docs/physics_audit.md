@@ -1,7 +1,7 @@
 # Physics Engine Audit
 
 > **Audit Date:** 2025-01-08 (Updated: 2025-01-12)
-> **Status:** 17 resolved, 5 pending
+> **Status:** 18 resolved, 4 pending
 > **Auditor:** Physics review session
 
 This document tracks identified issues in the GeoNoise physics engine, organized by severity. Each issue includes the current formulation, current code implementation, and proposed fix.
@@ -48,7 +48,7 @@ The 2024 update is not a radical departure but a significant **"bug fix" and mod
 
 ## Quick Status Summary
 
-### ✅ Resolved (17)
+### ✅ Resolved (18)
 - **#1** Spreading Loss Formula Constant Ambiguity — *Fixed with exact constants + documentation*
 - **#2** Two-Ray Ground Model Sign Inconsistency — *Resolved by design (see [Calculation Profile Presets](./ROADMAP.md#calculation-profile-presets))*
 - **#2b** computeProbeCoherent Double-Counts Direct Path — *Fixed: paths now processed uniformly*
@@ -57,6 +57,7 @@ The 2024 update is not a radical departure but a significant **"bug fix" and mod
 - **#5** Side Diffraction Geometry Oversimplified — *Fixed: horizontal diffraction at ground level*
 - **#5 (probeWorker)** Simplified Atmospheric Absorption in probeWorker — *Fixed: now respects UI model selection*
 - **#6** Delany-Bazley Extrapolation Outside Valid Range — *Fixed: bounds checking + Miki (1990) extension*
+- **#9** Wall Reflection Height Geometry Incorrect — *Fixed: geometric Z interpolation from image source method with wall bounds validation*
 - **#10** "Simple" Atmospheric Absorption Model Incorrectly Formulated — *Fixed: replaced buggy formula with lookup table*
 - **#11** Diffraction Only Traced When Direct Path Blocked — *Fixed: now traces diffraction for nearby barriers even when direct path is unblocked (for coherent summation accuracy)*
 - **#12** Mixed Ground Sigma Calculation Arbitrary — *Fixed: user-selectable ISO 9613-2 or logarithmic interpolation*
@@ -70,9 +71,8 @@ The 2024 update is not a radical departure but a significant **"bug fix" and mod
 ### 🔴 Critical - Pending (0)
 *No critical issues pending*
 
-### 🟠 Moderate - Pending (2)
+### 🟠 Moderate - Pending (1)
 - **#7** Ground Reflection Assumes Flat Ground (z=0)
-- **#9** Wall Reflection Height Geometry Incorrect
 
 ### 🟡 Minor - Pending (3)
 - **#13** Sommerfeld Correction Smooth Transition at |w|=4 — Sommerfeld IS implemented and working; smooth transition at threshold pending (low priority)
@@ -897,11 +897,20 @@ export function barrierAttenuation(
 ---
 
 ### 9. Wall Reflection Height Geometry Incorrect
-- [ ] **Status:** Open
-- **Location:** `packages/engine/src/raytracing/index.ts:387-389`
-- **Impact:** Geometry error in reflected paths
+- [x] **Status:** Resolved
+- **Location:** `packages/engine/src/raytracing/index.ts:360-400`
+- **Impact:** Geometry error in reflected paths — Fixed
 
-#### Current Formulation (Math)
+#### Problem
+The old code used arbitrary clamping for the reflection point Z coordinate:
+```typescript
+// WRONG: Arbitrary clamping instead of geometric calculation
+z: Math.min(imageSource.surface.height, Math.max(source.z, receiver.z))
+```
+
+This could place reflection points "in space" above the wall or at incorrect heights that don't match the actual ray geometry.
+
+#### Correct Formulation (Math)
 Image source method for vertical wall:
 ```
 Image source S' = mirror of S across wall plane (same Z)
@@ -911,9 +920,11 @@ Reflection point R_p lies on wall segment where line R→S' intersects wall.
 Correct Z coordinate of reflection point:
   t = parameter along R→S' where intersection occurs
   R_p.z = R.z + t·(S'.z - R.z) = R.z + t·(S.z - R.z)
+
+Validation: 0 ≤ R_p.z ≤ wall_height (or skip path)
 ```
 
-#### Current Code Implementation
+#### Before (Problematic Code)
 ```typescript
 // WRONG: Arbitrary clamping instead of geometric calculation
 const reflectionPoint3D: Point3D = {
@@ -922,58 +933,40 @@ const reflectionPoint3D: Point3D = {
 };
 ```
 
-#### Proposed Implementation
+#### After (Fixed Code)
 ```typescript
-function traceWallPaths(
-  source: Point3D, receiver: Point3D,
-  surfaces: ReflectingSurface[], allSurfaces: ReflectingSurface[]
-): RayPath[] {
-  const paths: RayPath[] = [];
-  const imageSources = createImageSources(source, surfaces, 1);
+// Issue #9 Fix: Calculate reflection Z geometrically from image source method
+const dx = imageSource.position.x - receiver.x;
+const dy = imageSource.position.y - receiver.y;
+const rx = reflectionPoint2D.x - receiver.x;
+const ry = reflectionPoint2D.y - receiver.y;
 
-  for (const imageSource of imageSources) {
-    const r2d = { x: receiver.x, y: receiver.y };
-    const img2d = { x: imageSource.position.x, y: imageSource.position.y };
+// Parameter t = how far along the R→S' line the reflection point is (normalized)
+const lineLenSq = dx * dx + dy * dy;
+const reflDistSq = rx * rx + ry * ry;
+const t = lineLenSq > EPSILON * EPSILON ? Math.sqrt(reflDistSq / lineLenSq) : 0.5;
 
-    const reflectionPoint2D = findReflectionPoint(r2d, img2d, imageSource.surface);
-    if (!reflectionPoint2D) continue;
+// Interpolate Z coordinate along the receiver → image source line
+const reflectionZ = receiver.z + t * (imageSource.position.z - receiver.z);
 
-    // Validate reflection point is on segment
-    const seg = imageSource.surface.segment;
-    const segLen = distance2D(seg.p1, seg.p2);
-    const d1 = distance2D(reflectionPoint2D, seg.p1);
-    const d2 = distance2D(reflectionPoint2D, seg.p2);
-    if (d1 > segLen + EPSILON || d2 > segLen + EPSILON) continue;
+// Validate: reflection point must be ON the wall (0 ≤ z ≤ wall height)
+// If z < 0: ray would hit below ground (impossible)
+// If z > wallHeight: ray would miss the wall entirely (go over it)
+if (reflectionZ < 0 || reflectionZ > imageSource.surface.height) continue;
 
-    // CORRECT: Calculate Z from image source geometry
-    // The reflection point is where R→S' intersects the wall
-    // Parameter t along the line from receiver to image source
-    const dx = imageSource.position.x - receiver.x;
-    const dy = imageSource.position.y - receiver.y;
-    const rx = reflectionPoint2D.x - receiver.x;
-    const ry = reflectionPoint2D.y - receiver.y;
-
-    // t = distance along R→S' to reflection point (normalized)
-    const lineLen = Math.sqrt(dx * dx + dy * dy);
-    const t = lineLen > EPSILON ? Math.sqrt(rx * rx + ry * ry) / lineLen : 0.5;
-
-    // Interpolate Z coordinate
-    const reflectionZ = receiver.z + t * (imageSource.position.z - receiver.z);
-
-    // Validate: reflection point must be on the wall (below wall height)
-    if (reflectionZ < 0 || reflectionZ > imageSource.surface.height) continue;
-
-    const reflectionPoint3D: Point3D = {
-      ...reflectionPoint2D,
-      z: reflectionZ,
-    };
-
-    // ... rest of path construction
-  }
-
-  return paths;
-}
+const reflectionPoint3D: Point3D = {
+  ...reflectionPoint2D,
+  z: reflectionZ,
+};
 ```
+
+#### Impact
+
+| Scenario | Old Behavior | New Behavior |
+|----------|--------------|--------------|
+| Source z=2, Receiver z=1, Wall 10m | z = max(2,1) = 2m | z calculated from ray geometry |
+| Geometric z = 15m, Wall = 10m | z clamped to 10m (wrong) | Path skipped (ray misses wall) |
+| Geometric z = -1m | z = max(source.z, receiver.z) | Path skipped (underground) |
 
 ---
 
@@ -1868,9 +1861,9 @@ The current label is misleading and suggests only the reflection aspect.
 | Severity | Total | Resolved | Pending |
 |----------|-------|----------|---------|
 | 🔴 Critical | 6 | 6 | 0 |
-| 🟠 Moderate | 5 | 3 | 2 |
+| 🟠 Moderate | 5 | 4 | 1 |
 | 🟡 Minor | 8 | 5 | 3 |
-| **Total** | **21** | **17** | **5** |
+| **Total** | **21** | **18** | **4** |
 
 ---
 
