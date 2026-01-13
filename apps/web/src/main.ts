@@ -8291,6 +8291,16 @@ function wirePropagationControls() {
 }
 
 function init() {
+  // Recalculate sequence counters based on demo scene elements to avoid ID collisions.
+  // Without this, hardcoded initial values (e.g. buildingSeq=2) would collide with
+  // pre-loaded demo scene IDs (bd1-bd5), causing duplicate IDs when adding new elements.
+  sourceSeq = nextSequence('s', scene.sources);
+  receiverSeq = nextSequence('r', scene.receivers);
+  panelSeq = nextSequence('p', scene.panels);
+  probeSeq = nextSequence('pr', scene.probes);
+  buildingSeq = nextSequence('bd', scene.buildings);
+  barrierSeq = nextSequence('b', scene.barriers);
+
   updateCounts();
   wireThemeSwitcher();
   wireLayerToggle(layerSources, 'sources');
