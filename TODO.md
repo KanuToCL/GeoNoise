@@ -16,6 +16,9 @@
 - [x] Inline name editing for elements (double-click to rename).
 - [x] Custom display names on map tooltips.
 
+## Known Bugs
+- [ ] **Layers popover**: The layers popover in the settings panel has a bug (needs investigation).
+
 ## Follow-Ups
 - [ ] Align UI compute with engine propagation config (mode/output metric).
 - [ ] Add canonical scenes and golden snapshots through router for receivers + panels.
