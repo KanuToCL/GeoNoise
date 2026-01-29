@@ -1,3 +1,4 @@
+import { inject } from '@vercel/analytics';
 import {
   detectWebGPU,
   loadPreference,
@@ -22,6 +23,9 @@ import {
   type ProbeRequest,
   type ProbeResult,
 } from '@geonoise/engine';
+
+// Initialize Vercel Web Analytics
+inject();
 
 // KaTeX auto-render function (loaded from CDN)
 declare function renderMathInElement(
