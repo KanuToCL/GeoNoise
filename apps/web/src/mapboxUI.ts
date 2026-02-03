@@ -107,6 +107,7 @@ export function initMapboxUI(options?: {
   wireMapToggleButton();
   wireTokenModal();
   wireFloatingPanel();
+  initScaleComparisonDrag();
 
   // Update button state based on whether token exists
   updateMapButtonState();
@@ -609,6 +610,80 @@ function updateScaleComparisonPanel(mapboxMetersPerPixel: number): void {
     matchIndicator.style.background = "#dc3545";
     matchIndicator.textContent = `✗ GeoNoise ${(1/ratio).toFixed(2)}x larger - zoom out on map`;
   }
+}
+
+/**
+ * Initialize drag functionality for the scale comparison panel
+ */
+function initScaleComparisonDrag(): void {
+  const panel = document.getElementById("scaleComparisonPanel");
+  if (!panel) return;
+
+  let isDragging = false;
+  let startX = 0;
+  let startY = 0;
+  let initialLeft = 0;
+  let initialBottom = 0;
+
+  const onMouseDown = (e: MouseEvent) => {
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+
+    // Get current position
+    const rect = panel.getBoundingClientRect();
+    initialLeft = rect.left;
+    initialBottom = window.innerHeight - rect.bottom;
+
+    // Switch to left/top positioning for dragging
+    panel.style.left = `${rect.left}px`;
+    panel.style.top = `${rect.top}px`;
+    panel.style.bottom = "auto";
+
+    panel.style.cursor = "grabbing";
+    e.preventDefault();
+  };
+
+  const onMouseMove = (e: MouseEvent) => {
+    if (!isDragging) return;
+
+    const deltaX = e.clientX - startX;
+    const deltaY = e.clientY - startY;
+
+    const newLeft = initialLeft + deltaX;
+    const newTop = (window.innerHeight - initialBottom - panel.offsetHeight) + deltaY;
+
+    // Keep panel within viewport bounds
+    const maxLeft = window.innerWidth - panel.offsetWidth - 10;
+    const maxTop = window.innerHeight - panel.offsetHeight - 10;
+
+    panel.style.left = `${Math.max(10, Math.min(maxLeft, newLeft))}px`;
+    panel.style.top = `${Math.max(10, Math.min(maxTop, newTop))}px`;
+  };
+
+  const onMouseUp = () => {
+    if (isDragging) {
+      isDragging = false;
+      panel.style.cursor = "move";
+    }
+  };
+
+  panel.addEventListener("mousedown", onMouseDown);
+  document.addEventListener("mousemove", onMouseMove);
+  document.addEventListener("mouseup", onMouseUp);
+
+  // Touch support for mobile
+  panel.addEventListener("touchstart", (e: TouchEvent) => {
+    const touch = e.touches[0];
+    onMouseDown({ clientX: touch.clientX, clientY: touch.clientY, preventDefault: () => e.preventDefault() } as MouseEvent);
+  });
+
+  document.addEventListener("touchmove", (e: TouchEvent) => {
+    const touch = e.touches[0];
+    onMouseMove({ clientX: touch.clientX, clientY: touch.clientY } as MouseEvent);
+  });
+
+  document.addEventListener("touchend", onMouseUp);
 }
 
 /**
