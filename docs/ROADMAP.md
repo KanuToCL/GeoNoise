@@ -60,6 +60,7 @@ The physics computation appears correct. The issue is isolated to the visualizat
 
 ### ✅ Recently Completed
 
+- **Mapbox Map Overlay Integration** (v0.8.0) - Real-world map backgrounds with pan/zoom sync
 - **Settings Panel UI Redesign** (v0.5.0) - Tabbed category selection with animated slide-out panels
 - **Physics Audit Fixes #5, #6, #12** (v0.4.8) - Side diffraction geometry, Delany-Bazley bounds, dual sigma models
 - **Barrier side diffraction toggle** (v0.4.2) - See [CHANGELOG.md](./CHANGELOG.md)

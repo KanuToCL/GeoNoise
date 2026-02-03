@@ -12,7 +12,7 @@ import {
   saveTheme,
   type Theme,
 } from './theme.js';
-import { initMapboxUI } from './mapboxUI.js';
+import { initMapboxUI, syncMapToCanvasZoom, syncMapToCanvasPan, isMapVisible, isMapInteractive } from './mapboxUI.js';
 import { engineCompute } from '@geonoise/engine-backends';
 import { createEmptyScene, type EngineConfig, type PropagationConfig } from '@geonoise/core';
 import {
@@ -6548,8 +6548,12 @@ function renderLoop() {
 
   const rect = canvas.getBoundingClientRect();
   ctx.clearRect(0, 0, rect.width, rect.height);
-  ctx.fillStyle = canvasTheme.canvasBg;
-  ctx.fillRect(0, 0, rect.width, rect.height);
+
+  // Only fill background if map is not visible
+  if (!isMapVisible()) {
+    ctx.fillStyle = canvasTheme.canvasBg;
+    ctx.fillRect(0, 0, rect.width, rect.height);
+  }
 
   if (layers.noiseMap) {
     drawNoiseMap();
@@ -6823,10 +6827,22 @@ function handlePointerMove(event: MouseEvent) {
   if (panState) {
     const dx = canvasPoint.x - panState.start.x;
     const dy = canvasPoint.y - panState.start.y;
-    panOffset = {
+    const newPanOffset = {
       x: panState.origin.x + dx / pixelsPerMeter,
       y: panState.origin.y - dy / pixelsPerMeter,
     };
+    
+    // Calculate delta for map sync (change from previous position)
+    const deltaX = newPanOffset.x - panOffset.x;
+    const deltaY = newPanOffset.y - panOffset.y;
+    
+    panOffset = newPanOffset;
+    
+    // Sync map pan when visible and NOT in interactive mode
+    if (isMapVisible() && !isMapInteractive()) {
+      syncMapToCanvasPan(deltaX, deltaY, pixelsPerMeter);
+    }
+    
     requestRender();
   }
 
@@ -7222,6 +7238,12 @@ function handleWheel(event: WheelEvent) {
     y: panOffset.y + (before.y - after.y),
   };
   updateScaleBar();
+
+  // Sync map zoom when map is visible and NOT in interactive mode
+  if (isMapVisible() && !isMapInteractive()) {
+    syncMapToCanvasZoom(pixelsPerMeter, panOffset.x, panOffset.y);
+  }
+
   requestRender();
 }
 

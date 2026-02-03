@@ -15,6 +15,7 @@ export interface MapboxMap {
   getZoom: () => number;
   setCenter: (center: [number, number]) => void;
   setZoom: (zoom: number) => void;
+  panBy: (offset: [number, number], options?: { duration?: number }) => void;
   getBounds: () => {
     getNorth: () => number;
     getSouth: () => number;
@@ -229,7 +230,7 @@ export async function initializeMap(config: MapboxConfig): Promise<MapboxMap> {
   // Set access token
   mapboxgl.accessToken = accessToken;
 
-  // Create map instance
+  // Create map instance - non-interactive by default so canvas gets pointer events
   const map = new mapboxgl.Map({
     container,
     style: STYLE_URLS[style],
@@ -238,8 +239,10 @@ export async function initializeMap(config: MapboxConfig): Promise<MapboxMap> {
     interactive,
   });
 
-  // Add navigation controls
-  map.addControl(new mapboxgl.NavigationControl(), "top-right");
+  // Only add navigation controls if interactive
+  if (interactive) {
+    map.addControl(new mapboxgl.NavigationControl(), "top-right");
+  }
 
   // Wait for map to load
   await new Promise<void>((resolve, reject) => {

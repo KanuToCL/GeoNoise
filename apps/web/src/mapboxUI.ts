@@ -19,12 +19,14 @@ import {
 // UI State
 interface MapboxUIState {
   isMapVisible: boolean;
+  isMapInteractive: boolean;
   map: MapboxMap | null;
   currentStyle: MapStyle;
 }
 
 const uiState: MapboxUIState = {
   isMapVisible: false,
+  isMapInteractive: false,
   map: null,
   currentStyle: "dark",
 };
@@ -43,6 +45,7 @@ let mapboxTokenSuccess: HTMLDivElement | null = null;
 // Floating panel elements
 let loadMapButton: HTMLButtonElement | null = null;
 let hideMapButton: HTMLButtonElement | null = null;
+let toggleMapInteractiveButton: HTMLButtonElement | null = null;
 let mapControls: HTMLDivElement | null = null;
 let mapStatusBadge: HTMLSpanElement | null = null;
 let mapOpacitySlider: HTMLInputElement | null = null;
@@ -85,6 +88,7 @@ export function initMapboxUI(options?: {
   // Get floating panel elements
   loadMapButton = document.getElementById("loadMapButton") as HTMLButtonElement | null;
   hideMapButton = document.getElementById("hideMapButton") as HTMLButtonElement | null;
+  toggleMapInteractiveButton = document.getElementById("toggleMapInteractiveButton") as HTMLButtonElement | null;
   mapControls = document.getElementById("mapControls") as HTMLDivElement | null;
   mapStatusBadge = document.getElementById("mapStatusBadge") as HTMLSpanElement | null;
   mapOpacitySlider = document.getElementById("mapOpacitySlider") as HTMLInputElement | null;
@@ -281,12 +285,17 @@ async function showMap(): Promise<void> {
         style: uiState.currentStyle,
         center: [-122.4194, 37.7749], // Default: San Francisco
         zoom: 16,
-        interactive: true,
+        interactive: true, // Start interactive so user can position
       });
 
       // Set up map event listeners for synchronization
       setupMapSyncListeners();
     }
+
+    // Start in interactive mode so user can position the map
+    uiState.isMapInteractive = true;
+    mapboxContainer.style.pointerEvents = "auto";
+    mapboxContainer.style.zIndex = "2";
 
     uiState.isMapVisible = true;
     updateMapButtonState();
@@ -356,6 +365,11 @@ function wireFloatingPanel(): void {
   mapStyleDark?.addEventListener("click", () => {
     changeMapStyle("dark");
   });
+
+  // Toggle Map Interactivity button
+  toggleMapInteractiveButton?.addEventListener("click", () => {
+    toggleMapInteractivity();
+  });
 }
 
 /**
@@ -395,6 +409,49 @@ function changeMapStyle(style: "streets" | "satellite" | "dark"): void {
 }
 
 /**
+ * Toggle map interactivity on/off
+ * When interactive, user can pan/zoom the map directly
+ * When not interactive, canvas gets all pointer events
+ */
+function toggleMapInteractivity(): void {
+  uiState.isMapInteractive = !uiState.isMapInteractive;
+
+  if (mapboxContainer) {
+    if (uiState.isMapInteractive) {
+      // Enable map interactivity - map gets pointer events
+      mapboxContainer.style.pointerEvents = "auto";
+      mapboxContainer.style.zIndex = "2"; // Put map on top temporarily
+    } else {
+      // Disable map interactivity - canvas gets pointer events
+      mapboxContainer.style.pointerEvents = "none";
+      mapboxContainer.style.zIndex = "0"; // Put map behind canvas
+
+      // Sync canvas to current map view when exiting interactive mode
+      syncScaleWithCanvas();
+    }
+  }
+
+  updateInteractiveButtonState();
+}
+
+/**
+ * Update the interactive button state
+ */
+function updateInteractiveButtonState(): void {
+  if (!toggleMapInteractiveButton) return;
+
+  if (uiState.isMapInteractive) {
+    toggleMapInteractiveButton.textContent = "🔒 Lock Map (Edit Mode)";
+    toggleMapInteractiveButton.style.background = "rgba(40, 167, 69, 0.3)";
+    toggleMapInteractiveButton.style.color = "#28a745";
+  } else {
+    toggleMapInteractiveButton.textContent = "🔓 Enable Map Panning";
+    toggleMapInteractiveButton.style.background = "rgba(74, 144, 217, 0.3)";
+    toggleMapInteractiveButton.style.color = "#4a90d9";
+  }
+}
+
+/**
  * Update the floating panel state based on map visibility
  */
 function updateFloatingPanelState(): void {
@@ -409,6 +466,9 @@ function updateFloatingPanelState(): void {
 
     // Update scale info
     updateMapInfo();
+
+    // Update interactive button state
+    updateInteractiveButtonState();
   } else {
     // Hide controls, show load button
     mapControls.style.display = "none";
@@ -553,6 +613,13 @@ export function isMapVisible(): boolean {
 }
 
 /**
+ * Check if map is currently in interactive mode
+ */
+export function isMapInteractive(): boolean {
+  return uiState.isMapInteractive;
+}
+
+/**
  * Get current map dimensions in meters
  */
 export function getMapDimensions(): ReturnType<typeof getMapDimensionsInMeters> | null {
@@ -587,4 +654,87 @@ export function destroyMapboxUI(): void {
   destroyMap();
   uiState.map = null;
   uiState.isMapVisible = false;
+}
+
+/**
+ * Sync map zoom to match canvas pixels-per-meter
+ * Called from main.ts when canvas zoom changes
+ */
+export function syncMapToCanvasZoom(pixelsPerMeter: number, _canvasCenterX: number, _canvasCenterY: number): void {
+  if (!uiState.map || !uiState.isMapVisible) return;
+
+  // Calculate the zoom level needed to match the canvas scale
+  // metersPerPixel = 1 / pixelsPerMeter
+  const metersPerPixel = 1 / pixelsPerMeter;
+
+  // Get current center latitude for accurate calculation
+  const currentCenter = uiState.map.getCenter();
+  const lat = currentCenter.lat;
+
+  // Earth's circumference at equator in meters
+  const EARTH_CIRCUMFERENCE = 40075016.686;
+  const TILE_SIZE = 512;
+
+  // Reverse the meters-per-pixel formula to get zoom
+  // metersPerPixel = (EARTH_CIRCUMFERENCE / (TILE_SIZE * 2^zoom)) * cos(lat)
+  // zoom = log2(EARTH_CIRCUMFERENCE * cos(lat) / (metersPerPixel * TILE_SIZE))
+  const cosLat = Math.cos((lat * Math.PI) / 180);
+  const zoom = Math.log2((EARTH_CIRCUMFERENCE * cosLat) / (metersPerPixel * TILE_SIZE));
+
+  // Clamp zoom to valid range
+  const clampedZoom = Math.max(0, Math.min(22, zoom));
+
+  uiState.map.setZoom(clampedZoom);
+
+  // Update the info display
+  updateMapInfo();
+}
+
+/**
+ * Sync map pan to match canvas pan offset
+ * Called from main.ts when canvas is panned
+ * 
+ * @param deltaX - Change in canvas X offset (in meters)
+ * @param deltaY - Change in canvas Y offset (in meters)
+ * @param pixelsPerMeter - Current canvas pixels per meter
+ */
+export function syncMapToCanvasPan(deltaX: number, deltaY: number, pixelsPerMeter: number): void {
+  if (!uiState.map || !uiState.isMapVisible || uiState.isMapInteractive) return;
+
+  // Convert delta from meters to pixels
+  const deltaPixelsX = deltaX * pixelsPerMeter;
+  const deltaPixelsY = deltaY * pixelsPerMeter;
+
+  // panBy expects [x, y] in pixels - note Y is inverted (canvas Y goes up, screen Y goes down)
+  uiState.map.panBy([-deltaPixelsX, deltaPixelsY], { duration: 0 });
+
+  // Update the info display
+  updateMapInfo();
+}
+
+/**
+ * Get the current meters per pixel from the map
+ */
+export function getMapMetersPerPixel(): number | null {
+  if (!uiState.map || !uiState.isMapVisible) return null;
+
+  const dimensions = getMapDimensionsInMeters(uiState.map);
+  return dimensions.metersPerPixel;
+}
+
+/**
+ * Set map zoom level directly
+ */
+export function setMapZoom(zoom: number): void {
+  if (!uiState.map) return;
+  uiState.map.setZoom(zoom);
+  updateMapInfo();
+}
+
+/**
+ * Get current map zoom level
+ */
+export function getMapZoom(): number | null {
+  if (!uiState.map) return null;
+  return uiState.map.getZoom();
 }

@@ -4,6 +4,64 @@ This document contains the implementation history of completed features. For pla
 
 ---
 
+## v0.8.0 (2026-02-03)
+
+### Mapbox Map Overlay Integration
+
+**Status:** ✅ Complete
+
+Added Mapbox GL JS integration for overlaying real-world maps beneath the noise modeling canvas.
+
+#### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Mapbox GL JS Integration** | Full Mapbox v3.2.0 integration via CDN loading |
+| **Floating Control Panel** | UI panel for map controls (top-right corner) |
+| **Style Switcher** | Toggle between Streets, Satellite, and Dark map styles |
+| **Opacity Control** | Slider to adjust map transparency (10-100%) |
+| **Interactive Mode Toggle** | Switch between map panning and canvas editing modes |
+| **Scale Sync** | Canvas scale syncs to map zoom for 1:1 accuracy |
+| **Pan Sync** | Canvas panning syncs map position in edit mode |
+| **Scale/Center Info** | Real-time display of meters-per-pixel and coordinates |
+
+#### Usage Workflow
+
+| Step | Action | Description |
+|------|--------|-------------|
+| 1 | Load Map | Click "Load Map" to initialize map overlay |
+| 2 | Position | Pan/zoom map to find your site location |
+| 3 | Lock Map | Click "🔒 Lock Map" to enter edit mode |
+| 4 | Model | Add sources, receivers, barriers on the map |
+| 5 | Unlock | Click "🔓 Enable Map Panning" to reposition if needed |
+
+#### Files Added
+
+| File | Purpose |
+|------|---------|
+| `apps/web/src/mapbox.ts` | Mapbox GL JS service module with types and coordinate transforms |
+| `apps/web/src/mapboxUI.ts` | UI wiring for floating panel and mode management |
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `apps/web/index.html` | Added mapbox container, control panel, and canvas positioning |
+| `apps/web/src/main.ts` | Integrated mapbox UI, added pan/zoom sync, transparent background |
+| `apps/web/vercel.json` | Skip preview deployments for feature branches |
+
+#### Technical Details
+
+| Feature | Implementation |
+|---------|----------------|
+| **Meters-per-pixel** | Calculated using Web Mercator projection at current latitude |
+| **Zoom Sync** | Converts canvas pixelsPerMeter to Mapbox zoom level |
+| **Pan Sync** | Converts canvas delta (meters) to map panBy (pixels) |
+| **Layer Order** | Map at z-index 0, canvas at z-index 1 (transparent background) |
+| **Interactive Toggle** | Switches pointer-events and z-index between map and canvas |
+
+---
+
 ## v0.7.0 (2026-01-12)
 
 ### Version Bump & Demo Scene

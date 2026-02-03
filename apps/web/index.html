@@ -140,8 +140,11 @@
     <div class="app-shell">
       <!-- Fullscreen map canvas layer. -->
         <div class="canvas-frame">
-        <!-- Mapbox map overlay container (hidden by default) -->
+          <!-- Mapbox map overlay container (hidden by default) -->
           <div id="mapboxContainer" class="mapbox-container" style="display: none; position: absolute; inset: 0; z-index: 0;"></div>
+
+          <!-- Main canvas for noise visualization -->
+          <canvas id="mapCanvas" style="position: absolute; inset: 0; z-index: 1;"></canvas>
 
           <!-- Floating Map Control Panel -->
           <div id="mapControlPanel" style="
@@ -236,6 +239,17 @@
                 <div id="mapCenterInfo">Center: --, --</div>
               </div>
 
+              <!-- Toggle Map Interactivity -->
+              <button id="toggleMapInteractiveButton" type="button" style="
+                padding: 8px 12px;
+                font-size: 12px;
+                border: none;
+                border-radius: 6px;
+                background: rgba(74, 144, 217, 0.3);
+                color: #4a90d9;
+                cursor: pointer;
+              ">🔓 Enable Map Panning</button>
+
               <button id="hideMapButton" type="button" style="
                 padding: 8px 12px;
                 font-size: 12px;
@@ -249,8 +263,7 @@
             </div>
           </div>
 
-          <canvas id="mapCanvas"></canvas>
-        <div class="snap-indicator" id="snapIndicator"></div>
+          <div class="snap-indicator" id="snapIndicator"></div>
         <!-- Help button and status on left side -->
         <div class="canvas-corner-left" id="canvasCornerLeft">
           <div class="canvas-help" id="canvasHelp">
