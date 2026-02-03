@@ -693,7 +693,7 @@ export function syncMapToCanvasZoom(pixelsPerMeter: number, _canvasCenterX: numb
 /**
  * Sync map pan to match canvas pan offset
  * Called from main.ts when canvas is panned
- * 
+ *
  * @param deltaX - Change in canvas X offset (in meters)
  * @param deltaY - Change in canvas Y offset (in meters)
  * @param pixelsPerMeter - Current canvas pixels per meter

@@ -46,6 +46,7 @@ export interface MapboxGL {
     interactive?: boolean;
   }) => MapboxMap;
   NavigationControl: new () => unknown;
+  ScaleControl: new (options?: { maxWidth?: number; unit?: 'imperial' | 'metric' | 'nautical' }) => unknown;
   Marker: new (options?: { element?: HTMLElement; draggable?: boolean }) => MapboxMarker;
 }
 
@@ -243,6 +244,9 @@ export async function initializeMap(config: MapboxConfig): Promise<MapboxMap> {
   if (interactive) {
     map.addControl(new mapboxgl.NavigationControl(), "top-right");
   }
+
+  // Always add scale control for verification (bottom-left to compare with GeoNoise scale bar)
+  map.addControl(new mapboxgl.ScaleControl({ maxWidth: 150, unit: 'metric' }), "bottom-left");
 
   // Wait for map to load
   await new Promise<void>((resolve, reject) => {

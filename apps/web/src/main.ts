@@ -6831,18 +6831,18 @@ function handlePointerMove(event: MouseEvent) {
       x: panState.origin.x + dx / pixelsPerMeter,
       y: panState.origin.y - dy / pixelsPerMeter,
     };
-    
+
     // Calculate delta for map sync (change from previous position)
     const deltaX = newPanOffset.x - panOffset.x;
     const deltaY = newPanOffset.y - panOffset.y;
-    
+
     panOffset = newPanOffset;
-    
+
     // Sync map pan when visible and NOT in interactive mode
     if (isMapVisible() && !isMapInteractive()) {
       syncMapToCanvasPan(deltaX, deltaY, pixelsPerMeter);
     }
-    
+
     requestRender();
   }
 
