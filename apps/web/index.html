@@ -139,8 +139,117 @@
   <body>
     <div class="app-shell">
       <!-- Fullscreen map canvas layer. -->
-      <div class="canvas-frame">
-        <canvas id="mapCanvas"></canvas>
+        <div class="canvas-frame">
+        <!-- Mapbox map overlay container (hidden by default) -->
+          <div id="mapboxContainer" class="mapbox-container" style="display: none; position: absolute; inset: 0; z-index: 0;"></div>
+
+          <!-- Floating Map Control Panel -->
+          <div id="mapControlPanel" style="
+            position: absolute;
+            top: 80px;
+            right: 16px;
+            z-index: 1000;
+            background: rgba(40, 44, 52, 0.95);
+            border-radius: 12px;
+            padding: 12px 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-width: 220px;
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.1);
+          ">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+              <span style="font-size: 13px; font-weight: 600; color: #fff;">🗺️ Map Overlay</span>
+              <span id="mapStatusBadge" style="
+                font-size: 10px;
+                padding: 2px 8px;
+                border-radius: 10px;
+                background: #dc3545;
+                color: white;
+              ">OFF</span>
+            </div>
+
+            <button id="loadMapButton" type="button" style="
+              padding: 10px 16px;
+              font-size: 13px;
+              font-weight: 500;
+              border: none;
+              border-radius: 8px;
+              background: linear-gradient(135deg, #4a90d9, #357abd);
+              color: white;
+              cursor: pointer;
+              transition: all 0.2s;
+            ">
+              Load Map
+            </button>
+
+            <div id="mapControls" style="display: none; flex-direction: column; gap: 10px;">
+              <!-- Style Switcher -->
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                <label style="font-size: 11px; color: #aaa; font-weight: 500;">Map Style:</label>
+                <div style="display: flex; gap: 6px;">
+                  <button id="mapStyleStreets" type="button" style="
+                    flex: 1;
+                    padding: 8px 10px;
+                    font-size: 11px;
+                    border: none;
+                    border-radius: 6px;
+                    background: rgba(255,255,255,0.1);
+                    color: #ccc;
+                    cursor: pointer;
+                  ">Streets</button>
+                  <button id="mapStyleSatellite" type="button" style="
+                    flex: 1;
+                    padding: 8px 10px;
+                    font-size: 11px;
+                    border: none;
+                    border-radius: 6px;
+                    background: rgba(255,255,255,0.1);
+                    color: #ccc;
+                    cursor: pointer;
+                  ">Satellite</button>
+                  <button id="mapStyleDark" type="button" style="
+                    flex: 1;
+                    padding: 8px 10px;
+                    font-size: 11px;
+                    border: none;
+                    border-radius: 6px;
+                    background: rgba(74, 144, 217, 0.5);
+                    color: #fff;
+                    cursor: pointer;
+                  ">Dark</button>
+                </div>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="font-size: 11px; color: #aaa;">Opacity:</label>
+                <input id="mapOpacitySlider" type="range" min="10" max="100" value="80" style="flex: 1; accent-color: #4a90d9;">
+                <span id="mapOpacityValue" style="font-size: 11px; color: #aaa; min-width: 32px;">80%</span>
+              </div>
+
+              <div style="font-size: 10px; color: #888; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <div id="mapScaleInfo">Scale: -- m/px</div>
+                <div id="mapCenterInfo">Center: --, --</div>
+              </div>
+
+              <button id="hideMapButton" type="button" style="
+                padding: 8px 12px;
+                font-size: 12px;
+                border: none;
+                border-radius: 6px;
+                background: rgba(220, 53, 69, 0.2);
+                color: #dc3545;
+                cursor: pointer;
+                margin-top: 4px;
+              ">Hide Map</button>
+            </div>
+          </div>
+
+          <canvas id="mapCanvas"></canvas>
         <div class="snap-indicator" id="snapIndicator"></div>
         <!-- Help button and status on left side -->
         <div class="canvas-corner-left" id="canvasCornerLeft">
@@ -730,6 +839,21 @@
                 aria-label="Measuring Tape (M)"
               >
                 <span class="dock-label">M</span>
+              </button>
+              <!-- Separator before map tools -->
+              <div class="dock-separator" style="width: 1px; height: 24px; background: var(--border-soft); margin: 0 4px;"></div>
+              <!-- Map overlay button -->
+              <button
+                class="dock-button ui-button"
+                id="mapToggleButton"
+                data-label="Toggle Map Overlay"
+                type="button"
+                aria-label="Toggle Map Overlay"
+                title="Toggle Mapbox map overlay"
+              >
+                <svg class="dock-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
+                </svg>
               </button>
             </div>
           </div>
@@ -1565,6 +1689,68 @@
     </div>
 
     <script type="module" src="./main.js"></script>
+
+    <!-- Mapbox Token Modal -->
+    <div class="modal" id="mapboxTokenModal" aria-hidden="true">
+      <div class="modal-backdrop" data-modal-close></div>
+      <div class="modal-card modal-plate" role="dialog" aria-modal="true" aria-labelledby="mapboxTokenTitle" style="width: min(450px, 90vw);">
+        <div class="modal-header">
+          <div class="modal-title">
+            <h2 id="mapboxTokenTitle">Configure Mapbox</h2>
+            <p class="modal-subtitle">Enter your Mapbox access token to enable map overlays</p>
+          </div>
+          <button class="modal-close ui-button" id="mapboxTokenClose" type="button" aria-label="Close">X</button>
+        </div>
+        <div class="spec-tray" style="padding: 16px;">
+          <div style="margin-bottom: 16px;">
+            <label for="mapboxTokenInput" style="display: block; font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 8px;">
+              Access Token
+            </label>
+            <input
+              type="text"
+              id="mapboxTokenInput"
+              placeholder="pk.eyJ1Ijoi..."
+              style="
+                width: 100%;
+                padding: 10px 12px;
+                font-size: 13px;
+                font-family: monospace;
+                border: none;
+                border-radius: 8px;
+                background: var(--surface-lo);
+                box-shadow: inset 2px 2px 4px var(--shadow-dark), inset -2px -2px 4px var(--shadow-light);
+                color: var(--text);
+                outline: none;
+              "
+            />
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 16px;">
+            Get your free token at <a href="https://account.mapbox.com/access-tokens/" target="_blank" rel="noopener noreferrer" style="color: var(--accent);">mapbox.com</a>
+            <br>Your token is stored locally in your browser.
+          </div>
+          <div style="display: flex; gap: 8px; justify-content: flex-end;">
+            <button
+              class="ui-button"
+              id="mapboxTokenClear"
+              type="button"
+              style="padding: 8px 16px; font-size: 13px;"
+            >
+              Clear
+            </button>
+            <button
+              class="ui-button"
+              id="mapboxTokenSave"
+              type="button"
+              style="padding: 8px 16px; font-size: 13px; background: linear-gradient(145deg, var(--accent), var(--accent)); color: white;"
+            >
+              Save & Enable Map
+            </button>
+          </div>
+          <div id="mapboxTokenError" style="display: none; margin-top: 12px; padding: 8px 12px; border-radius: 6px; background: rgba(220, 53, 69, 0.1); color: #dc3545; font-size: 12px;"></div>
+          <div id="mapboxTokenSuccess" style="display: none; margin-top: 12px; padding: 8px 12px; border-radius: 6px; background: rgba(40, 167, 69, 0.1); color: #28a745; font-size: 12px;"></div>
+        </div>
+      </div>
+    </div>
 
     <!-- Author/About Modal -->
     <div class="modal" id="authorModal" aria-hidden="true">

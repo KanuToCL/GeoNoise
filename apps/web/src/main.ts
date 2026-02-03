@@ -12,6 +12,7 @@ import {
   saveTheme,
   type Theme,
 } from './theme.js';
+import { initMapboxUI } from './mapboxUI.js';
 import { engineCompute } from '@geonoise/engine-backends';
 import { createEmptyScene, type EngineConfig, type PropagationConfig } from '@geonoise/core';
 import {
@@ -8334,6 +8335,20 @@ wireSettingsPopover();
   wireSaveLoad();
   wireCanvasHelp();
   wireActionOverflow();
+
+  // Initialize Mapbox UI integration
+  initMapboxUI({
+    onScaleSync: (metersPerPixel) => {
+      // Sync canvas pixels-per-meter with map scale for 1:1 accuracy
+      const newPpm = 1 / metersPerPixel;
+      if (Math.abs(newPpm - pixelsPerMeter) > 0.001) {
+        pixelsPerMeter = newPpm;
+        updatePixelsPerMeter();
+        updateScaleBar();
+        needsUpdate = true;
+      }
+    },
+  });
 
   updateUndoRedoButtons();
   updateSceneStatus();
