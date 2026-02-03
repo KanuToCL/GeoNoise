@@ -289,24 +289,29 @@ async function showMap(): Promise<void> {
         style: uiState.currentStyle,
         center: [-122.4194, 37.7749], // Default: San Francisco
         zoom: 16,
-        interactive: true, // Start interactive so user can position
+        interactive: true, // Keep interactive for internal use, we control via pointer-events
       });
 
       // Set up map event listeners for synchronization
       setupMapSyncListeners();
     }
 
-    // Start in interactive mode so user can position the map
-    uiState.isMapInteractive = true;
-    mapboxContainer.style.pointerEvents = "auto";
-    mapboxContainer.style.zIndex = "2";
+    // Start in LOCKED mode (edit mode) - canvas gets pointer events
+    // Map is automatically synced to canvas scale
+    uiState.isMapInteractive = false;
+    mapboxContainer.style.pointerEvents = "none";
+    mapboxContainer.style.zIndex = "0";
 
     uiState.isMapVisible = true;
     updateMapButtonState();
     updateFloatingPanelState();
+    updateInteractiveButtonState();
 
-    // Trigger initial scale sync
-    syncScaleWithCanvas();
+    // Auto-sync map zoom to match canvas scale for 1:1 accuracy
+    if (getPixelsPerMeter) {
+      const ppm = getPixelsPerMeter();
+      syncMapZoomToCanvas(ppm);
+    }
   } catch (error) {
     console.error("Failed to show map:", error);
     mapboxContainer.style.display = "none";
