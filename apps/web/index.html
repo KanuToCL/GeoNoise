@@ -305,6 +305,35 @@
               <div class="scale-line" id="scaleLine"></div>
               <div class="scale-text" id="scaleText">100 m</div>
             </div>
+            <!-- Scale Comparison Panel (visible when map is loaded) -->
+            <div id="scaleComparisonPanel" style="
+              display: none;
+              margin-top: 8px;
+              padding: 8px 12px;
+              background: rgba(0, 0, 0, 0.85);
+              border: 2px solid #00ff88;
+              border-radius: 6px;
+              pointer-events: auto;
+            ">
+              <div style="font-size: 10px; color: #00ff88; font-weight: 600; margin-bottom: 6px;">📏 SCALE COMPARISON</div>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 10px; color: #aaa; width: 70px;">GeoNoise:</span>
+                  <div style="display: flex; align-items: center; gap: 4px;">
+                    <div id="geonoiseCompareBar" style="height: 4px; background: #4a90d9; border-radius: 2px; width: 100px;"></div>
+                    <span id="geonoiseCompareText" style="font-size: 11px; color: #4a90d9; font-weight: 600;">100 m</span>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 10px; color: #aaa; width: 70px;">Mapbox:</span>
+                  <div style="display: flex; align-items: center; gap: 4px;">
+                    <div id="mapboxCompareBar" style="height: 4px; background: #00ff88; border-radius: 2px; width: 100px;"></div>
+                    <span id="mapboxCompareText" style="font-size: 11px; color: #00ff88; font-weight: 600;">100 m</span>
+                  </div>
+                </div>
+              </div>
+              <div id="scaleMatchIndicator" style="margin-top: 6px; font-size: 10px; text-align: center; padding: 4px; border-radius: 4px; background: #28a745; color: white;">✓ SCALES MATCH</div>
+            </div>
             <div class="canvas-status-line" aria-live="polite">
               <span class="canvas-status-item">x: <span id="debug-x">0.0</span>m y: <span id="debug-y">0.0</span>m</span>
               <span class="canvas-status-sep">|</span>

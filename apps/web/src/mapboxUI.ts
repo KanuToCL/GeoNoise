@@ -321,6 +321,12 @@ function hideMap(): void {
   uiState.isMapVisible = false;
   updateMapButtonState();
   updateFloatingPanelState();
+
+  // Hide scale comparison panel
+  const comparisonPanel = document.getElementById("scaleComparisonPanel");
+  if (comparisonPanel) {
+    comparisonPanel.style.display = "none";
+  }
 }
 
 /**
@@ -489,6 +495,77 @@ function updateMapInfo(): void {
 
   mapScaleInfo.textContent = `Scale: ${dimensions.metersPerPixel.toFixed(2)} m/px`;
   mapCenterInfo.textContent = `Center: ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`;
+
+  // Update scale comparison panel
+  updateScaleComparisonPanel(dimensions.metersPerPixel);
+}
+
+/**
+ * Update the scale comparison panel with current Mapbox scale
+ */
+function updateScaleComparisonPanel(mapboxMetersPerPixel: number): void {
+  const panel = document.getElementById("scaleComparisonPanel");
+  const mapboxBar = document.getElementById("mapboxCompareBar");
+  const mapboxText = document.getElementById("mapboxCompareText");
+  const geonoiseBar = document.getElementById("geonoiseCompareBar");
+  const geonoiseText = document.getElementById("geonoiseCompareText");
+  const matchIndicator = document.getElementById("scaleMatchIndicator");
+
+  if (!panel || !mapboxBar || !mapboxText || !geonoiseBar || !geonoiseText || !matchIndicator) return;
+
+  // Show the panel
+  panel.style.display = "block";
+
+  // Calculate nice round distance for 100 pixels
+  const referencePixels = 100;
+  const mapboxMeters = mapboxMetersPerPixel * referencePixels;
+
+  // Get GeoNoise scale from the scale bar element
+  const scaleTextEl = document.getElementById("scaleText");
+  const scaleLineEl = document.getElementById("scaleLine");
+  let geonoiseMeters = 100;
+  let geonoisePixels = 100;
+
+  if (scaleTextEl && scaleLineEl) {
+    const textMatch = scaleTextEl.textContent?.match(/(\d+)/);
+    if (textMatch) {
+      geonoiseMeters = parseInt(textMatch[1], 10);
+    }
+    const widthMatch = scaleLineEl.style.width?.match(/(\d+)/);
+    if (widthMatch) {
+      geonoisePixels = parseInt(widthMatch[1], 10);
+    }
+  }
+
+  // Calculate meters per pixel for GeoNoise
+  const geonoiseMetersPerPixel = geonoiseMeters / geonoisePixels;
+
+  // Use a fixed 100m reference for both bars
+  const refMeters = 50; // Reference distance in meters
+  const mapboxWidth = refMeters / mapboxMetersPerPixel;
+  const geonoiseWidth = refMeters / geonoiseMetersPerPixel;
+
+  // Update the comparison bars
+  mapboxBar.style.width = `${Math.min(150, mapboxWidth)}px`;
+  mapboxText.textContent = `${refMeters} m (${mapboxMetersPerPixel.toFixed(2)} m/px)`;
+
+  geonoiseBar.style.width = `${Math.min(150, geonoiseWidth)}px`;
+  geonoiseText.textContent = `${refMeters} m (${geonoiseMetersPerPixel.toFixed(2)} m/px)`;
+
+  // Check if scales match (within 5% tolerance)
+  const ratio = mapboxMetersPerPixel / geonoiseMetersPerPixel;
+  const tolerance = 0.05;
+
+  if (Math.abs(ratio - 1) <= tolerance) {
+    matchIndicator.style.background = "#28a745";
+    matchIndicator.textContent = `✓ SCALES MATCH (${((1 - Math.abs(ratio - 1)) * 100).toFixed(1)}% accurate)`;
+  } else if (ratio > 1) {
+    matchIndicator.style.background = "#dc3545";
+    matchIndicator.textContent = `✗ Mapbox ${(ratio).toFixed(2)}x larger - zoom in on map`;
+  } else {
+    matchIndicator.style.background = "#dc3545";
+    matchIndicator.textContent = `✗ GeoNoise ${(1/ratio).toFixed(2)}x larger - zoom out on map`;
+  }
 }
 
 /**
