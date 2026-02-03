@@ -8370,6 +8370,7 @@ wireSettingsPopover();
         needsUpdate = true;
       }
     },
+    getPixelsPerMeter: () => pixelsPerMeter,
   });
 
   updateUndoRedoButtons();

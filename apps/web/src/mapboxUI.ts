@@ -59,9 +59,11 @@ let mapStyleDark: HTMLButtonElement | null = null;
 // Callbacks for canvas synchronization
 type ScaleSyncCallback = (metersPerPixel: number) => void;
 type MapMoveCallback = (centerLat: number, centerLng: number, zoom: number) => void;
+type GetPixelsPerMeterCallback = () => number;
 
 let onScaleSync: ScaleSyncCallback | null = null;
 let onMapMove: MapMoveCallback | null = null;
+let getPixelsPerMeter: GetPixelsPerMeterCallback | null = null;
 
 /**
  * Initialize Mapbox UI integration
@@ -69,10 +71,12 @@ let onMapMove: MapMoveCallback | null = null;
 export function initMapboxUI(options?: {
   onScaleSync?: ScaleSyncCallback;
   onMapMove?: MapMoveCallback;
+  getPixelsPerMeter?: GetPixelsPerMeterCallback;
 }): void {
   // Store callbacks
   if (options?.onScaleSync) onScaleSync = options.onScaleSync;
   if (options?.onMapMove) onMapMove = options.onMapMove;
+  if (options?.getPixelsPerMeter) getPixelsPerMeter = options.getPixelsPerMeter;
 
   // Get DOM elements
   mapToggleButton = document.getElementById("mapToggleButton") as HTMLButtonElement | null;
@@ -432,12 +436,46 @@ function toggleMapInteractivity(): void {
       mapboxContainer.style.pointerEvents = "none";
       mapboxContainer.style.zIndex = "0"; // Put map behind canvas
 
-      // Sync canvas to current map view when exiting interactive mode
-      syncScaleWithCanvas();
+      // Sync MAP zoom to match CANVAS scale when locking
+      if (uiState.map && getPixelsPerMeter) {
+        const ppm = getPixelsPerMeter();
+        syncMapZoomToCanvas(ppm);
+      }
     }
   }
 
   updateInteractiveButtonState();
+}
+
+/**
+ * Sync the map zoom level to match the canvas pixels-per-meter
+ * This ensures 1:1 scale accuracy when locking the map
+ */
+function syncMapZoomToCanvas(pixelsPerMeter: number): void {
+  if (!uiState.map) return;
+
+  // Calculate the zoom level needed to match the canvas scale
+  const metersPerPixel = 1 / pixelsPerMeter;
+
+  // Get current center latitude for accurate calculation
+  const currentCenter = uiState.map.getCenter();
+  const lat = currentCenter.lat;
+
+  // Earth's circumference at equator in meters
+  const EARTH_CIRCUMFERENCE = 40075016.686;
+  const TILE_SIZE = 512;
+
+  // Reverse the meters-per-pixel formula to get zoom
+  const cosLat = Math.cos((lat * Math.PI) / 180);
+  const zoom = Math.log2((EARTH_CIRCUMFERENCE * cosLat) / (metersPerPixel * TILE_SIZE));
+
+  // Clamp zoom to valid range
+  const clampedZoom = Math.max(0, Math.min(22, zoom));
+
+  uiState.map.setZoom(clampedZoom);
+
+  // Update the info display
+  updateMapInfo();
 }
 
 /**
