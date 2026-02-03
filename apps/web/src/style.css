@@ -4793,3 +4793,38 @@ html:not([data-feature-profile-dropdown="true"]) .settings-profile-banner {
   color: var(--text-muted);
   font-weight: 400;
 }
+
+/* =============================================================================
+   Mapbox Scale Control - High Visibility Styling
+   ============================================================================= */
+
+.mapboxgl-ctrl-scale {
+  background: rgba(0, 0, 0, 0.85) !important;
+  border: 2px solid #00ff88 !important;
+  border-top: none !important;
+  color: #00ff88 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  font-family: 'Work Sans', monospace !important;
+  padding: 4px 8px !important;
+  border-radius: 0 0 4px 4px !important;
+  box-shadow: 0 2px 8px rgba(0, 255, 136, 0.3) !important;
+  min-width: 80px !important;
+  text-align: center !important;
+}
+
+/* Position the Mapbox scale control with more spacing from bottom */
+.mapboxgl-ctrl-bottom-left {
+  bottom: 40px !important;
+  left: 12px !important;
+}
+
+/* Hide mapbox logo when not needed */
+.mapboxgl-ctrl-logo {
+  opacity: 0.5 !important;
+}
+
+.mapboxgl-ctrl-attrib {
+  opacity: 0.5 !important;
+  font-size: 9px !important;
+}
