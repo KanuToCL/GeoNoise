@@ -222,27 +222,27 @@ interface LicenseInfo {
 export function validateLicenseKey(key: string): LicenseInfo {
   // Parse: GEONOISE-PRO-{USER_ID}-{EXPIRY_YYYYMM}-{SIGNATURE}
   const parts = key.split('-');
-  
+
   if (parts.length !== 5 || parts[0] !== 'GEONOISE') {
     return { tier: 'free', isValid: false, ... };
   }
-  
+
   const tier = parts[1].toLowerCase();
   const userId = parts[2];
   const expiry = parseExpiry(parts[3]); // YYYYMM -> Date
   const signature = parts[4];
-  
+
   // Validate signature (simple HMAC or hash check)
   const expectedSig = generateSignature(tier, userId, expiry);
   if (signature !== expectedSig) {
     return { tier: 'free', isValid: false, ... };
   }
-  
+
   // Check expiry
   if (new Date() > expiry) {
     return { tier: 'free', isValid: false, expired: true, ... };
   }
-  
+
   return {
     tier,
     userId,
