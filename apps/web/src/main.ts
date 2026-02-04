@@ -770,6 +770,16 @@ let measureLocked = false;
 let barrierDraft: { p1: Point; p2: Point } | null = null;
 let barrierDraftAnchored = false;
 let barrierDragActive = false;
+
+// Building tool workflow:
+// - First click anchors corner1.
+// - Drag or move to preview corner2 as a dashed rectangle with dimensions.
+// - Mouse up commits if size is non-trivial.
+// This allows drag-to-size building creation with real-time dimension display.
+let buildingDraft: { corner1: Point; corner2: Point } | null = null;
+let buildingDraftAnchored = false;
+let buildingDragActive = false;
+
 const results: SceneResults = { receivers: [], panels: [] };
 const probeResults = new Map<string, ProbeResult['data']>();
 let probeWorker: Worker | null = null;
@@ -4335,6 +4345,11 @@ function setActiveTool(tool: Tool) {
     barrierDraftAnchored = false;
     barrierDragActive = false;
   }
+  if (tool !== 'add-building') {
+    buildingDraft = null;
+    buildingDraftAnchored = false;
+    buildingDragActive = false;
+  }
   if (modeLabel) {
     modeLabel.textContent = toolLabel(tool);
   }
@@ -6001,7 +6016,7 @@ function commitBarrierDraft() {
   // Defaults:
   // - height: 3m, a typical small screen / fence / wall height for quick iteration.
   // - transmissionLoss: Infinity (placeholder). We currently model barriers as diffracting screens only;
-  //   future work can incorporate transmissionLoss / attenuationDb as “through-barrier” energy reduction.
+  //   future work can incorporate transmissionLoss / attenuationDb as "through-barrier" energy reduction.
   const barrier: Barrier = {
     id: createId('b', barrierSeq++),
     p1: { ...barrierDraft.p1 },
@@ -6014,6 +6029,57 @@ function commitBarrierDraft() {
   barrierDraftAnchored = false;
   barrierDragActive = false;
   setSelection({ type: 'barrier', id: barrier.id });
+  updateCounts();
+  pushHistory();
+  computeScene();
+  resetDockInactivityTimer();
+}
+
+function commitBuildingDraft() {
+  if (!buildingDraft) return;
+
+  // Calculate building dimensions from corner points
+  const minX = Math.min(buildingDraft.corner1.x, buildingDraft.corner2.x);
+  const maxX = Math.max(buildingDraft.corner1.x, buildingDraft.corner2.x);
+  const minY = Math.min(buildingDraft.corner1.y, buildingDraft.corner2.y);
+  const maxY = Math.max(buildingDraft.corner1.y, buildingDraft.corner2.y);
+
+  const width = maxX - minX;
+  const height = maxY - minY;
+
+  // Minimum size check (at least 2m x 2m)
+  if (width < 2 && height < 2) {
+    // Too small, cancel draft
+    buildingDraft = null;
+    buildingDraftAnchored = false;
+    buildingDragActive = false;
+    requestRender();
+    return;
+  }
+
+  // Calculate center point
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+
+  // Ensure minimum dimensions
+  const finalWidth = Math.max(2, width);
+  const finalHeight = Math.max(2, height);
+
+  const building = new Building({
+    id: createId('bd', buildingSeq++),
+    x: centerX,
+    y: centerY,
+    width: finalWidth,
+    height: finalHeight,
+    rotation: 0,
+    z_height: 10, // Default height 10m
+  });
+
+  scene.buildings.push(building);
+  buildingDraft = null;
+  buildingDraftAnchored = false;
+  buildingDragActive = false;
+  setSelection({ type: 'building', id: building.id });
   updateCounts();
   pushHistory();
   computeScene();
@@ -6353,6 +6419,71 @@ function drawBarriers() {
     const start = worldToCanvas(barrierDraft.p1);
     const end = worldToCanvas(barrierDraft.p2);
     drawLine(start, end, canvasTheme.barrierStroke, 4, [6, 6]);
+  }
+
+  // Draw building draft preview with dimensions
+  if (buildingDraft) {
+    const c1 = worldToCanvas(buildingDraft.corner1);
+    const c2 = worldToCanvas(buildingDraft.corner2);
+
+    // Calculate rectangle bounds
+    const left = Math.min(c1.x, c2.x);
+    const right = Math.max(c1.x, c2.x);
+    const top = Math.min(c1.y, c2.y);
+    const bottom = Math.max(c1.y, c2.y);
+    const rectWidth = right - left;
+    const rectHeight = bottom - top;
+
+    // Draw dashed rectangle outline
+    ctx.strokeStyle = canvasTheme.buildingStroke;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 6]);
+    ctx.strokeRect(left, top, rectWidth, rectHeight);
+    ctx.setLineDash([]);
+
+    // Calculate world dimensions
+    const worldWidth = Math.abs(buildingDraft.corner2.x - buildingDraft.corner1.x);
+    const worldHeight = Math.abs(buildingDraft.corner2.y - buildingDraft.corner1.y);
+    const worldArea = worldWidth * worldHeight;
+
+    // Draw dimension labels if size is meaningful
+    if (worldWidth > 0.5 || worldHeight > 0.5) {
+      const centerX = (left + right) / 2;
+      const centerY = (top + bottom) / 2;
+
+      // Background for dimension text
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.font = '12px "Work Sans", monospace';
+
+      const widthText = `W: ${worldWidth.toFixed(1)}m`;
+      const heightText = `H: ${worldHeight.toFixed(1)}m`;
+      const areaText = `A: ${worldArea.toFixed(0)} m²`;
+
+      const textLines = [widthText, heightText, areaText];
+      const lineHeight = 16;
+      const padding = 6;
+      const maxWidth = Math.max(...textLines.map(t => ctx.measureText(t).width));
+      const boxWidth = maxWidth + padding * 2;
+      const boxHeight = textLines.length * lineHeight + padding * 2;
+
+      const boxX = centerX - boxWidth / 2;
+      const boxY = centerY - boxHeight / 2;
+
+      // Draw background box
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 4);
+      ctx.fill();
+
+      // Draw text
+      ctx.fillStyle = '#00ff88';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      textLines.forEach((text, i) => {
+        const y = boxY + padding + lineHeight / 2 + i * lineHeight;
+        ctx.fillText(text, centerX, y);
+      });
+    }
   }
 }
 
@@ -6870,6 +7001,13 @@ function handlePointerMove(event: MouseEvent) {
     return;
   }
 
+  // Update building draft while dragging
+  if (activeTool === 'add-building' && buildingDragActive && buildingDraft) {
+    buildingDraft.corner2 = snappedPoint;
+    requestRender();
+    return;
+  }
+
   if (!dragState && (activeTool === 'select' || activeTool === 'delete')) {
     const nextHover = hitTest(canvasPoint);
     if (!sameSelection(hoverSelection, nextHover)) {
@@ -6936,7 +7074,15 @@ function handlePointerDown(event: MouseEvent) {
   }
 
   if (activeTool === 'add-building') {
-    addBuildingAt(snappedPoint);
+    // Start or continue building draft
+    if (!buildingDraft) {
+      buildingDraft = { corner1: snappedPoint, corner2: snappedPoint };
+      buildingDraftAnchored = false;
+    } else {
+      buildingDraft.corner2 = snappedPoint;
+    }
+    buildingDragActive = true;
+    requestRender();
     return;
   }
 
@@ -7181,6 +7327,23 @@ function handlePointerUp() {
     }
     return;
   }
+
+  // Commit building draft on mouse up
+  if (buildingDragActive && buildingDraft) {
+    const draftWidth = Math.abs(buildingDraft.corner2.x - buildingDraft.corner1.x);
+    const draftHeight = Math.abs(buildingDraft.corner2.y - buildingDraft.corner1.y);
+    // Commit if user dragged a meaningful size (at least 1m in any direction)
+    if (buildingDraftAnchored || draftWidth > 1 || draftHeight > 1) {
+      commitBuildingDraft();
+    } else {
+      // First click without meaningful drag: wait for second click
+      buildingDraftAnchored = true;
+      buildingDragActive = false;
+      requestRender();
+    }
+    return;
+  }
+
   if (panState) {
     panState = null;
     return;
@@ -7301,6 +7464,9 @@ function wireKeyboard() {
       barrierDraft = null;
       barrierDraftAnchored = false;
       barrierDragActive = false;
+      buildingDraft = null;
+      buildingDraftAnchored = false;
+      buildingDragActive = false;
       requestRender();
     }
     if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -7681,6 +7847,9 @@ function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
   barrierDraft = null;
   barrierDraftAnchored = false;
   barrierDragActive = false;
+  buildingDraft = null;
+  buildingDraftAnchored = false;
+  buildingDragActive = false;
   activeProbeId = null;
   probeResults.clear();
   probePending.clear();
