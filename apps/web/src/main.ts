@@ -2167,95 +2167,11 @@ async function computeNoiseMapInternal(options: NoiseMapComputeOptions = {}) {
       if (!silent) {
         updateMapUI();
       }
-        textLines.forEach((text, i) => {
-          const y = boxY + padding + lineHeight / 2 + i * lineHeight;
-          ctx.fillText(text, centerX, y);
-        });
+      if (queuedMapResolutionPx !== null) {
+        const nextResolution = queuedMapResolutionPx;
+        queuedMapResolutionPx = null;
+        recalculateNoiseMap(nextResolution);
       }
-    }
-  }
-
-  // Draw building center draft preview with dimensions
-  if (buildingCenterDraft) {
-    // Calculate rectangle from center + corner (mirrored)
-    const dx = Math.abs(buildingCenterDraft.corner.x - buildingCenterDraft.center.x);
-    const dy = Math.abs(buildingCenterDraft.corner.y - buildingCenterDraft.center.y);
-
-    const left = buildingCenterDraft.center.x - dx;
-    const right = buildingCenterDraft.center.x + dx;
-    const top = buildingCenterDraft.center.y - dy;
-    const bottom = buildingCenterDraft.center.y + dy;
-
-    const c1 = worldToCanvas({ x: left, y: top });
-    const c2 = worldToCanvas({ x: right, y: bottom });
-
-    // Calculate rectangle bounds on canvas
-    const canvasLeft = Math.min(c1.x, c2.x);
-    const canvasRight = Math.max(c1.x, c2.x);
-    const canvasTop = Math.min(c1.y, c2.y);
-    const canvasBottom = Math.max(c1.y, c2.y);
-    const rectWidth = canvasRight - canvasLeft;
-    const rectHeight = canvasBottom - canvasTop;
-
-    // Draw dashed rectangle outline
-    ctx.strokeStyle = canvasTheme.barrierStroke;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 6]);
-    ctx.strokeRect(canvasLeft, canvasTop, rectWidth, rectHeight);
-    ctx.setLineDash([]);
-
-    // Draw center point indicator
-    const center = worldToCanvas(buildingCenterDraft.center);
-    ctx.beginPath();
-    ctx.arc(center.x, center.y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 136, 0, 0.8)';
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Calculate world dimensions
-    const worldWidth = dx * 2;
-    const worldHeight = dy * 2;
-    const worldArea = worldWidth * worldHeight;
-
-    // Draw dimension labels if size is meaningful
-    if (worldWidth > 0.5 || worldHeight > 0.5) {
-      const centerX = (canvasLeft + canvasRight) / 2;
-      const centerY = (canvasTop + canvasBottom) / 2;
-
-      // Background for dimension text
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.font = '12px "Work Sans", monospace';
-
-      const widthText = `W: ${worldWidth.toFixed(1)}m`;
-      const heightText = `H: ${worldHeight.toFixed(1)}m`;
-      const areaText = `A: ${worldArea.toFixed(0)} m²`;
-
-      const textLines = [widthText, heightText, areaText];
-      const lineHeight = 16;
-      const padding = 6;
-      const maxWidth = Math.max(...textLines.map(t => ctx.measureText(t).width));
-      const boxWidth = maxWidth + padding * 2;
-      const boxHeight = textLines.length * lineHeight + padding * 2;
-
-      const boxX = centerX - boxWidth / 2;
-      const boxY = centerY - boxHeight / 2;
-
-      // Draw background box
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-      ctx.beginPath();
-      ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 4);
-      ctx.fill();
-
-      // Draw text
-      ctx.fillStyle = '#00ff88';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      textLines.forEach((text, i) => {
-        const y = boxY + padding + lineHeight / 2 + i * lineHeight;
-        ctx.fillText(text, centerX, y);
-      });
     }
   }
 }
@@ -5531,9 +5447,6 @@ function downloadCsv() {
 
 // Drawing mode submenu state
 let drawingModeSubmenu: HTMLElement | null = null;
-let lastToolClickTime = 0;
-let lastToolClicked: string | null = null;
-const DOUBLE_CLICK_THRESHOLD = 300; // ms
 
 function showDrawingModeSubmenu(tool: 'add-building' | 'add-barrier', button: HTMLElement) {
   // Hide any existing submenu first
@@ -5642,22 +5555,16 @@ function wireTools() {
     if (!button) return;
     const tool = button.dataset.tool as Tool;
 
-    const now = Date.now();
-    const isDoubleClick = tool === lastToolClicked && (now - lastToolClickTime) < DOUBLE_CLICK_THRESHOLD;
-
     // Check if this tool supports drawing mode submenu
     const supportsSubmenu = tool === 'add-building' || tool === 'add-barrier';
 
-    if (isDoubleClick && supportsSubmenu) {
-      // Double-click: show submenu
+    // If clicking on already-active tool that supports submenu, show the submenu
+    if (supportsSubmenu && activeTool === tool) {
       showDrawingModeSubmenu(tool as 'add-building' | 'add-barrier', button);
     } else {
-      // Single click: select tool
+      // Otherwise, select the tool
       setActiveTool(tool);
     }
-
-    lastToolClickTime = now;
-    lastToolClicked = tool;
   });
 }
 
@@ -6248,6 +6155,7 @@ function commitBarrierDraft() {
   barrierDraftAnchored = false;
   barrierDragActive = false;
   setSelection({ type: 'barrier', id: barrier.id });
+  setActiveTool('select');
   updateCounts();
   pushHistory();
   computeScene();
@@ -6299,6 +6207,7 @@ function commitBuildingDraft() {
   buildingDraftAnchored = false;
   buildingDragActive = false;
   setSelection({ type: 'building', id: building.id });
+  setActiveTool('select');
   updateCounts();
   pushHistory();
   computeScene();
@@ -6342,6 +6251,7 @@ function commitBuildingCenterDraft() {
   buildingCenterDraft = null;
   buildingDragActive = false;
   setSelection({ type: 'building', id: building.id });
+  setActiveTool('select');
   updateCounts();
   pushHistory();
   computeScene();
@@ -6388,6 +6298,7 @@ function commitBarrierCenterDraft() {
   barrierCenterDraft = null;
   barrierDragActive = false;
   setSelection({ type: 'barrier', id: barrier.id });
+  setActiveTool('select');
   updateCounts();
   pushHistory();
   computeScene();
@@ -6637,6 +6548,90 @@ function drawBuildings() {
       rotationHandleRadius: BUILDING_ROTATION_HANDLE_RADIUS,
       rotationHandleStroke: canvasTheme.panelStroke,
     });
+  }
+
+  // Draw building center draft preview with dimensions
+  if (buildingCenterDraft) {
+    // Calculate rectangle from center + corner (mirrored)
+    const dx = Math.abs(buildingCenterDraft.corner.x - buildingCenterDraft.center.x);
+    const dy = Math.abs(buildingCenterDraft.corner.y - buildingCenterDraft.center.y);
+
+    const left = buildingCenterDraft.center.x - dx;
+    const right = buildingCenterDraft.center.x + dx;
+    const top = buildingCenterDraft.center.y - dy;
+    const bottom = buildingCenterDraft.center.y + dy;
+
+    const c1 = worldToCanvas({ x: left, y: top });
+    const c2 = worldToCanvas({ x: right, y: bottom });
+
+    // Calculate rectangle bounds on canvas
+    const canvasLeft = Math.min(c1.x, c2.x);
+    const canvasRight = Math.max(c1.x, c2.x);
+    const canvasTop = Math.min(c1.y, c2.y);
+    const canvasBottom = Math.max(c1.y, c2.y);
+    const rectWidth = canvasRight - canvasLeft;
+    const rectHeight = canvasBottom - canvasTop;
+
+    // Draw dashed rectangle outline
+    ctx.strokeStyle = canvasTheme.barrierStroke;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 6]);
+    ctx.strokeRect(canvasLeft, canvasTop, rectWidth, rectHeight);
+    ctx.setLineDash([]);
+
+    // Draw center point indicator
+    const center = worldToCanvas(buildingCenterDraft.center);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 136, 0, 0.8)';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Calculate world dimensions
+    const worldWidth = dx * 2;
+    const worldHeight = dy * 2;
+    const worldArea = worldWidth * worldHeight;
+
+    // Draw dimension labels if size is meaningful
+    if (worldWidth > 0.5 || worldHeight > 0.5) {
+      const centerX = (canvasLeft + canvasRight) / 2;
+      const centerY = (canvasTop + canvasBottom) / 2;
+
+      // Background for dimension text
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.font = '12px "Work Sans", monospace';
+
+      const widthText = `W: ${worldWidth.toFixed(1)}m`;
+      const heightText = `H: ${worldHeight.toFixed(1)}m`;
+      const areaText = `A: ${worldArea.toFixed(0)} m²`;
+
+      const textLines = [widthText, heightText, areaText];
+      const lineHeight = 16;
+      const padding = 6;
+      const maxWidth = Math.max(...textLines.map(t => ctx.measureText(t).width));
+      const boxWidth = maxWidth + padding * 2;
+      const boxHeight = textLines.length * lineHeight + padding * 2;
+
+      const boxX = centerX - boxWidth / 2;
+      const boxY = centerY - boxHeight / 2;
+
+      // Draw background box
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 4);
+      ctx.fill();
+
+      // Draw text
+      ctx.fillStyle = '#00ff88';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      textLines.forEach((text, i) => {
+        const y = boxY + padding + lineHeight / 2 + i * lineHeight;
+        ctx.fillText(text, centerX, y);
+      });
+    }
   }
 }
 
