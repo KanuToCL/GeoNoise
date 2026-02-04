@@ -780,6 +780,19 @@ let buildingDraft: { corner1: Point; corner2: Point } | null = null;
 let buildingDraftAnchored = false;
 let buildingDragActive = false;
 
+// Drawing modes for building and barrier tools
+// - 'diagonal': Click corner, drag to opposite corner (default for buildings)
+// - 'center': Click center, drag outward symmetrically
+// - 'end-to-end': Click start, click/drag to end (default for barriers)
+type BuildingDrawingMode = 'diagonal' | 'center';
+type BarrierDrawingMode = 'end-to-end' | 'center';
+let buildingDrawingMode: BuildingDrawingMode = 'diagonal';
+let barrierDrawingMode: BarrierDrawingMode = 'end-to-end';
+
+// For center-outward mode, we store the center point
+let buildingCenterDraft: { center: Point; corner: Point } | null = null;
+let barrierCenterDraft: { center: Point; end: Point } | null = null;
+
 const results: SceneResults = { receivers: [], panels: [] };
 const probeResults = new Map<string, ProbeResult['data']>();
 let probeWorker: Worker | null = null;
@@ -2159,6 +2172,120 @@ async function computeNoiseMapInternal(options: NoiseMapComputeOptions = {}) {
         queuedMapResolutionPx = null;
         recalculateNoiseMap(nextResolution);
       }
+    }
+  }
+
+  // Draw barrier center draft preview
+  if (barrierCenterDraft) {
+    // Calculate endpoints from center + end (mirrored)
+    const dx = barrierCenterDraft.end.x - barrierCenterDraft.center.x;
+    const dy = barrierCenterDraft.end.y - barrierCenterDraft.center.y;
+
+    const p1: Point = {
+      x: barrierCenterDraft.center.x - dx,
+      y: barrierCenterDraft.center.y - dy,
+    };
+    const p2: Point = {
+      x: barrierCenterDraft.center.x + dx,
+      y: barrierCenterDraft.center.y + dy,
+    };
+
+    const start = worldToCanvas(p1);
+    const end = worldToCanvas(p2);
+    drawLine(start, end, canvasTheme.barrierStroke, 4, [6, 6]);
+
+    // Draw center point indicator
+    const center = worldToCanvas(barrierCenterDraft.center);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 136, 0, 0.8)';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Draw building center draft preview with dimensions
+  if (buildingCenterDraft) {
+    // Calculate rectangle from center + corner (mirrored)
+    const dx = Math.abs(buildingCenterDraft.corner.x - buildingCenterDraft.center.x);
+    const dy = Math.abs(buildingCenterDraft.corner.y - buildingCenterDraft.center.y);
+
+    const left = buildingCenterDraft.center.x - dx;
+    const right = buildingCenterDraft.center.x + dx;
+    const top = buildingCenterDraft.center.y - dy;
+    const bottom = buildingCenterDraft.center.y + dy;
+
+    const c1 = worldToCanvas({ x: left, y: top });
+    const c2 = worldToCanvas({ x: right, y: bottom });
+
+    // Calculate rectangle bounds on canvas
+    const canvasLeft = Math.min(c1.x, c2.x);
+    const canvasRight = Math.max(c1.x, c2.x);
+    const canvasTop = Math.min(c1.y, c2.y);
+    const canvasBottom = Math.max(c1.y, c2.y);
+    const rectWidth = canvasRight - canvasLeft;
+    const rectHeight = canvasBottom - canvasTop;
+
+    // Draw dashed rectangle outline
+    ctx.strokeStyle = canvasTheme.barrierStroke;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 6]);
+    ctx.strokeRect(canvasLeft, canvasTop, rectWidth, rectHeight);
+    ctx.setLineDash([]);
+
+    // Draw center point indicator
+    const center = worldToCanvas(buildingCenterDraft.center);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 136, 0, 0.8)';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Calculate world dimensions
+    const worldWidth = dx * 2;
+    const worldHeight = dy * 2;
+    const worldArea = worldWidth * worldHeight;
+
+    // Draw dimension labels if size is meaningful
+    if (worldWidth > 0.5 || worldHeight > 0.5) {
+      const centerX = (canvasLeft + canvasRight) / 2;
+      const centerY = (canvasTop + canvasBottom) / 2;
+
+      // Background for dimension text
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.font = '12px "Work Sans", monospace';
+
+      const widthText = `W: ${worldWidth.toFixed(1)}m`;
+      const heightText = `H: ${worldHeight.toFixed(1)}m`;
+      const areaText = `A: ${worldArea.toFixed(0)} m²`;
+
+      const textLines = [widthText, heightText, areaText];
+      const lineHeight = 16;
+      const padding = 6;
+      const maxWidth = Math.max(...textLines.map(t => ctx.measureText(t).width));
+      const boxWidth = maxWidth + padding * 2;
+      const boxHeight = textLines.length * lineHeight + padding * 2;
+
+      const boxX = centerX - boxWidth / 2;
+      const boxY = centerY - boxHeight / 2;
+
+      // Draw background box
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 4);
+      ctx.fill();
+
+      // Draw text
+      ctx.fillStyle = '#00ff88';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      textLines.forEach((text, i) => {
+        const y = boxY + padding + lineHeight / 2 + i * lineHeight;
+        ctx.fillText(text, centerX, y);
+      });
     }
   }
 }
@@ -4344,11 +4471,13 @@ function setActiveTool(tool: Tool) {
     barrierDraft = null;
     barrierDraftAnchored = false;
     barrierDragActive = false;
+    barrierCenterDraft = null;
   }
   if (tool !== 'add-building') {
     buildingDraft = null;
     buildingDraftAnchored = false;
     buildingDragActive = false;
+    buildingCenterDraft = null;
   }
   if (modeLabel) {
     modeLabel.textContent = toolLabel(tool);
@@ -5430,6 +5559,110 @@ function downloadCsv() {
   URL.revokeObjectURL(url);
 }
 
+// Drawing mode submenu state
+let drawingModeSubmenu: HTMLElement | null = null;
+let lastToolClickTime = 0;
+let lastToolClicked: string | null = null;
+const DOUBLE_CLICK_THRESHOLD = 300; // ms
+
+function showDrawingModeSubmenu(tool: 'add-building' | 'add-barrier', button: HTMLElement) {
+  // Hide any existing submenu first
+  hideDrawingModeSubmenu();
+
+  // Create submenu element
+  const submenu = document.createElement('div');
+  submenu.className = 'drawing-mode-submenu';
+  submenu.setAttribute('role', 'menu');
+
+  const isBuilding = tool === 'add-building';
+  const currentMode = isBuilding ? buildingDrawingMode : barrierDrawingMode;
+
+  const modes = isBuilding
+    ? [
+        { id: 'diagonal', label: 'Diagonal Drag', desc: 'Click corner, drag to opposite' },
+        { id: 'center', label: 'Center Outward', desc: 'Click center, drag to corner' },
+      ]
+    : [
+        { id: 'end-to-end', label: 'End-to-End', desc: 'Click start, click/drag to end' },
+        { id: 'center', label: 'Center Outward', desc: 'Click center, drag to expand both ends' },
+      ];
+
+  const title = document.createElement('div');
+  title.className = 'drawing-mode-submenu-title';
+  title.textContent = isBuilding ? 'Building Drawing Mode' : 'Barrier Drawing Mode';
+  submenu.appendChild(title);
+
+  for (const mode of modes) {
+    const option = document.createElement('button');
+    option.className = 'drawing-mode-option';
+    option.setAttribute('role', 'menuitemradio');
+    option.setAttribute('aria-checked', mode.id === currentMode ? 'true' : 'false');
+    if (mode.id === currentMode) {
+      option.classList.add('is-selected');
+    }
+
+    const radio = document.createElement('span');
+    radio.className = 'drawing-mode-radio';
+    radio.textContent = mode.id === currentMode ? '●' : '○';
+
+    const labelWrap = document.createElement('span');
+    labelWrap.className = 'drawing-mode-label-wrap';
+
+    const label = document.createElement('span');
+    label.className = 'drawing-mode-label';
+    label.textContent = mode.label;
+
+    const desc = document.createElement('span');
+    desc.className = 'drawing-mode-desc';
+    desc.textContent = mode.desc;
+
+    labelWrap.appendChild(label);
+    labelWrap.appendChild(desc);
+    option.appendChild(radio);
+    option.appendChild(labelWrap);
+
+    option.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (isBuilding) {
+        buildingDrawingMode = mode.id as BuildingDrawingMode;
+      } else {
+        barrierDrawingMode = mode.id as BarrierDrawingMode;
+      }
+      hideDrawingModeSubmenu();
+    });
+
+    submenu.appendChild(option);
+  }
+
+  // Position submenu above the button
+  const buttonRect = button.getBoundingClientRect();
+  submenu.style.position = 'fixed';
+  submenu.style.left = `${buttonRect.left + buttonRect.width / 2}px`;
+  submenu.style.bottom = `${window.innerHeight - buttonRect.top + 8}px`;
+
+  document.body.appendChild(submenu);
+  drawingModeSubmenu = submenu;
+
+  // Close on click outside
+  const closeHandler = (e: MouseEvent) => {
+    if (!submenu.contains(e.target as Node)) {
+      hideDrawingModeSubmenu();
+      document.removeEventListener('click', closeHandler);
+    }
+  };
+  // Delay adding the listener so the current click doesn't trigger it
+  requestAnimationFrame(() => {
+    document.addEventListener('click', closeHandler);
+  });
+}
+
+function hideDrawingModeSubmenu() {
+  if (drawingModeSubmenu) {
+    drawingModeSubmenu.remove();
+    drawingModeSubmenu = null;
+  }
+}
+
 function wireTools() {
   if (!toolGrid) return;
   toolGrid.addEventListener('click', (event) => {
@@ -5438,7 +5671,23 @@ function wireTools() {
     const button = target.closest<HTMLButtonElement>('button[data-tool]');
     if (!button) return;
     const tool = button.dataset.tool as Tool;
-    setActiveTool(tool);
+
+    const now = Date.now();
+    const isDoubleClick = tool === lastToolClicked && (now - lastToolClickTime) < DOUBLE_CLICK_THRESHOLD;
+
+    // Check if this tool supports drawing mode submenu
+    const supportsSubmenu = tool === 'add-building' || tool === 'add-barrier';
+
+    if (isDoubleClick && supportsSubmenu) {
+      // Double-click: show submenu
+      showDrawingModeSubmenu(tool as 'add-building' | 'add-barrier', button);
+    } else {
+      // Single click: select tool
+      setActiveTool(tool);
+    }
+
+    lastToolClickTime = now;
+    lastToolClicked = tool;
   });
 }
 
@@ -6080,6 +6329,95 @@ function commitBuildingDraft() {
   buildingDraftAnchored = false;
   buildingDragActive = false;
   setSelection({ type: 'building', id: building.id });
+  updateCounts();
+  pushHistory();
+  computeScene();
+  resetDockInactivityTimer();
+}
+
+function commitBuildingCenterDraft() {
+  if (!buildingCenterDraft) return;
+
+  // Calculate building dimensions from center + corner
+  // The corner represents one corner of the rectangle, so we mirror it to get the full extent
+  const dx = Math.abs(buildingCenterDraft.corner.x - buildingCenterDraft.center.x);
+  const dy = Math.abs(buildingCenterDraft.corner.y - buildingCenterDraft.center.y);
+
+  const width = dx * 2;
+  const height = dy * 2;
+
+  // Minimum size check (at least 2m x 2m)
+  if (width < 2 && height < 2) {
+    buildingCenterDraft = null;
+    buildingDragActive = false;
+    requestRender();
+    return;
+  }
+
+  // Ensure minimum dimensions
+  const finalWidth = Math.max(2, width);
+  const finalHeight = Math.max(2, height);
+
+  const building = new Building({
+    id: createId('bd', buildingSeq++),
+    x: buildingCenterDraft.center.x,
+    y: buildingCenterDraft.center.y,
+    width: finalWidth,
+    height: finalHeight,
+    rotation: 0,
+    z_height: 10, // Default height 10m
+  });
+
+  scene.buildings.push(building);
+  buildingCenterDraft = null;
+  buildingDragActive = false;
+  setSelection({ type: 'building', id: building.id });
+  updateCounts();
+  pushHistory();
+  computeScene();
+  resetDockInactivityTimer();
+}
+
+function commitBarrierCenterDraft() {
+  if (!barrierCenterDraft) return;
+
+  // Calculate barrier endpoints from center + end
+  // The end represents one endpoint, so we mirror it through center to get the full extent
+  const dx = barrierCenterDraft.end.x - barrierCenterDraft.center.x;
+  const dy = barrierCenterDraft.end.y - barrierCenterDraft.center.y;
+
+  const p1: Point = {
+    x: barrierCenterDraft.center.x - dx,
+    y: barrierCenterDraft.center.y - dy,
+  };
+  const p2: Point = {
+    x: barrierCenterDraft.center.x + dx,
+    y: barrierCenterDraft.center.y + dy,
+  };
+
+  // Calculate length
+  const length = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
+
+  // Minimum length check (at least 1m)
+  if (length < 1) {
+    barrierCenterDraft = null;
+    barrierDragActive = false;
+    requestRender();
+    return;
+  }
+
+  const barrier: Barrier = {
+    id: createId('b', barrierSeq++),
+    p1: p1,
+    p2: p2,
+    height: 3,
+    transmissionLoss: Number.POSITIVE_INFINITY,
+  };
+
+  scene.barriers.push(barrier);
+  barrierCenterDraft = null;
+  barrierDragActive = false;
+  setSelection({ type: 'barrier', id: barrier.id });
   updateCounts();
   pushHistory();
   computeScene();
@@ -6977,17 +7315,29 @@ function handlePointerMove(event: MouseEvent) {
     return;
   }
 
-  if (activeTool === 'add-barrier' && barrierDragActive && barrierDraft) {
-    barrierDraft.p2 = snappedPoint;
-    requestRender();
-    return;
+  if (activeTool === 'add-barrier' && barrierDragActive) {
+    if (barrierDrawingMode === 'center' && barrierCenterDraft) {
+      barrierCenterDraft.end = snappedPoint;
+      requestRender();
+      return;
+    } else if (barrierDraft) {
+      barrierDraft.p2 = snappedPoint;
+      requestRender();
+      return;
+    }
   }
 
   // Update building draft while dragging
-  if (activeTool === 'add-building' && buildingDragActive && buildingDraft) {
-    buildingDraft.corner2 = snappedPoint;
-    requestRender();
-    return;
+  if (activeTool === 'add-building' && buildingDragActive) {
+    if (buildingDrawingMode === 'center' && buildingCenterDraft) {
+      buildingCenterDraft.corner = snappedPoint;
+      requestRender();
+      return;
+    } else if (buildingDraft) {
+      buildingDraft.corner2 = snappedPoint;
+      requestRender();
+      return;
+    }
   }
 
   if (!dragState && (activeTool === 'select' || activeTool === 'delete')) {
@@ -7039,13 +7389,24 @@ function handlePointerDown(event: MouseEvent) {
   }
 
   if (activeTool === 'add-barrier') {
-    if (!barrierDraft) {
-      barrierDraft = { p1: snappedPoint, p2: snappedPoint };
-      barrierDraftAnchored = false;
+    if (barrierDrawingMode === 'center') {
+      // Center-outward mode: first click sets center
+      if (!barrierCenterDraft) {
+        barrierCenterDraft = { center: snappedPoint, end: snappedPoint };
+      } else {
+        barrierCenterDraft.end = snappedPoint;
+      }
+      barrierDragActive = true;
     } else {
-      barrierDraft.p2 = snappedPoint;
+      // End-to-end mode (default): first click sets p1
+      if (!barrierDraft) {
+        barrierDraft = { p1: snappedPoint, p2: snappedPoint };
+        barrierDraftAnchored = false;
+      } else {
+        barrierDraft.p2 = snappedPoint;
+      }
+      barrierDragActive = true;
     }
-    barrierDragActive = true;
     requestRender();
     return;
   }
@@ -7056,14 +7417,25 @@ function handlePointerDown(event: MouseEvent) {
   }
 
   if (activeTool === 'add-building') {
-    // Start or continue building draft
-    if (!buildingDraft) {
-      buildingDraft = { corner1: snappedPoint, corner2: snappedPoint };
-      buildingDraftAnchored = false;
+    // Start or continue building draft based on drawing mode
+    if (buildingDrawingMode === 'center') {
+      // Center-outward mode: first click sets center
+      if (!buildingCenterDraft) {
+        buildingCenterDraft = { center: snappedPoint, corner: snappedPoint };
+      } else {
+        buildingCenterDraft.corner = snappedPoint;
+      }
+      buildingDragActive = true;
     } else {
-      buildingDraft.corner2 = snappedPoint;
+      // Diagonal mode (default): first click sets corner
+      if (!buildingDraft) {
+        buildingDraft = { corner1: snappedPoint, corner2: snappedPoint };
+        buildingDraftAnchored = false;
+      } else {
+        buildingDraft.corner2 = snappedPoint;
+      }
+      buildingDragActive = true;
     }
-    buildingDragActive = true;
     requestRender();
     return;
   }
@@ -7295,35 +7667,67 @@ function handlePointerLeave() {
 }
 
 function handlePointerUp() {
-  if (barrierDragActive && barrierDraft) {
-    // If user dragged a visible length, commit immediately; otherwise wait for a second click.
-    const draftDistance = distance(barrierDraft.p1, barrierDraft.p2);
-    if (barrierDraftAnchored || draftDistance > 0.5) {
-      commitBarrierDraft();
-    } else {
-      // First click without a meaningful drag:
-      // keep the draft around so the next click can set p2 (classic click-then-click placement).
-      barrierDraftAnchored = true;
-      barrierDragActive = false;
-      requestRender();
+  if (barrierDragActive) {
+    if (barrierDrawingMode === 'center' && barrierCenterDraft) {
+      // Center-outward mode
+      const dx = barrierCenterDraft.end.x - barrierCenterDraft.center.x;
+      const dy = barrierCenterDraft.end.y - barrierCenterDraft.center.y;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      if (length > 0.5) {
+        commitBarrierCenterDraft();
+      } else {
+        // Too small, cancel
+        barrierCenterDraft = null;
+        barrierDragActive = false;
+        requestRender();
+      }
+      return;
+    } else if (barrierDraft) {
+      // If user dragged a visible length, commit immediately; otherwise wait for a second click.
+      const draftDistance = distance(barrierDraft.p1, barrierDraft.p2);
+      if (barrierDraftAnchored || draftDistance > 0.5) {
+        commitBarrierDraft();
+      } else {
+        // First click without a meaningful drag:
+        // keep the draft around so the next click can set p2 (classic click-then-click placement).
+        barrierDraftAnchored = true;
+        barrierDragActive = false;
+        requestRender();
+      }
+      return;
     }
-    return;
   }
 
   // Commit building draft on mouse up
-  if (buildingDragActive && buildingDraft) {
-    const draftWidth = Math.abs(buildingDraft.corner2.x - buildingDraft.corner1.x);
-    const draftHeight = Math.abs(buildingDraft.corner2.y - buildingDraft.corner1.y);
-    // Commit if user dragged a meaningful size (at least 1m in any direction)
-    if (buildingDraftAnchored || draftWidth > 1 || draftHeight > 1) {
-      commitBuildingDraft();
-    } else {
-      // First click without meaningful drag: wait for second click
-      buildingDraftAnchored = true;
-      buildingDragActive = false;
-      requestRender();
+  if (buildingDragActive) {
+    if (buildingDrawingMode === 'center' && buildingCenterDraft) {
+      // Center-outward mode
+      const dx = Math.abs(buildingCenterDraft.corner.x - buildingCenterDraft.center.x);
+      const dy = Math.abs(buildingCenterDraft.corner.y - buildingCenterDraft.center.y);
+      if (dx > 0.5 || dy > 0.5) {
+        commitBuildingCenterDraft();
+      } else {
+        // Too small, cancel
+        buildingCenterDraft = null;
+        buildingDragActive = false;
+        requestRender();
+      }
+      return;
+    } else if (buildingDraft) {
+      // Diagonal mode
+      const draftWidth = Math.abs(buildingDraft.corner2.x - buildingDraft.corner1.x);
+      const draftHeight = Math.abs(buildingDraft.corner2.y - buildingDraft.corner1.y);
+      // Commit if user dragged a meaningful size (at least 1m in any direction)
+      if (buildingDraftAnchored || draftWidth > 1 || draftHeight > 1) {
+        commitBuildingDraft();
+      } else {
+        // First click without meaningful drag: wait for second click
+        buildingDraftAnchored = true;
+        buildingDragActive = false;
+        requestRender();
+      }
+      return;
     }
-    return;
   }
 
   if (panState) {
