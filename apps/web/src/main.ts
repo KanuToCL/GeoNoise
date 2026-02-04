@@ -7777,15 +7777,19 @@ function handleWheel(event: WheelEvent) {
   zoom = Math.min(4, Math.max(0.5, zoom * direction));
   updatePixelsPerMeter();
   const after = canvasToWorld(canvasPoint);
+  const panDeltaX = before.x - after.x;
+  const panDeltaY = before.y - after.y;
   panOffset = {
-    x: panOffset.x + (before.x - after.x),
-    y: panOffset.y + (before.y - after.y),
+    x: panOffset.x + panDeltaX,
+    y: panOffset.y + panDeltaY,
   };
   updateScaleBar();
 
-  // Sync map zoom when map is visible and NOT in interactive mode
+  // Sync map zoom AND pan when map is visible and NOT in interactive mode
   if (isMapVisible() && !isMapInteractive()) {
     syncMapToCanvasZoom(pixelsPerMeter, panOffset.x, panOffset.y);
+    // Also sync the pan offset change caused by zooming around cursor
+    syncMapToCanvasPan(panDeltaX, panDeltaY, pixelsPerMeter);
   }
 
   requestRender();
