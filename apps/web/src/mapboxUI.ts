@@ -562,7 +562,7 @@ function updateScaleComparisonPanel(mapboxMetersPerPixel: number): void {
 
   // Calculate nice round distance for 100 pixels
   const referencePixels = 100;
-  const _mapboxMeters = mapboxMetersPerPixel * referencePixels;
+  void (mapboxMetersPerPixel * referencePixels); // Mapbox meters available for future use
 
   // Get GeoNoise scale from the scale bar element
   const scaleTextEl = document.getElementById("scaleText");

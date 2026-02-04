@@ -6108,24 +6108,6 @@ function addPanelAt(point: Point) {
   resetDockInactivityTimer();
 }
 
-function _addBuildingAt(point: Point) {
-  const building = new Building({
-    id: createId('bd', buildingSeq++),
-    x: point.x,
-    y: point.y,
-    width: 12,
-    height: 10,
-    rotation: 0,
-    z_height: 10,
-  });
-  scene.buildings.push(building);
-  setSelection({ type: 'building', id: building.id });
-  updateCounts();
-  pushHistory();
-  computeScene();
-  resetDockInactivityTimer();
-}
-
 function addSourceAt(point: Point) {
   const defaultSpectrum = createFlatSpectrum(100) as Spectrum9;
   const source: Source = {
