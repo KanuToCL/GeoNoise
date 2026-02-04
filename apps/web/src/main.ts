@@ -2167,42 +2167,12 @@ async function computeNoiseMapInternal(options: NoiseMapComputeOptions = {}) {
       if (!silent) {
         updateMapUI();
       }
-      if (queuedMapResolutionPx !== null) {
-        const nextResolution = queuedMapResolutionPx;
-        queuedMapResolutionPx = null;
-        recalculateNoiseMap(nextResolution);
+        textLines.forEach((text, i) => {
+          const y = boxY + padding + lineHeight / 2 + i * lineHeight;
+          ctx.fillText(text, centerX, y);
+        });
       }
     }
-  }
-
-  // Draw barrier center draft preview
-  if (barrierCenterDraft) {
-    // Calculate endpoints from center + end (mirrored)
-    const dx = barrierCenterDraft.end.x - barrierCenterDraft.center.x;
-    const dy = barrierCenterDraft.end.y - barrierCenterDraft.center.y;
-
-    const p1: Point = {
-      x: barrierCenterDraft.center.x - dx,
-      y: barrierCenterDraft.center.y - dy,
-    };
-    const p2: Point = {
-      x: barrierCenterDraft.center.x + dx,
-      y: barrierCenterDraft.center.y + dy,
-    };
-
-    const start = worldToCanvas(p1);
-    const end = worldToCanvas(p2);
-    drawLine(start, end, canvasTheme.barrierStroke, 4, [6, 6]);
-
-    // Draw center point indicator
-    const center = worldToCanvas(barrierCenterDraft.center);
-    ctx.beginPath();
-    ctx.arc(center.x, center.y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 136, 0, 0.8)';
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1;
-    ctx.stroke();
   }
 
   // Draw building center draft preview with dimensions
@@ -6739,6 +6709,36 @@ function drawBarriers() {
     const start = worldToCanvas(barrierDraft.p1);
     const end = worldToCanvas(barrierDraft.p2);
     drawLine(start, end, canvasTheme.barrierStroke, 4, [6, 6]);
+  }
+
+  // Draw barrier center draft preview
+  if (barrierCenterDraft) {
+    // Calculate endpoints from center + end (mirrored)
+    const dx = barrierCenterDraft.end.x - barrierCenterDraft.center.x;
+    const dy = barrierCenterDraft.end.y - barrierCenterDraft.center.y;
+
+    const p1: Point = {
+      x: barrierCenterDraft.center.x - dx,
+      y: barrierCenterDraft.center.y - dy,
+    };
+    const p2: Point = {
+      x: barrierCenterDraft.center.x + dx,
+      y: barrierCenterDraft.center.y + dy,
+    };
+
+    const start = worldToCanvas(p1);
+    const end = worldToCanvas(p2);
+    drawLine(start, end, canvasTheme.barrierStroke, 4, [6, 6]);
+
+    // Draw center point indicator
+    const center = worldToCanvas(barrierCenterDraft.center);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 136, 0, 0.8)';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
   }
 
   // Draw building draft preview with dimensions
