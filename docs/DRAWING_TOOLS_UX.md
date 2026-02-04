@@ -17,10 +17,11 @@ Enhance the Building (H) and Barrier (B) drawing tools with more intuitive drawi
 
 ## 🏢 Building Tool (H) Improvements
 
-### Current Behavior
-- Click to place building corner
-- Click again to place opposite corner
-- Fixed rectangular shape
+### Current Behavior (After Implementation)
+- **Single click**: Selects building tool
+- **Double-click on tool button**: Shows drawing mode submenu
+- **Diagonal mode (default)**: Click corner, drag to opposite corner
+- **Center mode**: Click center, drag outward - building expands symmetrically
 
 ### Proposed: Drawing Modes Submenu
 
@@ -110,10 +111,11 @@ Click points 1, 2, 3, 4... then Enter/double-click to close
 
 ## 🚧 Barrier Tool (B) Improvements
 
-### Current Behavior
-- Click to place one end
-- Click again to place other end
-- Line segment barrier
+### Current Behavior (After Implementation)
+- **Single click**: Selects barrier tool
+- **Double-click on tool button**: Shows drawing mode submenu
+- **End-to-end mode (default)**: Click start, click/drag to end
+- **Center mode**: Click center, drag outward - barrier expands in both directions
 
 ### Proposed: Drawing Modes Submenu
 
@@ -286,31 +288,36 @@ const drawingState: DrawingModeState = {
 
 ## 📋 Implementation Roadmap
 
-### Phase 1: Auto-Select After Creation (Quick Win) - 0.5 day
+### Phase 1: Auto-Select After Creation ✅ COMPLETE
 
-- [ ] After creating building, auto-select it
-- [ ] After creating barrier, auto-select it
-- [ ] Show properties panel immediately
+- [x] After creating building, auto-select it
+- [x] After creating barrier, auto-select it
+- [x] Show properties panel immediately
 
-### Phase 2: Building Diagonal Drag Enhancement - 0.5 day
+### Phase 2: Double-Click Submenu Infrastructure ✅ COMPLETE
 
-- [ ] Show dimensions while drawing (width, height, area)
-- [ ] Dashed preview outline
-- [ ] Snap to grid while drawing
+- [x] Double-click detection on tool buttons (300ms threshold)
+- [x] Submenu component with animated popup
+- [x] Radio button mode selection UI
+- [x] Mode selection persistence (until changed)
+- [x] CSS styling in style.css (.drawing-mode-submenu)
 
-### Phase 3: Submenu Infrastructure - 0.5 day
+### Phase 3: Center Outward Modes ✅ COMPLETE
 
-- [ ] Double-click detection on tool buttons
-- [ ] Submenu component (show/hide/position)
-- [ ] Mode selection persistence
+- [x] Building: center outward drawing mode
+- [x] Barrier: center outward drawing mode
+- [x] Orange center point indicator during drawing
+- [x] Dimension labels for buildings (W, H, Area)
+- [x] handlePointerDown/Move/Up handlers for center mode
+- [x] commitBuildingCenterDraft() function
+- [x] commitBarrierCenterDraft() function
+- [x] Preview rendering for center mode drafts
 
-### Phase 4: Center Outward Modes - 0.5 day
+### Phase 4: Barrier Anchor + Drag Mode (Future)
 
-- [ ] Building: center outward
-- [ ] Barrier: center outward
-- [ ] Barrier: anchor + drag
+- [ ] Barrier: anchor + drag (one end fixed, other follows mouse)
 
-### Phase 5: Polygon Buildings (Requires Audit) - 1 day
+### Phase 5: Polygon Buildings (Requires Physics Audit)
 
 - [ ] Audit physics engine for non-rectangular support
 - [ ] Click-to-place corners mode
@@ -354,4 +361,4 @@ const drawingState: DrawingModeState = {
 
 ---
 
-*Last updated: 2026-02-04*
+*Last updated: 2026-02-04 (Phases 1-3 implemented)*
