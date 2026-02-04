@@ -12,8 +12,10 @@ import {
   initializeMap,
   destroyMap,
   getMapDimensionsInMeters,
+  geocodeSearch,
   type MapboxMap,
   type MapStyle,
+  type GeocodingResult,
 } from "./mapbox.js";
 
 // UI State
@@ -55,6 +57,17 @@ let mapCenterInfo: HTMLDivElement | null = null;
 let mapStyleStreets: HTMLButtonElement | null = null;
 let mapStyleSatellite: HTMLButtonElement | null = null;
 let mapStyleDark: HTMLButtonElement | null = null;
+
+// Search and coordinate input elements
+let mapSearchInput: HTMLInputElement | null = null;
+let mapSearchResults: HTMLDivElement | null = null;
+let mapLatInput: HTMLInputElement | null = null;
+let mapLngInput: HTMLInputElement | null = null;
+let mapGoToCoords: HTMLButtonElement | null = null;
+
+// Search state
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let currentSearchResults: GeocodingResult[] = [];
 
 // Callbacks for canvas synchronization
 type ScaleSyncCallback = (metersPerPixel: number) => void;
@@ -103,10 +116,19 @@ export function initMapboxUI(options?: {
   mapStyleSatellite = document.getElementById("mapStyleSatellite") as HTMLButtonElement | null;
   mapStyleDark = document.getElementById("mapStyleDark") as HTMLButtonElement | null;
 
+  // Search and coordinate input elements
+  mapSearchInput = document.getElementById("mapSearchInput") as HTMLInputElement | null;
+  mapSearchResults = document.getElementById("mapSearchResults") as HTMLDivElement | null;
+  mapLatInput = document.getElementById("mapLatInput") as HTMLInputElement | null;
+  mapLngInput = document.getElementById("mapLngInput") as HTMLInputElement | null;
+  mapGoToCoords = document.getElementById("mapGoToCoords") as HTMLButtonElement | null;
+
   // Wire up event listeners
   wireMapToggleButton();
   wireTokenModal();
   wireFloatingPanel();
+  wireLocationSearch();
+  wireCoordinateInput();
   initScaleComparisonDrag();
 
   // Update button state based on whether token exists
@@ -697,6 +719,7 @@ function setupMapSyncListeners(): void {
   // Sync on move/zoom
   map.on("moveend", () => {
     syncScaleWithCanvas();
+    updateCoordinateInputs();
   });
 
   map.on("zoomend", () => {
@@ -705,6 +728,7 @@ function setupMapSyncListeners(): void {
 
   // Also sync during move for smoother experience
   map.on("move", () => {
+    updateCoordinateInputs();
     if (onMapMove) {
       const center = map.getCenter();
       const zoom = map.getZoom();
@@ -932,4 +956,212 @@ export function setMapZoom(zoom: number): void {
 export function getMapZoom(): number | null {
   if (!uiState.map) return null;
   return uiState.map.getZoom();
+}
+
+/**
+ * Update coordinate input fields with current map center
+ */
+function updateCoordinateInputs(): void {
+  if (!uiState.map) return;
+
+  const center = uiState.map.getCenter();
+
+  if (mapLatInput && document.activeElement !== mapLatInput) {
+    mapLatInput.value = center.lat.toFixed(6);
+  }
+  if (mapLngInput && document.activeElement !== mapLngInput) {
+    mapLngInput.value = center.lng.toFixed(6);
+  }
+}
+
+/**
+ * Wire location search input with debounced geocoding
+ */
+function wireLocationSearch(): void {
+  if (!mapSearchInput || !mapSearchResults) return;
+
+  // Debounced search on input
+  mapSearchInput.addEventListener("input", () => {
+    const query = mapSearchInput!.value.trim();
+
+    // Clear existing timer
+    if (searchDebounceTimer) {
+      clearTimeout(searchDebounceTimer);
+    }
+
+    // Hide results if query is empty
+    if (!query) {
+      hideSearchResults();
+      return;
+    }
+
+    // Debounce search
+    searchDebounceTimer = setTimeout(async () => {
+      const token = getMapboxToken();
+      if (!token) return;
+
+      const results = await geocodeSearch(query, token);
+      currentSearchResults = results;
+      displaySearchResults(results);
+    }, 300);
+  });
+
+  // Hide results when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!mapSearchInput?.contains(e.target as Node) && !mapSearchResults?.contains(e.target as Node)) {
+      hideSearchResults();
+    }
+  });
+
+  // Handle keyboard navigation
+  mapSearchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      hideSearchResults();
+      mapSearchInput!.blur();
+    } else if (e.key === "Enter" && currentSearchResults.length > 0) {
+      selectSearchResult(currentSearchResults[0]);
+    }
+  });
+}
+
+/**
+ * Display search results dropdown
+ */
+function displaySearchResults(results: GeocodingResult[]): void {
+  if (!mapSearchResults) return;
+
+  if (results.length === 0) {
+    mapSearchResults.innerHTML = `<div style="padding: 10px; font-size: 11px; color: #888;">No results found</div>`;
+    mapSearchResults.style.display = "block";
+    return;
+  }
+
+  mapSearchResults.innerHTML = results
+    .map(
+      (result, index) => `
+      <div class="map-search-result" data-index="${index}" style="
+        padding: 10px 12px;
+        font-size: 11px;
+        color: #ddd;
+        cursor: pointer;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        transition: background 0.15s;
+      " onmouseover="this.style.background='rgba(74,144,217,0.2)'" onmouseout="this.style.background='transparent'">
+        ${escapeHtml(result.place_name)}
+      </div>
+    `
+    )
+    .join("");
+
+  mapSearchResults.style.display = "block";
+
+  // Add click handlers to results
+  const resultElements = mapSearchResults.querySelectorAll(".map-search-result");
+  resultElements.forEach((el) => {
+    el.addEventListener("click", () => {
+      const index = parseInt(el.getAttribute("data-index") || "0", 10);
+      selectSearchResult(currentSearchResults[index]);
+    });
+  });
+}
+
+/**
+ * Hide search results dropdown
+ */
+function hideSearchResults(): void {
+  if (mapSearchResults) {
+    mapSearchResults.style.display = "none";
+    mapSearchResults.innerHTML = "";
+  }
+  currentSearchResults = [];
+}
+
+/**
+ * Select a search result and navigate to it
+ */
+function selectSearchResult(result: GeocodingResult): void {
+  if (!uiState.map) return;
+
+  const [lng, lat] = result.center;
+  uiState.map.setCenter([lng, lat]);
+  uiState.map.setZoom(16); // Good default zoom for buildings/streets
+
+  // Update UI
+  hideSearchResults();
+  if (mapSearchInput) {
+    mapSearchInput.value = "";
+  }
+  updateMapInfo();
+  updateCoordinateInputs();
+}
+
+/**
+ * Wire coordinate input fields
+ */
+function wireCoordinateInput(): void {
+  // Go button click
+  mapGoToCoords?.addEventListener("click", () => {
+    navigateToCoordinates();
+  });
+
+  // Enter key in inputs
+  mapLatInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      navigateToCoordinates();
+    }
+  });
+
+  mapLngInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      navigateToCoordinates();
+    }
+  });
+}
+
+/**
+ * Navigate to coordinates entered in input fields
+ */
+function navigateToCoordinates(): void {
+  if (!uiState.map || !mapLatInput || !mapLngInput) return;
+
+  const lat = parseFloat(mapLatInput.value);
+  const lng = parseFloat(mapLngInput.value);
+
+  // Validate coordinates
+  if (isNaN(lat) || isNaN(lng)) {
+    // Flash the inputs red briefly
+    flashInputError(mapLatInput);
+    flashInputError(mapLngInput);
+    return;
+  }
+
+  // Validate ranges
+  if (lat < -85 || lat > 85 || lng < -180 || lng > 180) {
+    flashInputError(mapLatInput);
+    flashInputError(mapLngInput);
+    return;
+  }
+
+  uiState.map.setCenter([lng, lat]);
+  updateMapInfo();
+}
+
+/**
+ * Flash an input field red to indicate error
+ */
+function flashInputError(input: HTMLInputElement): void {
+  const originalBg = input.style.background;
+  input.style.background = "rgba(220, 53, 69, 0.3)";
+  setTimeout(() => {
+    input.style.background = originalBg;
+  }, 300);
+}
+
+/**
+ * Escape HTML to prevent XSS in search results
+ */
+function escapeHtml(text: string): string {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
 }

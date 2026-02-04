@@ -408,3 +408,33 @@ export function worldMetersToLngLat(
   const pixel = worldMetersToMapPixel(map, x, y);
   return map.unproject({ x: pixel.pixelX, y: pixel.pixelY });
 }
+
+/**
+ * Geocoding result from Mapbox API
+ */
+export interface GeocodingResult {
+  place_name: string;
+  center: [number, number]; // [lng, lat]
+}
+
+/**
+ * Search for a location using Mapbox Geocoding API
+ */
+export async function geocodeSearch(query: string, accessToken: string): Promise<GeocodingResult[]> {
+  if (!query.trim()) return [];
+
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${accessToken}&limit=5`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return [];
+
+    const data = await response.json();
+    return data.features.map((f: { place_name: string; center: [number, number] }) => ({
+      place_name: f.place_name,
+      center: f.center,
+    }));
+  } catch {
+    return [];
+  }
+}

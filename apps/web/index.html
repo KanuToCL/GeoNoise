@@ -191,6 +191,26 @@
             </button>
 
             <div id="mapControls" style="display: none; flex-direction: column; gap: 10px;">
+              <!-- Location Search -->
+              <div style="display: flex; flex-direction: column; gap: 6px; position: relative;">
+                <label style="font-size: 11px; color: #aaa; font-weight: 500;">Search Location:</label>
+                <input id="mapSearchInput" type="text" placeholder="Search address or place..."
+                  style="padding: 8px 10px; font-size: 11px; border-radius: 6px; background: rgba(255,255,255,0.1); color: #fff; border: none; outline: none;">
+                <div id="mapSearchResults" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: rgba(40,44,52,0.98); border-radius: 6px; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);"></div>
+              </div>
+
+              <!-- Coordinate Input -->
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                <label style="font-size: 11px; color: #aaa; font-weight: 500;">Coordinates:</label>
+                <div style="display: flex; gap: 6px; align-items: center;">
+                  <input id="mapLatInput" type="text" placeholder="Lat"
+                    style="flex: 1; padding: 8px 6px; font-size: 11px; border-radius: 6px; background: rgba(255,255,255,0.1); color: #fff; border: none; outline: none; text-align: center;">
+                  <input id="mapLngInput" type="text" placeholder="Lng"
+                    style="flex: 1; padding: 8px 6px; font-size: 11px; border-radius: 6px; background: rgba(255,255,255,0.1); color: #fff; border: none; outline: none; text-align: center;">
+                  <button id="mapGoToCoords" type="button" style="padding: 8px 12px; font-size: 11px; border: none; border-radius: 6px; background: rgba(74, 144, 217, 0.5); color: #fff; cursor: pointer;">Go</button>
+                </div>
+              </div>
+
               <!-- Style Switcher -->
               <div style="display: flex; flex-direction: column; gap: 6px;">
                 <label style="font-size: 11px; color: #aaa; font-weight: 500;">Map Style:</label>
