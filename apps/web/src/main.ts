@@ -6108,7 +6108,7 @@ function addPanelAt(point: Point) {
   resetDockInactivityTimer();
 }
 
-function addBuildingAt(point: Point) {
+function _addBuildingAt(point: Point) {
   const building = new Building({
     id: createId('bd', buildingSeq++),
     x: point.x,
@@ -6435,7 +6435,7 @@ function drawBarriers() {
     const rectHeight = bottom - top;
 
     // Draw dashed rectangle outline
-    ctx.strokeStyle = canvasTheme.buildingStroke;
+    ctx.strokeStyle = canvasTheme.barrierStroke;
     ctx.lineWidth = 2;
     ctx.setLineDash([6, 6]);
     ctx.strokeRect(left, top, rectWidth, rectHeight);
