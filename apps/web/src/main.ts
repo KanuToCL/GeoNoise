@@ -81,6 +81,21 @@ import {
   buildSmoothLegendStops,
   throttle,
 } from './utils/index.js';
+import {
+  type Point,
+  type DisplayBand,
+  OCTAVE_BAND_LABELS,
+  type Tool,
+  type SelectableElementType,
+  type SelectionItem,
+  type Selection,
+  type DragState,
+  type DragContribution,
+  type NoiseMap,
+  type MapRange,
+  type MapRenderStyle,
+  type CanvasTheme,
+} from './types/index.js';
 
 // ============================================================================
 // Feature Flags
@@ -94,150 +109,6 @@ import {
  * See: docs/ROADMAP.md - "Ray Visualization Only Shows One First-Order Wall Reflection"
  */
 const ENABLE_RAY_VISUALIZATION = false;
-
-type Point = { x: number; y: number };
-
-/** Labels for octave band display */
-const OCTAVE_BAND_LABELS = ['63', '125', '250', '500', '1k', '2k', '4k', '8k', '16k'] as const;
-
-/** Display mode: which frequency band or overall to show */
-/** Display mode: which frequency band to show (overall or specific octave band index 0-8) */
-type DisplayBand = 'overall' | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
-
-// Whole-scene noise map ("Mesh All") visualization:
-// - A grid is computed in the engine (as a temporary receiver lattice).
-// - Values are mapped to a color ramp and drawn as a scaled texture in world coordinates.
-type NoiseMap = {
-  bounds: { minX: number; minY: number; maxX: number; maxY: number };
-  resolution: number;
-  elevation: number;
-  cols: number;
-  rows: number;
-  values: number[];
-  min: number;
-  max: number;
-  texture: HTMLCanvasElement;
-};
-
-type MapRange = { min: number; max: number };
-type MapRenderStyle = 'Smooth' | 'Contours';
-
-type Tool =
-  | 'select'
-  | 'add-source'
-  | 'add-receiver'
-  | 'add-probe'
-  | 'add-panel'
-  | 'add-barrier'
-  | 'add-building'
-  | 'measure'
-  | 'delete';
-
-type SelectableElementType = 'source' | 'receiver' | 'probe' | 'panel' | 'barrier' | 'building';
-
-interface SelectionItem {
-  elementType: SelectableElementType;
-  id: string;
-}
-
-type Selection =
-  | { type: 'none' }
-  | { type: 'source'; id: string }
-  | { type: 'probe'; id: string }
-  | { type: 'receiver'; id: string }
-  | { type: 'panel'; id: string }
-  | { type: 'barrier'; id: string }
-  | { type: 'building'; id: string }
-  | { type: 'multi'; items: SelectionItem[] };
-
-type DragState =
-  | null
-  | {
-      type: 'source' | 'receiver' | 'probe' | 'panel' | 'barrier' | 'building';
-      id: string;
-      offset: Point;
-    }
-  | {
-      type: 'panel-vertex';
-      id: string;
-      index: number;
-      offset: Point;
-    }
-  | {
-      type: 'building-resize';
-      id: string;
-    }
-  | {
-      type: 'building-rotate';
-      id: string;
-      startAngle: number;
-      startRotation: number;
-    }
-  | {
-      type: 'barrier-endpoint';
-      id: string;
-      endpoint: 'p1' | 'p2';
-    }
-  | {
-      type: 'barrier-rotate';
-      id: string;
-      startAngle: number;
-      startRotation: number;
-      startLength: number;
-      startMidpoint: Point;
-    }
-  | {
-      type: 'select-box';
-      startCanvasPoint: Point;
-      currentCanvasPoint: Point;
-    }
-  | {
-      type: 'move-multi';
-      offsets: Map<string, Point>;
-    };
-
-type DragContribution = {
-  sourceId: string;
-  receiverEnergy: Map<string, number>;
-  panelEnergy: Map<string, Float64Array>;
-};
-
-type CanvasTheme = {
-  gridLine: string;
-  measureLine: string;
-  measureText: string;
-  panelStroke: string;
-  panelFill: string;
-  panelSelected: string;
-  panelHandleFill: string;
-  panelHandleStroke: string;
-  sampleStroke: string;
-  barrierStroke: string;
-  barrierSelected: string;
-  sourceFill: string;
-  sourceStroke: string;
-  sourceMutedFill: string;
-  sourceMutedStroke: string;
-  sourceMutedText: string;
-  sourceLabel: string;
-  sourceRing: string;
-  sourceTooltipBg: string;
-  sourceTooltipBorder: string;
-  sourceTooltipText: string;
-  receiverFill: string;
-  receiverStroke: string;
-  receiverLabel: string;
-  receiverRing: string;
-  probeFill: string;
-  probeStroke: string;
-  probeLabel: string;
-  probeRing: string;
-  badgeBg: string;
-  badgeBorder: string;
-  badgeText: string;
-  canvasBg: string;
-  selectionHalo: string;
-};
 
 const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
 const debugX = document.querySelector('#debug-x') as HTMLSpanElement | null;
