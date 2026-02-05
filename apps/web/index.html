@@ -727,6 +727,13 @@
                       <input type="checkbox" id="layerNoiseMap" />
                       <span>Noise Map</span>
                     </label>
+                    <div id="heatmapOpacityContainer" style="display: none; margin-left: 24px; margin-bottom: 8px;">
+                      <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 10px; color: var(--muted); min-width: 45px;">Opacity:</span>
+                        <input id="heatmapOpacitySlider" type="range" min="10" max="100" value="70" style="flex: 1; height: 4px;">
+                        <span id="heatmapOpacityValue" style="font-size: 10px; color: var(--muted); min-width: 28px;">70%</span>
+                      </div>
+                    </div>
                     <label class="toggle" for="layerGrid">
                       <input type="checkbox" id="layerGrid" />
                       <span>Grid Overlay</span>
