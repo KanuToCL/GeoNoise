@@ -192,6 +192,7 @@ interface Draggable {
 | Extract `Building` class to own file | High | Small | ✅ Done |
 | Extract utility functions to utils/ | High | Small | ✅ Done |
 | Extract UI types to types/ | High | Small | ✅ Done |
+| Create constants file | Low | Small | ✅ Done |
 | Extract rendering functions | High | Medium | 🔲 Todo |
 | Consolidate global state | Medium | Medium | 🔲 Todo |
 | Unify entity abstractions | Medium | Large | 🔲 Todo |
@@ -199,7 +200,6 @@ interface Draggable {
 | Collect building diffraction paths for ray viz | Medium | Small | 🔲 Todo |
 | Fix barrier diffraction viz geometry | Low | Small | 🔲 Todo |
 | Move inline styles to CSS | Low | Small | 🔲 Todo |
-| Create constants file | Low | Small | 🔲 Todo |
 
 ---
 
