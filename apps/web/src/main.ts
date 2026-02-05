@@ -201,6 +201,8 @@ type BuildingData = {
   rotation: number;
   z_height: number;
   color: string;
+  /** Optional polygon vertices for non-rectangular buildings (4+ points, CCW order) */
+  vertices?: Point[];
 };
 
 const DEFAULT_BUILDING_COLOR = '#9aa3ad';
@@ -221,6 +223,8 @@ class Building {
   z_height: number;
   color: string;
   selected: boolean;
+  /** Optional polygon vertices for non-rectangular buildings */
+  private _vertices?: Point[];
 
   constructor(data: Partial<BuildingData> & { id: string }) {
     this.id = data.id;
@@ -233,10 +237,16 @@ class Building {
     this.z_height = data.z_height ?? 10;
     this.color = data.color ?? DEFAULT_BUILDING_COLOR;
     this.selected = false;
+    this._vertices = data.vertices ? [...data.vertices] : undefined;
+  }
+
+  /** Check if this is a polygon building (non-rectangular) */
+  isPolygon(): boolean {
+    return this._vertices !== undefined && this._vertices.length >= 3;
   }
 
   toData(): BuildingData {
-    return {
+    const data: BuildingData = {
       id: this.id,
       name: this.name,
       x: this.x,
@@ -247,9 +257,19 @@ class Building {
       z_height: this.z_height,
       color: this.color,
     };
+    if (this._vertices) {
+      data.vertices = [...this._vertices];
+    }
+    return data;
   }
 
   getVertices(): Point[] {
+    // For polygon buildings, return stored vertices directly
+    if (this._vertices && this._vertices.length >= 3) {
+      return [...this._vertices];
+    }
+
+    // For rectangular buildings, compute from center/size/rotation
     const halfWidth = this.width / 2;
     const halfHeight = this.height / 2;
     const corners = [
@@ -784,7 +804,7 @@ let buildingDragActive = false;
 // - 'diagonal': Click corner, drag to opposite corner (default for buildings)
 // - 'center': Click center, drag outward symmetrically
 // - 'end-to-end': Click start, click/drag to end (default for barriers)
-type BuildingDrawingMode = 'diagonal' | 'center';
+type BuildingDrawingMode = 'diagonal' | 'center' | 'polygon';
 type BarrierDrawingMode = 'end-to-end' | 'center';
 let buildingDrawingMode: BuildingDrawingMode = 'diagonal';
 let barrierDrawingMode: BarrierDrawingMode = 'end-to-end';
@@ -792,6 +812,10 @@ let barrierDrawingMode: BarrierDrawingMode = 'end-to-end';
 // For center-outward mode, we store the center point
 let buildingCenterDraft: { center: Point; corner: Point } | null = null;
 let barrierCenterDraft: { center: Point; end: Point } | null = null;
+
+// For polygon mode, we store clicked corners (up to 4)
+let buildingPolygonDraft: Point[] = [];
+let buildingPolygonPreviewPoint: Point | null = null;
 
 const results: SceneResults = { receivers: [], panels: [] };
 const probeResults = new Map<string, ProbeResult['data']>();
@@ -1476,6 +1500,62 @@ function pointInPolygon(point: Point, polygon: Point[]) {
     if (intersect) inside = !inside;
   }
   return inside;
+}
+
+/**
+ * Cross product of two 2D vectors (returns scalar z-component)
+ */
+function cross2D(ax: number, ay: number, bx: number, by: number): number {
+  return ax * by - ay * bx;
+}
+
+/**
+ * Check if two line segments intersect (strictly cross, not just touch)
+ */
+function segmentsIntersect(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
+  const d1 = cross2D(b2.x - b1.x, b2.y - b1.y, a1.x - b1.x, a1.y - b1.y);
+  const d2 = cross2D(b2.x - b1.x, b2.y - b1.y, a2.x - b1.x, a2.y - b1.y);
+  const d3 = cross2D(a2.x - a1.x, a2.y - a1.y, b1.x - a1.x, b1.y - a1.y);
+  const d4 = cross2D(a2.x - a1.x, a2.y - a1.y, b2.x - a1.x, b2.y - a1.y);
+
+  // Segments intersect if they straddle each other
+  return (d1 * d2 < 0) && (d3 * d4 < 0);
+}
+
+/**
+ * Check if 4 points form a valid (non-self-intersecting) quadrilateral.
+ * A quadrilateral is valid if the two diagonals intersect inside the polygon.
+ * Invalid quadrilaterals are "bowtie" or "figure-8" shapes where edges cross.
+ */
+function isValidQuadrilateral(p0: Point, p1: Point, p2: Point, p3: Point): boolean {
+  // A quadrilateral is valid if its diagonals (P0-P2 and P1-P3) intersect
+  return segmentsIntersect(p0, p2, p1, p3);
+}
+
+/**
+ * Ensure polygon vertices are in counter-clockwise order.
+ * Uses the shoelace formula to calculate signed area.
+ *
+ * In our Y-up coordinate system:
+ * - Positive signed area from shoelace = CW
+ * - Negative signed area from shoelace = CCW
+ */
+function ensureCCW(vertices: Point[]): Point[] {
+  if (vertices.length < 3) return vertices;
+
+  // Shoelace formula for signed area (doubled)
+  let signedArea2 = 0;
+  for (let i = 0; i < vertices.length; i++) {
+    const j = (i + 1) % vertices.length;
+    signedArea2 += (vertices[j].x - vertices[i].x) * (vertices[j].y + vertices[i].y);
+  }
+
+  // In Y-up coordinate system: positive signed area = CW, need to reverse
+  if (signedArea2 > 0) {
+    return [...vertices].reverse();
+  }
+
+  return vertices;
 }
 
 function panelSamplesToEnergy(samples: PanelResult['samples']) {
@@ -4364,6 +4444,8 @@ function setActiveTool(tool: Tool) {
     buildingDraftAnchored = false;
     buildingDragActive = false;
     buildingCenterDraft = null;
+    buildingPolygonDraft = [];
+    buildingPolygonPreviewPoint = null;
   }
   if (modeLabel) {
     modeLabel.textContent = toolLabel(tool);
@@ -5464,6 +5546,7 @@ function showDrawingModeSubmenu(tool: 'add-building' | 'add-barrier', button: HT
     ? [
         { id: 'diagonal', label: 'Diagonal Drag', desc: 'Click corner, drag to opposite' },
         { id: 'center', label: 'Center Outward', desc: 'Click center, drag to corner' },
+        { id: 'polygon', label: '4-Corner Polygon', desc: 'Click 4 corners to create shape' },
       ]
     : [
         { id: 'end-to-end', label: 'End-to-End', desc: 'Click start, click/drag to end' },
@@ -6258,6 +6341,52 @@ function commitBuildingCenterDraft() {
   resetDockInactivityTimer();
 }
 
+function commitBuildingPolygonDraft() {
+  if (buildingPolygonDraft.length !== 4) return;
+
+  // Ensure CCW winding order for correct physics normals
+  const vertices = ensureCCW(buildingPolygonDraft);
+
+  // Calculate centroid for the building's x/y position
+  let cx = 0, cy = 0;
+  for (const v of vertices) {
+    cx += v.x;
+    cy += v.y;
+  }
+  cx /= vertices.length;
+  cy /= vertices.length;
+
+  // Calculate bounding box for width/height (used for some legacy calculations)
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const v of vertices) {
+    if (v.x < minX) minX = v.x;
+    if (v.y < minY) minY = v.y;
+    if (v.x > maxX) maxX = v.x;
+    if (v.y > maxY) maxY = v.y;
+  }
+
+  const building = new Building({
+    id: createId('bd', buildingSeq++),
+    x: cx,
+    y: cy,
+    width: maxX - minX,
+    height: maxY - minY,
+    rotation: 0,
+    z_height: 10, // Default height 10m
+    vertices: vertices, // Store the polygon vertices
+  });
+
+  scene.buildings.push(building);
+  buildingPolygonDraft = [];
+  buildingPolygonPreviewPoint = null;
+  setSelection({ type: 'building', id: building.id });
+  setActiveTool('select');
+  updateCounts();
+  pushHistory();
+  computeScene();
+  resetDockInactivityTimer();
+}
+
 function commitBarrierCenterDraft() {
   if (!barrierCenterDraft) return;
 
@@ -6632,6 +6761,96 @@ function drawBuildings() {
         ctx.fillText(text, centerX, y);
       });
     }
+  }
+
+  // Draw polygon building draft preview
+  if (buildingPolygonDraft.length > 0) {
+    const points = buildingPolygonDraft.map(p => worldToCanvas(p));
+
+    // Draw edges between placed points
+    ctx.strokeStyle = canvasTheme.barrierStroke;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 6]);
+
+    if (points.length >= 2) {
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+      }
+      ctx.stroke();
+    }
+
+    // Draw preview line to mouse position
+    if (buildingPolygonPreviewPoint && points.length < 4) {
+      const previewCanvas = worldToCanvas(buildingPolygonPreviewPoint);
+      const lastPoint = points[points.length - 1];
+
+      ctx.beginPath();
+      ctx.moveTo(lastPoint.x, lastPoint.y);
+      ctx.lineTo(previewCanvas.x, previewCanvas.y);
+      ctx.stroke();
+
+      // If this would be the 4th point, also show closing line preview
+      if (points.length === 3) {
+        ctx.beginPath();
+        ctx.moveTo(previewCanvas.x, previewCanvas.y);
+        ctx.lineTo(points[0].x, points[0].y);
+        ctx.stroke();
+
+        // Check if this position would create valid quadrilateral
+        const [p0, p1, p2] = buildingPolygonDraft;
+        const p3 = buildingPolygonPreviewPoint;
+        const isValid = isValidQuadrilateral(p0, p1, p2, p3);
+
+        // Show semi-transparent fill preview
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        ctx.lineTo(points[1].x, points[1].y);
+        ctx.lineTo(points[2].x, points[2].y);
+        ctx.lineTo(previewCanvas.x, previewCanvas.y);
+        ctx.closePath();
+        ctx.fillStyle = isValid ? 'rgba(100, 200, 100, 0.2)' : 'rgba(255, 100, 100, 0.2)';
+        ctx.fill();
+      }
+    }
+    ctx.setLineDash([]);
+
+    // Draw corner points with numbers
+    for (let i = 0; i < points.length; i++) {
+      const point = points[i];
+
+      // Corner circle
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 136, 0, 0.9)';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Corner number
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 10px "Work Sans", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(i + 1), point.x, point.y);
+    }
+
+    // Show instruction text
+    const instruction = buildingPolygonDraft.length < 4
+      ? `Click corner ${buildingPolygonDraft.length + 1} of 4`
+      : 'Validating...';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.font = '12px "Work Sans", sans-serif';
+    const textWidth = ctx.measureText(instruction).width;
+    const textX = canvas.width / 2;
+    const textY = 60;
+    ctx.fillRect(textX - textWidth / 2 - 8, textY - 10, textWidth + 16, 20);
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(instruction, textX, textY);
   }
 }
 
@@ -7322,16 +7541,23 @@ function handlePointerMove(event: MouseEvent) {
     }
   }
 
-  // Update building draft while dragging
-  if (activeTool === 'add-building' && buildingDragActive) {
-    if (buildingDrawingMode === 'center' && buildingCenterDraft) {
-      buildingCenterDraft.corner = snappedPoint;
+  // Update building draft while dragging or tracking polygon preview
+  if (activeTool === 'add-building') {
+    if (buildingDrawingMode === 'polygon' && buildingPolygonDraft.length > 0 && buildingPolygonDraft.length < 4) {
+      // Track mouse for polygon preview line
+      buildingPolygonPreviewPoint = snappedPoint;
       requestRender();
       return;
-    } else if (buildingDraft) {
-      buildingDraft.corner2 = snappedPoint;
-      requestRender();
-      return;
+    } else if (buildingDragActive) {
+      if (buildingDrawingMode === 'center' && buildingCenterDraft) {
+        buildingCenterDraft.corner = snappedPoint;
+        requestRender();
+        return;
+      } else if (buildingDraft) {
+        buildingDraft.corner2 = snappedPoint;
+        requestRender();
+        return;
+      }
     }
   }
 
@@ -7413,7 +7639,25 @@ function handlePointerDown(event: MouseEvent) {
 
   if (activeTool === 'add-building') {
     // Start or continue building draft based on drawing mode
-    if (buildingDrawingMode === 'center') {
+    if (buildingDrawingMode === 'polygon') {
+      // Polygon mode: collect 4 corners with clicks
+      buildingPolygonDraft.push(snappedPoint);
+      buildingPolygonPreviewPoint = null;
+
+      if (buildingPolygonDraft.length === 4) {
+        // All 4 corners collected, validate and commit
+        const [p0, p1, p2, p3] = buildingPolygonDraft;
+        if (isValidQuadrilateral(p0, p1, p2, p3)) {
+          commitBuildingPolygonDraft();
+        } else {
+          // Invalid shape - reset to 3 points so user can try different 4th point
+          console.warn('Invalid quadrilateral: edges cross each other');
+          buildingPolygonDraft.pop();
+        }
+      }
+      requestRender();
+      return;
+    } else if (buildingDrawingMode === 'center') {
       // Center-outward mode: first click sets center
       if (!buildingCenterDraft) {
         buildingCenterDraft = { center: snappedPoint, corner: snappedPoint };
@@ -7852,6 +8096,10 @@ function wireKeyboard() {
       buildingDraft = null;
       buildingDraftAnchored = false;
       buildingDragActive = false;
+      buildingCenterDraft = null;
+      barrierCenterDraft = null;
+      buildingPolygonDraft = [];
+      buildingPolygonPreviewPoint = null;
       requestRender();
     }
     if (event.key === 'Delete' || event.key === 'Backspace') {

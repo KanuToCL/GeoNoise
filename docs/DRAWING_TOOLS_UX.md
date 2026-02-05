@@ -317,28 +317,35 @@ const drawingState: DrawingModeState = {
 
 - [ ] Barrier: anchor + drag (one end fixed, other follows mouse)
 
-### Phase 5: Polygon Buildings (Requires Physics Audit)
+### Phase 5: 4-Corner Polygon Buildings ✅ COMPLETE
 
-- [ ] Audit physics engine for non-rectangular support
-- [ ] Click-to-place corners mode
-- [ ] Close polygon on double-click/Enter
-- [ ] Validate convex/simple polygon
+- [x] Physics engine already polygon-ready (see physics_audit.md)
+- [x] 4-corner click-to-place mode added to submenu
+- [x] Auto-validation: rejects self-intersecting "bowtie" shapes
+- [x] Auto-CCW winding correction (user clicks in any order)
+- [x] Real-time preview with green/red fill (valid/invalid)
+- [x] Numbered corner indicators (1-4)
+- [x] Instruction text overlay ("Click corner X of 4")
+- [x] commitBuildingPolygonDraft() with ensureCCW()
+- [x] Building class supports optional vertices[] for polygon storage
 
 ---
 
 ## ⚠️ Physics Audit: Non-Rectangular Buildings
 
-**Current Implementation Questions**:
+**Status: ✅ VERIFIED - Physics engine is polygon-ready**
 
-1. **Shadow Calculation**: Does `calculateBuildingShadow()` assume rectangles?
-2. **Reflection**: Does specular reflection work on arbitrary polygon edges?
-3. **Diffraction**: Is building diffraction edge-based or corner-based?
-4. **Occlusion**: Does line-of-sight check work with any polygon?
+See `docs/physics_audit.md` for full audit. Key findings:
 
-**Files to Audit**:
-- `packages/core/src/acoustics/` - Shadow and reflection logic
-- `apps/web/src/probeWorker.ts` - Building occlusion
-- `packages/engine/src/` - Noise map calculation
+1. **Occlusion**: ✅ `segmentIntersectsPolygon()` works with arbitrary polygons
+2. **Reflection**: ✅ Image source method iterates all polygon edges
+3. **Diffraction**: ✅ `findVisibleCorners()` works with all vertices
+4. **Point-in-Polygon**: ✅ Ray-casting algorithm handles any shape
+
+**Limitations for complex polygons**:
+- Concave buildings: Interior corners may be incorrectly included in diffraction
+- Self-intersecting: Must be rejected at UI validation (implemented)
+- Performance: O(n) for n edges, recommend max 12-16 vertices
 
 ---
 
@@ -347,9 +354,10 @@ const drawingState: DrawingModeState = {
 1. **Quick rectangle**: Click-drag should feel instant
 2. **Precise placement**: Should snap to grid
 3. **Cancel drawing**: Escape key cancels in-progress drawing
-4. **Polygon building**: Create L-shaped building, verify shadows
-5. **Barrier from center**: Create barrier centered on known point
-6. **Auto-select**: After creation, properties panel shows immediately
+4. **4-corner polygon**: Create trapezoid building, verify physics work
+5. **Invalid polygon**: Try to create bowtie shape, should reject 4th point
+6. **Barrier from center**: Create barrier centered on known point
+7. **Auto-select**: After creation, properties panel shows immediately
 
 ---
 
@@ -361,4 +369,4 @@ const drawingState: DrawingModeState = {
 
 ---
 
-*Last updated: 2026-02-04 (Phases 1-3 implemented)*
+*Last updated: 2026-02-04 (Phases 1-3, 5 implemented)*
