@@ -16,6 +16,7 @@ export {
   type NoiseMap,
   type MapRange,
   type MapRenderStyle,
+  sameSelection,
 } from './ui.js';
 
 export { type CanvasTheme } from './theme.js';

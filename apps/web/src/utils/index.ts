@@ -25,3 +25,5 @@ export {
 } from './colors.js';
 
 export { throttle, type ThrottledFn } from './throttle.js';
+
+export { calculateSpeedOfSound, niceDistance } from './audio.js';

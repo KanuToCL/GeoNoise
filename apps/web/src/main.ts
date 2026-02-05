@@ -80,6 +80,8 @@ import {
   colorToCss,
   buildSmoothLegendStops,
   throttle,
+  calculateSpeedOfSound,
+  niceDistance,
 } from './utils/index.js';
 import {
   type Point,
@@ -95,6 +97,7 @@ import {
   type MapRange,
   type MapRenderStyle,
   type CanvasTheme,
+  sameSelection,
 } from './types/index.js';
 import {
   ENABLE_RAY_VISUALIZATION,
@@ -514,11 +517,6 @@ const meteoState = {
   pressure: 101.325, // kPa
 };
 
-/** Calculate speed of sound from temperature (simplified formula: c = 331.3 + 0.606 * T) */
-function calculateSpeedOfSound(temperatureC: number): number {
-  return 331.3 + 0.606 * temperatureC;
-}
-
 /** Update the speed of sound display based on current meteo state */
 function updateSpeedOfSoundDisplay() {
   if (!derivedSpeedOfSound) return;
@@ -533,15 +531,6 @@ function getMeteoConfig() {
     humidity: meteoState.humidity,
     pressure: meteoState.pressure,
   };
-}
-
-function niceDistance(value: number): number {
-  const options = [5, 10, 20, 50, 100, 200, 500, 1000];
-  let best = options[0];
-  for (const option of options) {
-    if (value >= option) best = option;
-  }
-  return best;
 }
 
 function readCssVar(name: string) {
@@ -621,21 +610,6 @@ function applyAndPersistTheme(next: Theme) {
   saveTheme(resolved);
   updateThemeControls(resolved, allowed);
   refreshCanvasTheme();
-}
-
-function sameSelection(a: Selection | null, b: Selection | null) {
-  if (!a && !b) return true;
-  if (!a || !b) return false;
-  if (a.type !== b.type) return false;
-  if (a.type === 'none' || b.type === 'none') return a.type === b.type;
-  if (a.type === 'multi' || b.type === 'multi') {
-    if (a.type !== 'multi' || b.type !== 'multi') return false;
-    if (a.items.length !== b.items.length) return false;
-    return a.items.every((item, i) =>
-      item.elementType === b.items[i].elementType && item.id === b.items[i].id
-    );
-  }
-  return a.id === b.id;
 }
 
 function updateCounts() {

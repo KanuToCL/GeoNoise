@@ -115,3 +115,21 @@ export type MapRange = { min: number; max: number };
 
 /** Rendering style for noise map */
 export type MapRenderStyle = 'Smooth' | 'Contours';
+
+/**
+ * Compare two selections for equality
+ */
+export function sameSelection(a: Selection | null, b: Selection | null): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  if (a.type !== b.type) return false;
+  if (a.type === 'none' || b.type === 'none') return a.type === b.type;
+  if (a.type === 'multi' || b.type === 'multi') {
+    if (a.type !== 'multi' || b.type !== 'multi') return false;
+    if (a.items.length !== b.items.length) return false;
+    return a.items.every((item, i) =>
+      item.elementType === b.items[i].elementType && item.id === b.items[i].id
+    );
+  }
+  return a.id === b.id;
+}
