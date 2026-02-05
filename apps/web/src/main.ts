@@ -70,6 +70,17 @@ import {
 import { buildCsv } from './export.js';
 import type { SceneResults, PanelResult } from './export.js';
 import { formatLevel, formatMeters } from './format.js';
+import {
+  distance,
+  distanceToSegment,
+  isValidQuadrilateral,
+  ensureCCW,
+  pointInPolygon,
+  getSampleColor,
+  colorToCss,
+  buildSmoothLegendStops,
+  throttle,
+} from './utils/index.js';
 
 // ============================================================================
 // Feature Flags
@@ -979,115 +990,6 @@ function snapPoint(point: Point): { point: Point; snapped: boolean } {
   return { point: { x: snappedX, y: snappedY }, snapped };
 }
 
-function distance(a: Point, b: Point) {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return Math.sqrt(dx * dx + dy * dy);
-}
-
-function distanceToSegment(point: Point, a: Point, b: Point) {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  if (dx === 0 && dy === 0) return distance(point, a);
-  const t = ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy);
-  const clamped = Math.max(0, Math.min(1, t));
-  const proj = { x: a.x + clamped * dx, y: a.y + clamped * dy };
-  return distance(point, proj);
-}
-
-type ThrottledFn<T extends (...args: never[]) => void> = ((...args: Parameters<T>) => void) & {
-  flush: () => void;
-  cancel: () => void;
-};
-
-function throttle<T extends (...args: never[]) => void>(fn: T, waitMs: number): ThrottledFn<T> {
-  let lastCall = 0;
-  let timeoutId: number | null = null;
-  let pendingArgs: Parameters<T> | null = null;
-
-  const invoke = (args: Parameters<T>) => {
-    lastCall = performance.now();
-    pendingArgs = null;
-    fn(...args);
-  };
-
-  // Leading call, then coalesce trailing updates.
-  const throttled = ((...args: Parameters<T>) => {
-    const now = performance.now();
-    const remaining = waitMs - (now - lastCall);
-    if (remaining <= 0 || remaining > waitMs) {
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      invoke(args);
-      return;
-    }
-
-    pendingArgs = args;
-    if (timeoutId === null) {
-      timeoutId = window.setTimeout(() => {
-        timeoutId = null;
-        if (pendingArgs) {
-          invoke(pendingArgs);
-        }
-      }, remaining);
-    }
-  }) as ThrottledFn<T>;
-
-  throttled.flush = () => {
-    if (!pendingArgs) return;
-    if (timeoutId !== null) {
-      window.clearTimeout(timeoutId);
-      timeoutId = null;
-    }
-    invoke(pendingArgs);
-  };
-
-  throttled.cancel = () => {
-    if (timeoutId !== null) {
-      window.clearTimeout(timeoutId);
-      timeoutId = null;
-    }
-    pendingArgs = null;
-  };
-
-  return throttled;
-}
-
-function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t;
-}
-
-const sampleRamp = [
-  { stop: 0, color: { r: 32, g: 86, b: 140 } },
-  { stop: 0.45, color: { r: 42, g: 157, b: 143 } },
-  { stop: 0.75, color: { r: 233, g: 196, b: 106 } },
-  { stop: 1, color: { r: 231, g: 111, b: 81 } },
-];
-
-function getSampleColor(ratio: number) {
-  const clamped = Math.min(Math.max(ratio, 0), 1);
-  for (let i = 0; i < sampleRamp.length - 1; i += 1) {
-    const current = sampleRamp[i];
-    const next = sampleRamp[i + 1];
-    if (clamped >= current.stop && clamped <= next.stop) {
-      const span = next.stop - current.stop || 1;
-      const t = (clamped - current.stop) / span;
-      return {
-        r: Math.round(lerp(current.color.r, next.color.r, t)),
-        g: Math.round(lerp(current.color.g, next.color.g, t)),
-        b: Math.round(lerp(current.color.b, next.color.b, t)),
-      };
-    }
-  }
-  return sampleRamp[sampleRamp.length - 1].color;
-}
-
-function colorToCss(color: { r: number; g: number; b: number }) {
-  return `rgb(${color.r}, ${color.g}, ${color.b})`;
-}
-
 function formatLegendLevel(value: number) {
   const text = formatLevel(value);
   return text.endsWith('.0') ? text.slice(0, -2) : text;
@@ -1121,12 +1023,6 @@ function snapMapValue(value: number) {
   if (mapRenderStyle !== 'Contours') return value;
   const step = getMapBandStep();
   return Math.floor(value / step) * step;
-}
-
-function buildSmoothLegendStops() {
-  return sampleRamp
-    .map((stop) => `${colorToCss(stop.color)} ${Math.round(stop.stop * 100)}%`)
-    .join(', ');
 }
 
 function buildBandedLegendLabels(range: MapRange, step: number) {
@@ -1217,76 +1113,6 @@ function dbToEnergy(level: number) {
 function energyToDb(energy: number) {
   if (energy <= 0) return MIN_LEVEL;
   return 10 * Math.log10(energy);
-}
-
-function pointInPolygon(point: Point, polygon: Point[]) {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].x;
-    const yi = polygon[i].y;
-    const xj = polygon[j].x;
-    const yj = polygon[j].y;
-    const intersect = yi > point.y !== yj > point.y &&
-      point.x < ((xj - xi) * (point.y - yi)) / (yj - yi) + xi;
-    if (intersect) inside = !inside;
-  }
-  return inside;
-}
-
-/**
- * Cross product of two 2D vectors (returns scalar z-component)
- */
-function cross2D(ax: number, ay: number, bx: number, by: number): number {
-  return ax * by - ay * bx;
-}
-
-/**
- * Check if two line segments intersect (strictly cross, not just touch)
- */
-function segmentsIntersect(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
-  const d1 = cross2D(b2.x - b1.x, b2.y - b1.y, a1.x - b1.x, a1.y - b1.y);
-  const d2 = cross2D(b2.x - b1.x, b2.y - b1.y, a2.x - b1.x, a2.y - b1.y);
-  const d3 = cross2D(a2.x - a1.x, a2.y - a1.y, b1.x - a1.x, b1.y - a1.y);
-  const d4 = cross2D(a2.x - a1.x, a2.y - a1.y, b2.x - a1.x, b2.y - a1.y);
-
-  // Segments intersect if they straddle each other
-  return (d1 * d2 < 0) && (d3 * d4 < 0);
-}
-
-/**
- * Check if 4 points form a valid (non-self-intersecting) quadrilateral.
- * A quadrilateral is valid if the two diagonals intersect inside the polygon.
- * Invalid quadrilaterals are "bowtie" or "figure-8" shapes where edges cross.
- */
-function isValidQuadrilateral(p0: Point, p1: Point, p2: Point, p3: Point): boolean {
-  // A quadrilateral is valid if its diagonals (P0-P2 and P1-P3) intersect
-  return segmentsIntersect(p0, p2, p1, p3);
-}
-
-/**
- * Ensure polygon vertices are in counter-clockwise order.
- * Uses the shoelace formula to calculate signed area.
- *
- * In our Y-up coordinate system:
- * - Positive signed area from shoelace = CW
- * - Negative signed area from shoelace = CCW
- */
-function ensureCCW(vertices: Point[]): Point[] {
-  if (vertices.length < 3) return vertices;
-
-  // Shoelace formula for signed area (doubled)
-  let signedArea2 = 0;
-  for (let i = 0; i < vertices.length; i++) {
-    const j = (i + 1) % vertices.length;
-    signedArea2 += (vertices[j].x - vertices[i].x) * (vertices[j].y + vertices[i].y);
-  }
-
-  // In Y-up coordinate system: positive signed area = CW, need to reverse
-  if (signedArea2 > 0) {
-    return [...vertices].reverse();
-  }
-
-  return vertices;
 }
 
 function panelSamplesToEnergy(samples: PanelResult['samples']) {
