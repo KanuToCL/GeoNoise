@@ -1994,6 +1994,159 @@ When implementing polygon drawing mode:
 4. **Limit complexity** - Maximum 12-16 vertices
 5. **Prefer convex shapes** - Indicate best physics accuracy for convex
 
+### Polygon Face Normal and Incidence Angle Calculation
+
+For consistent physics between the **probe worker (ray tracing)** and **grid engine (colormap)**, both engines need to determine:
+
+1. **Which polygon face** a ray intersects
+2. **The incidence angle** at that face for reflection/absorption calculations
+
+#### Mathematical Formulation
+
+Given a polygon with vertices `V₀, V₁, ..., Vₙ₋₁` (counter-clockwise winding), each edge `Eᵢ` from `Vᵢ` to `V₍ᵢ₊₁₎ mod n` has an **outward normal**:
+
+```
+Edge vector:    D = V₍ᵢ₊₁₎ - Vᵢ
+Outward normal: N = (-Dᵧ, Dₓ) / |D|    (perpendicular, pointing outward for CCW winding)
+```
+
+For a ray from point `S` (source) to point `R` (receiver):
+
+```
+Ray direction:  L = (R - S) / |R - S|
+```
+
+**Step 1: Find intersecting edge**
+
+For each edge `Eᵢ`, compute intersection point `P` using parametric line-segment intersection.
+
+**Step 2: Compute incidence angle**
+
+The incidence angle `θ` between the ray and the surface normal:
+
+```
+cos(θ) = |L · N|    (take absolute value for both-sided surfaces)
+θ = arccos(|L · N|)
+```
+
+Note: Acoustic incidence is typically measured from the normal (θ=0 is perpendicular), not from the surface (θ=90° is grazing).
+
+**Step 3: Determine source-side normal**
+
+For reflections, we need the normal pointing *toward* the source:
+
+```
+Source-relative vector: V_src = S - P
+Sign check:             sign = V_src · N
+If sign < 0:            N_src = -N    (flip normal to point toward source)
+Else:                   N_src = N
+```
+
+#### Current Implementation in Probe Worker
+
+The probe worker already implements this in `traceWallReflectionPaths()` (lines 1446-1457):
+
+```typescript
+// Normal pointing outward (perpendicular to wall)
+const wallDx = segment.p2.x - segment.p1.x;
+const wallDy = segment.p2.y - segment.p1.y;
+const wallLen = Math.sqrt(wallDx * wallDx + wallDy * wallDy);
+const nx = -wallDy / wallLen;  // Outward normal X
+const ny = wallDx / wallLen;   // Outward normal Y
+
+// Determine which side source is on
+const toSrcX = source.x - reflPoint.x;
+const toSrcY = source.y - reflPoint.y;
+const dot = toSrcX * nx + toSrcY * ny;
+const sign = dot >= 0 ? 1 : -1;
+```
+
+#### Grid Engine Gap: Missing Angle-Dependent Calculations
+
+The **grid engine** (`packages/engine/src/compute/index.ts`) currently:
+- ✅ Detects polygon edge intersections for blocking
+- ✅ Computes over-roof diffraction paths
+- ❌ Does NOT compute wall reflections
+- ❌ Does NOT use incidence angle for ground/absorption calculations
+
+**Proposed Enhancement for Grid Engine:**
+
+To achieve consistent physics, the grid engine should be enhanced to:
+
+1. **Add wall reflection paths** for grid points (like probe worker does)
+2. **Pass incidence angle** to ground reflection calculations
+
+```typescript
+/**
+ * Calculate the incidence angle for a ray hitting a polygon edge.
+ *
+ * @param from - Ray origin (source or previous reflection point)
+ * @param to - Ray destination (receiver or grid point)
+ * @param edgeP1 - First vertex of the polygon edge
+ * @param edgeP2 - Second vertex of the polygon edge
+ * @returns Incidence angle in radians (0 = perpendicular, π/2 = grazing)
+ */
+function calculateIncidenceAngle(
+  from: Point2D,
+  to: Point2D,
+  edgeP1: Point2D,
+  edgeP2: Point2D
+): number {
+  // Edge direction vector
+  const edgeDx = edgeP2.x - edgeP1.x;
+  const edgeDy = edgeP2.y - edgeP1.y;
+  const edgeLen = Math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy);
+
+  if (edgeLen < EPSILON) return Math.PI / 2; // Degenerate edge -> grazing
+
+  // Outward normal (perpendicular to edge, for CCW winding)
+  const nx = -edgeDy / edgeLen;
+  const ny = edgeDx / edgeLen;
+
+  // Ray direction
+  const rayDx = to.x - from.x;
+  const rayDy = to.y - from.y;
+  const rayLen = Math.sqrt(rayDx * rayDx + rayDy * rayDy);
+
+  if (rayLen < EPSILON) return 0; // Point source at edge -> perpendicular
+
+  // Cosine of incidence angle (dot product of normalized vectors)
+  const cosTheta = Math.abs((rayDx * nx + rayDy * ny) / rayLen);
+
+  // Clamp to valid range and compute angle
+  return Math.acos(Math.min(1, Math.max(0, cosTheta)));
+}
+```
+
+#### Using Incidence Angle for Reflection Coefficient
+
+The Fresnel reflection coefficient depends on incidence angle. For acoustic reflections:
+
+```
+For hard surfaces:  |Γ| ≈ 1 (independent of angle)
+For soft surfaces:  |Γ| decreases as θ → π/2 (grazing incidence)
+```
+
+The probe worker's ground reflection already uses this (line 1271):
+```typescript
+const theta = incidenceAngle ?? (Math.PI / 2 - 0.087); // ~85° from normal
+```
+
+For wall reflections, the default is often near-normal incidence (θ ≈ 0 to 45°), giving high reflection coefficients.
+
+#### Consistency Matrix
+
+| Feature | Probe Worker | Grid Engine | Status |
+|---------|--------------|-------------|--------|
+| Polygon edge intersection | ✅ | ✅ | Consistent |
+| Over-roof diffraction | ✅ | ✅ | Consistent |
+| Corner diffraction | ✅ | ❌ (simplified) | Gap |
+| Wall reflections | ✅ | ❌ | Gap |
+| Incidence angle for Γ | ✅ | ❌ | Gap |
+| Ground reflection | ✅ (two-ray) | ✅ (ISO 9613) | Different models (by design) |
+
 ### Conclusion
 
 The probe worker ray tracing engine is **production-ready for polygon buildings**. The architecture is inherently polygon-based, and all major acoustic phenomena work correctly for arbitrary shapes. Only minor edge cases exist for highly concave or complex geometries.
+
+The grid engine is simpler by design (for performance) but can be enhanced with the `calculateIncidenceAngle()` function to support angle-dependent calculations when wall reflections are added in a future update.
