@@ -26,4 +26,9 @@ export {
 
 export { throttle, type ThrottledFn } from './throttle.js';
 
-export { calculateSpeedOfSound, niceDistance } from './audio.js';
+export {
+  calculateSpeedOfSound,
+  niceDistance,
+  dbToEnergy,
+  energyToDb,
+} from './audio.js';

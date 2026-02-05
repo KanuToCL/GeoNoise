@@ -82,6 +82,8 @@ import {
   throttle,
   calculateSpeedOfSound,
   niceDistance,
+  dbToEnergy,
+  energyToDb,
 } from './utils/index.js';
 import {
   type Point,
@@ -918,16 +920,6 @@ function panelSampleRatio(sample: { LAeq: number }, min: number, max: number) {
   const span = max - min;
   if (span <= 0) return 0;
   return (sample.LAeq - min) / span;
-}
-
-function dbToEnergy(level: number) {
-  if (level <= MIN_LEVEL) return 0;
-  return Math.pow(10, level / 10);
-}
-
-function energyToDb(energy: number) {
-  if (energy <= 0) return MIN_LEVEL;
-  return 10 * Math.log10(energy);
 }
 
 function panelSamplesToEnergy(samples: PanelResult['samples']) {
