@@ -197,6 +197,7 @@ interface Draggable {
 | Consolidate global state | Medium | Medium | 🔲 Todo |
 | Unify entity abstractions | Medium | Large | 🔲 Todo |
 | Extract drag handlers | Medium | Medium | 🔲 Todo |
+| Split probeWorker.ts (path collection vs level computation) | Low | Medium | 🔲 Todo |
 | Collect building diffraction paths for ray viz | Medium | Small | 🔲 Todo |
 | Fix barrier diffraction viz geometry | Low | Small | 🔲 Todo |
 | Move inline styles to CSS | Low | Small | 🔲 Todo |
