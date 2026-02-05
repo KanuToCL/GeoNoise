@@ -628,9 +628,6 @@ const layerReceivers = document.querySelector('#layerReceivers') as HTMLInputEle
 const layerPanels = document.querySelector('#layerPanels') as HTMLInputElement | null;
 const layerNoiseMap = document.querySelector('#layerNoiseMap') as HTMLInputElement | null;
 const layerGrid = document.querySelector('#layerGrid') as HTMLInputElement | null;
-const heatmapOpacityContainer = document.querySelector('#heatmapOpacityContainer') as HTMLDivElement | null;
-const heatmapOpacitySlider = document.querySelector('#heatmapOpacitySlider') as HTMLInputElement | null;
-const heatmapOpacityValue = document.querySelector('#heatmapOpacityValue') as HTMLSpanElement | null;
 const displayWeightingSelect = document.querySelector('#displayWeighting') as HTMLSelectElement | null;
 const displayBandSelect = document.querySelector('#displayBand') as HTMLSelectElement | null;
 
@@ -730,9 +727,6 @@ const layers = {
   noiseMap: false,
   grid: false,
 };
-
-/** Heatmap opacity (0-1 range, default 0.7 = 70%) */
-let heatmapOpacity = 0.7;
 
 const DEFAULT_MAP_RANGE: MapRange = { min: 30, max: 85 };
 const DEFAULT_MAP_BAND_STEP = 3; // Finer default for overall level display
@@ -5520,35 +5514,6 @@ function wireLayerToggle(input: HTMLInputElement | null, key: keyof typeof layer
   });
 }
 
-function wireHeatmapOpacity() {
-  // Show/hide opacity slider based on noise map layer state
-  function updateOpacityVisibility() {
-    if (heatmapOpacityContainer) {
-      heatmapOpacityContainer.style.display = layers.noiseMap ? 'block' : 'none';
-    }
-  }
-
-  // Wire the slider
-  if (heatmapOpacitySlider) {
-    heatmapOpacitySlider.addEventListener('input', () => {
-      const value = parseInt(heatmapOpacitySlider.value, 10);
-      heatmapOpacity = value / 100;
-      if (heatmapOpacityValue) {
-        heatmapOpacityValue.textContent = `${value}%`;
-      }
-      requestRender();
-    });
-  }
-
-  // Listen for noise map layer changes
-  if (layerNoiseMap) {
-    layerNoiseMap.addEventListener('change', updateOpacityVisibility);
-  }
-
-  // Initial state
-  updateOpacityVisibility();
-}
-
 function downloadCsv() {
   const csv = buildCsv(results);
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -6577,7 +6542,6 @@ function drawNoiseMap() {
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
-  ctx.globalAlpha = heatmapOpacity;
   ctx.drawImage(noiseMap.texture, topLeft.x, topLeft.y, width, height);
   ctx.restore();
 }
@@ -9169,7 +9133,6 @@ function init() {
   wireLayerToggle(layerPanels, 'panels');
   wireLayerToggle(layerNoiseMap, 'noiseMap');
   wireLayerToggle(layerGrid, 'grid');
-  wireHeatmapOpacity();
   wirePreference();
   wireTools();
   wireDockLabels();
