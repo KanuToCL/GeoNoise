@@ -189,7 +189,9 @@ interface Draggable {
 
 | Task | Priority | Effort | Status |
 |------|----------|--------|--------|
-| Extract `Building` class to own file | High | Small | 🔲 Todo |
+| Extract `Building` class to own file | High | Small | ✅ Done |
+| Extract utility functions to utils/ | High | Small | ✅ Done |
+| Extract UI types to types/ | High | Small | ✅ Done |
 | Extract rendering functions | High | Medium | 🔲 Todo |
 | Consolidate global state | Medium | Medium | 🔲 Todo |
 | Unify entity abstractions | Medium | Large | 🔲 Todo |
