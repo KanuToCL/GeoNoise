@@ -23,6 +23,30 @@ import {
   type ProbeRequest,
   type ProbeResult,
 } from '@geonoise/engine';
+import {
+  Building,
+  type BuildingData,
+  BUILDING_MIN_SIZE,
+  BUILDING_HANDLE_RADIUS,
+  BUILDING_HANDLE_HIT_RADIUS,
+  BUILDING_ROTATION_HANDLE_OFFSET_PX,
+  BUILDING_ROTATION_HANDLE_RADIUS,
+  type Barrier,
+  BARRIER_HANDLE_RADIUS,
+  BARRIER_HANDLE_HIT_RADIUS,
+  BARRIER_ROTATION_HANDLE_OFFSET_PX,
+  BARRIER_ROTATION_HANDLE_RADIUS,
+  BARRIER_MIN_LENGTH,
+  getBarrierMidpoint,
+  getBarrierLength,
+  getBarrierRotation,
+  getBarrierRotationHandlePosition,
+  setBarrierFromMidpointAndRotation,
+  type Source,
+  type Receiver,
+  type Panel,
+  type Probe,
+} from './entities/index.js';
 
 // KaTeX auto-render function (loaded from CDN)
 declare function renderMathInElement(
@@ -68,337 +92,6 @@ const OCTAVE_BAND_LABELS = ['63', '125', '250', '500', '1k', '2k', '4k', '8k', '
 /** Display mode: which frequency band or overall to show */
 /** Display mode: which frequency band to show (overall or specific octave band index 0-8) */
 type DisplayBand = 'overall' | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
-
-/**
- * Sound source with full spectral definition
- *
- * Spectral Source Migration (Jan 2026):
- * - Added `spectrum` for 9-band octave levels
- * - Added `gain` for master level offset
- * - `power` is now computed from spectrum (kept for backward compatibility)
- */
-type Source = {
-  id: string;
-  name: string;
-  x: number;
-  y: number;
-  z: number;
-  /** Overall power level (computed from spectrum) - kept for legacy compatibility */
-  power: number;
-  /** 9-band spectrum: [63, 125, 250, 500, 1k, 2k, 4k, 8k, 16k] Hz in dB Lw */
-  spectrum: Spectrum9;
-  /** Gain offset applied on top of spectrum (dB) */
-  gain: number;
-  enabled: boolean;
-};
-
-type Receiver = {
-  id: string;
-  name?: string;
-  x: number;
-  y: number;
-  z: number;
-};
-
-type Panel = {
-  id: string;
-  name?: string;
-  points: Point[];
-  elevation: number;
-  sampling: { resolution: number; pointCap: number };
-};
-
-type Probe = {
-  id: string;
-  name?: string;
-  x: number;
-  y: number;
-  z: number;
-};
-
-type Barrier = {
-  // UI barrier primitive (matches the feature ticket's intent):
-  // - p1/p2 are endpoints in the 2D editor plane (x,y) in local meters (ENU).
-  // - height is the vertical screen height (meters). In physics, this becomes the Z of the barrier top edge.
-  // - transmissionLoss is reserved for future "through-wall" modeling (currently unused by the engine).
-  //
-  // Important: The UI is 2D, but the engine computes 3D acoustics:
-  //   - source z = hs
-  //   - receiver z = hr
-  //   - barrier height = hb
-  // The CPU engine checks 2D intersection (SR crosses barrier segment) and then uses hb/hs/hr to compute
-  // the 3D "over the top" path difference delta that drives the barrier insertion loss term.
-  id: string;
-  name?: string;
-  p1: Point;
-  p2: Point;
-  height: number;
-  transmissionLoss?: number;
-};
-
-// Barrier manipulation constants
-const BARRIER_HANDLE_RADIUS = 5;
-const BARRIER_HANDLE_HIT_RADIUS = 12;
-const BARRIER_ROTATION_HANDLE_OFFSET_PX = 20;
-const BARRIER_ROTATION_HANDLE_RADIUS = 5;
-const BARRIER_MIN_LENGTH = 1;
-
-// Helper functions for barrier geometry
-function getBarrierMidpoint(barrier: Barrier): Point {
-  return {
-    x: (barrier.p1.x + barrier.p2.x) / 2,
-    y: (barrier.p1.y + barrier.p2.y) / 2,
-  };
-}
-
-function getBarrierLength(barrier: Barrier): number {
-  const dx = barrier.p2.x - barrier.p1.x;
-  const dy = barrier.p2.y - barrier.p1.y;
-  return Math.sqrt(dx * dx + dy * dy);
-}
-
-function getBarrierRotation(barrier: Barrier): number {
-  return Math.atan2(barrier.p2.y - barrier.p1.y, barrier.p2.x - barrier.p1.x);
-}
-
-function getBarrierRotationHandlePosition(barrier: Barrier, handleOffset: number): Point {
-  const mid = getBarrierMidpoint(barrier);
-  const rotation = getBarrierRotation(barrier);
-  // Handle is perpendicular to the barrier, offset from midpoint
-  const perpAngle = rotation + Math.PI / 2;
-  return {
-    x: mid.x + Math.cos(perpAngle) * handleOffset,
-    y: mid.y + Math.sin(perpAngle) * handleOffset,
-  };
-}
-
-function setBarrierFromMidpointAndRotation(
-  barrier: Barrier,
-  midpoint: Point,
-  rotation: number,
-  length: number
-): void {
-  const halfLength = length / 2;
-  const cos = Math.cos(rotation);
-  const sin = Math.sin(rotation);
-  barrier.p1 = {
-    x: midpoint.x - cos * halfLength,
-    y: midpoint.y - sin * halfLength,
-  };
-  barrier.p2 = {
-    x: midpoint.x + cos * halfLength,
-    y: midpoint.y + sin * halfLength,
-  };
-}
-
-type BuildingData = {
-  id: string;
-  name?: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotation: number;
-  z_height: number;
-  color: string;
-  /** Optional polygon vertices for non-rectangular buildings (4+ points, CCW order) */
-  vertices?: Point[];
-};
-
-const DEFAULT_BUILDING_COLOR = '#9aa3ad';
-const BUILDING_MIN_SIZE = 2;
-const BUILDING_HANDLE_RADIUS = 4;
-const BUILDING_HANDLE_HIT_RADIUS = 10;
-const BUILDING_ROTATION_HANDLE_OFFSET_PX = 20;
-const BUILDING_ROTATION_HANDLE_RADIUS = 5;
-
-class Building {
-  id: string;
-  name?: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotation: number;
-  z_height: number;
-  color: string;
-  selected: boolean;
-  /** Optional polygon vertices for non-rectangular buildings */
-  private _vertices?: Point[];
-
-  constructor(data: Partial<BuildingData> & { id: string }) {
-    this.id = data.id;
-    this.name = data.name;
-    this.x = data.x ?? 0;
-    this.y = data.y ?? 0;
-    this.width = data.width ?? 10;
-    this.height = data.height ?? 10;
-    this.rotation = data.rotation ?? 0;
-    this.z_height = data.z_height ?? 10;
-    this.color = data.color ?? DEFAULT_BUILDING_COLOR;
-    this.selected = false;
-    this._vertices = data.vertices ? [...data.vertices] : undefined;
-  }
-
-  /** Check if this is a polygon building (non-rectangular) */
-  isPolygon(): boolean {
-    return this._vertices !== undefined && this._vertices.length >= 3;
-  }
-
-  toData(): BuildingData {
-    const data: BuildingData = {
-      id: this.id,
-      name: this.name,
-      x: this.x,
-      y: this.y,
-      width: this.width,
-      height: this.height,
-      rotation: this.rotation,
-      z_height: this.z_height,
-      color: this.color,
-    };
-    if (this._vertices) {
-      data.vertices = [...this._vertices];
-    }
-    return data;
-  }
-
-  getVertices(): Point[] {
-    // For polygon buildings, return stored vertices directly
-    if (this._vertices && this._vertices.length >= 3) {
-      return [...this._vertices];
-    }
-
-    // For rectangular buildings, compute from center/size/rotation
-    const halfWidth = this.width / 2;
-    const halfHeight = this.height / 2;
-    const corners = [
-      { x: -halfWidth, y: halfHeight },
-      { x: halfWidth, y: halfHeight },
-      { x: halfWidth, y: -halfHeight },
-      { x: -halfWidth, y: -halfHeight },
-    ];
-    const cos = Math.cos(this.rotation);
-    const sin = Math.sin(this.rotation);
-    return corners.map((corner) => ({
-      x: this.x + corner.x * cos - corner.y * sin,
-      y: this.y + corner.x * sin + corner.y * cos,
-    }));
-  }
-
-  /** Translate the building by dx, dy. For polygon buildings, also translates all vertices. */
-  translate(dx: number, dy: number): void {
-    this.x += dx;
-    this.y += dy;
-    if (this._vertices) {
-      for (const v of this._vertices) {
-        v.x += dx;
-        v.y += dy;
-      }
-    }
-  }
-
-  getRotationHandlePosition(handleOffset: number) {
-    if (this._vertices && this._vertices.length >= 3) {
-      // For polygon buildings, find the vertex furthest from center in Y direction
-      // and place handle beyond that
-      let maxDistFromCenter = 0;
-      let furthestVertex = this._vertices[0];
-      for (const v of this._vertices) {
-        const dist = Math.sqrt((v.x - this.x) ** 2 + (v.y - this.y) ** 2);
-        if (dist > maxDistFromCenter) {
-          maxDistFromCenter = dist;
-          furthestVertex = v;
-        }
-      }
-      // Direction from center to furthest vertex
-      const dx = furthestVertex.x - this.x;
-      const dy = furthestVertex.y - this.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > 0) {
-        const normX = dx / dist;
-        const normY = dy / dist;
-        return {
-          x: this.x + normX * (dist + handleOffset),
-          y: this.y + normY * (dist + handleOffset),
-        };
-      }
-    }
-    // For rectangular buildings, use existing logic
-    const localX = 0;
-    const localY = this.height / 2 + handleOffset;
-    const cos = Math.cos(this.rotation);
-    const sin = Math.sin(this.rotation);
-    return {
-      x: this.x + localX * cos - localY * sin,
-      y: this.y + localX * sin + localY * cos,
-    };
-  }
-
-  renderControls(
-    ctx: CanvasRenderingContext2D,
-    toCanvas: (point: Point) => Point,
-    options: {
-      stroke: string;
-      lineWidth: number;
-      dash: number[];
-      handleFill: string;
-      handleStroke: string;
-      handleRadius: number;
-      rotationHandleOffset: number;
-      rotationHandleRadius: number;
-      rotationHandleStroke: string;
-    }
-  ) {
-    if (!this.selected) return;
-    const vertices = this.getVertices();
-    const first = toCanvas(vertices[0]);
-    ctx.save();
-    ctx.strokeStyle = options.stroke;
-    ctx.lineWidth = options.lineWidth;
-    ctx.setLineDash(options.dash);
-    ctx.beginPath();
-    ctx.moveTo(first.x, first.y);
-    for (const corner of vertices.slice(1)) {
-      const point = toCanvas(corner);
-      ctx.lineTo(point.x, point.y);
-    }
-    ctx.closePath();
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    ctx.fillStyle = options.handleFill;
-    ctx.strokeStyle = options.handleStroke;
-    ctx.lineWidth = 1.5;
-    for (const corner of vertices) {
-      const point = toCanvas(corner);
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, options.handleRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    }
-
-    const handleOffset = options.rotationHandleOffset;
-    const handleWorld = this.getRotationHandlePosition(handleOffset);
-    const topCenterWorld = this.getRotationHandlePosition(0);
-    const handleCanvas = toCanvas(handleWorld);
-    const topCenterCanvas = toCanvas(topCenterWorld);
-    ctx.strokeStyle = options.rotationHandleStroke;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(topCenterCanvas.x, topCenterCanvas.y);
-    ctx.lineTo(handleCanvas.x, handleCanvas.y);
-    ctx.stroke();
-
-    ctx.fillStyle = options.handleFill;
-    ctx.strokeStyle = options.handleStroke;
-    ctx.beginPath();
-    ctx.arc(handleCanvas.x, handleCanvas.y, options.rotationHandleRadius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-  }
-}
 
 // Whole-scene noise map ("Mesh All") visualization:
 // - A grid is computed in the engine (as a temporary receiver lattice).
