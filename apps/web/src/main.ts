@@ -96,19 +96,23 @@ import {
   type MapRenderStyle,
   type CanvasTheme,
 } from './types/index.js';
-
-// ============================================================================
-// Feature Flags
-// ============================================================================
-
-/**
- * Enable ray visualization in probe inspector.
- * Set to false to hide the feature from production until the bug is fixed
- * where only one first-order wall reflection is shown instead of all.
- *
- * See: docs/ROADMAP.md - "Ray Visualization Only Shows One First-Order Wall Reflection"
- */
-const ENABLE_RAY_VISUALIZATION = false;
+import {
+  ENABLE_RAY_VISUALIZATION,
+  DEFAULT_MAP_RANGE,
+  DEFAULT_MAP_BAND_STEP,
+  DEFAULT_MAP_BAND_STEP_PERBAND,
+  MAX_MAP_LEGEND_LABELS,
+  RES_HIGH,
+  RES_LOW,
+  REFINE_POINTS,
+  STATIC_POINTS,
+  DRAG_POINTS,
+  DRAG_FRAME_MS,
+  PROBE_UPDATE_MS,
+  PROBE_DEFAULT_Z,
+  INSPECTOR_MAX_ZINDEX,
+  CANVAS_HELP_KEY,
+} from './constants.js';
 
 const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
 const debugX = document.querySelector('#debug-x') as HTMLSpanElement | null;
@@ -341,37 +345,6 @@ const layers = {
   grid: false,
 };
 
-const DEFAULT_MAP_RANGE: MapRange = { min: 30, max: 85 };
-const DEFAULT_MAP_BAND_STEP = 3; // Finer default for overall level display
-const DEFAULT_MAP_BAND_STEP_PERBAND = 10; // Coarser for per-frequency band display
-const MAX_MAP_LEGEND_LABELS = 7;
-
-// =============================================================================
-// NOISE MAP RESOLUTION STRATEGY
-// =============================================================================
-// The noise map uses adaptive resolution based on interaction state:
-//
-// | Scenario           | Point Cap | Pixel Step | Purpose                      |
-// |--------------------|-----------|------------|------------------------------|
-// | Initial load       | 75,000    | RES_HIGH=2 | Good first impression        |
-// | During drag        | 35,000    | RES_LOW=8  | Smooth interaction (coarse)  |
-// | Static after drag  | 50,000    | RES_HIGH=2 | Good quality                 |
-// | Refine button      | 75,000    | RES_HIGH=2 | Maximum detail               |
-//
-// Lower pixel step = finer grid (more points, slower)
-// Higher pixel step = coarser grid (fewer points, faster)
-// =============================================================================
-const RES_HIGH = 2;   // Fine quality: 2px per grid cell
-const RES_LOW = 8;    // Coarse preview: 8px per grid cell (fast drag updates)
-const REFINE_POINTS = 75000;  // Maximum detail for refine button and initial load
-const STATIC_POINTS = 50000;  // Good quality for static after drag
-const DRAG_POINTS = 35000;    // Coarse preview during drag (smooth interaction)
-// Cap drag updates to ~33 FPS.
-const DRAG_FRAME_MS = 30;
-// Cap probe updates to ~10 FPS while dragging.
-const PROBE_UPDATE_MS = 100;
-const PROBE_DEFAULT_Z = 1.7;
-
 let pixelsPerMeter = 3;
 let activeTool: Tool = 'select';
 let selection: Selection = { type: 'none' };
@@ -390,7 +363,6 @@ let pinnedContextSeq = 1;
 /** Global z-index counter for inspector panels - ensures new panels appear above existing ones.
  *  Capped well below dock z-index (99999) to ensure dock is always on top. */
 let inspectorZIndex = 100;
-const INSPECTOR_MAX_ZINDEX = 9000; // Dock is at 99999, keep panels well below
 let dragState: DragState = null;
 let measureStart: Point | null = null;
 let measureEnd: Point | null = null;
@@ -493,8 +465,6 @@ let displayWeighting: FrequencyWeighting = 'A';
 
 /** Current band to display: 'overall' or band index 0-8 */
 let displayBand: DisplayBand = 'overall';
-
-const CANVAS_HELP_KEY = 'geonoise.canvasHelpDismissed';
 
 type SceneSnapshot = {
   sources: Source[];
