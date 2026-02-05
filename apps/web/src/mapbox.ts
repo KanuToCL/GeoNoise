@@ -90,7 +90,7 @@ export interface MapboxState {
 }
 
 // Module state
-let mapboxState: MapboxState = {
+const mapboxState: MapboxState = {
   isLoaded: false,
   isLoading: false,
   error: null,

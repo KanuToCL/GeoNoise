@@ -2,8 +2,16 @@
  * WebGPU backend stub - implements Engine interface but returns NotImplemented warnings for now
  */
 
-import type { Engine } from '@geonoise/engine';
-import type { EngineCapabilities } from '@geonoise/engine';
+import type {
+  Engine,
+  EngineCapabilities,
+  ComputeReceiversRequest,
+  ComputeReceiversResponse,
+  ComputePanelRequest,
+  ComputePanelResponse,
+  ComputeGridRequest,
+  ComputeGridResponse,
+} from '@geonoise/engine';
 import { isWebGPUAvailable } from './capability.js';
 
 export class WebGPUBackend implements Engine {
@@ -22,7 +30,7 @@ export class WebGPUBackend implements Engine {
   }
   dispose() {}
 
-  async computeReceivers(_request: any): Promise<any> { throw new Error('WebGPU backend not implemented'); }
-  async computePanel(_request: any): Promise<any> { throw new Error('WebGPU backend not implemented'); }
-  async computeGrid(_request: any): Promise<any> { throw new Error('WebGPU backend not implemented'); }
+  async computeReceivers(_request: ComputeReceiversRequest): Promise<ComputeReceiversResponse> { throw new Error('WebGPU backend not implemented'); }
+  async computePanel(_request: ComputePanelRequest): Promise<ComputePanelResponse> { throw new Error('WebGPU backend not implemented'); }
+  async computeGrid(_request: ComputeGridRequest): Promise<ComputeGridResponse> { throw new Error('WebGPU backend not implemented'); }
 }

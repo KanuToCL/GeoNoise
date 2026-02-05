@@ -286,7 +286,45 @@ class Building {
     }));
   }
 
+  /** Translate the building by dx, dy. For polygon buildings, also translates all vertices. */
+  translate(dx: number, dy: number): void {
+    this.x += dx;
+    this.y += dy;
+    if (this._vertices) {
+      for (const v of this._vertices) {
+        v.x += dx;
+        v.y += dy;
+      }
+    }
+  }
+
   getRotationHandlePosition(handleOffset: number) {
+    if (this._vertices && this._vertices.length >= 3) {
+      // For polygon buildings, find the vertex furthest from center in Y direction
+      // and place handle beyond that
+      let maxDistFromCenter = 0;
+      let furthestVertex = this._vertices[0];
+      for (const v of this._vertices) {
+        const dist = Math.sqrt((v.x - this.x) ** 2 + (v.y - this.y) ** 2);
+        if (dist > maxDistFromCenter) {
+          maxDistFromCenter = dist;
+          furthestVertex = v;
+        }
+      }
+      // Direction from center to furthest vertex
+      const dx = furthestVertex.x - this.x;
+      const dy = furthestVertex.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 0) {
+        const normX = dx / dist;
+        const normY = dy / dist;
+        return {
+          x: this.x + normX * (dist + handleOffset),
+          y: this.y + normY * (dist + handleOffset),
+        };
+      }
+    }
+    // For rectangular buildings, use existing logic
     const localX = 0;
     const localY = this.height / 2 + handleOffset;
     const cos = Math.cos(this.rotation);
@@ -1264,12 +1302,12 @@ function distanceToSegment(point: Point, a: Point, b: Point) {
   return distance(point, proj);
 }
 
-type ThrottledFn<T extends (...args: any[]) => void> = ((...args: Parameters<T>) => void) & {
+type ThrottledFn<T extends (...args: never[]) => void> = ((...args: Parameters<T>) => void) & {
   flush: () => void;
   cancel: () => void;
 };
 
-function throttle<T extends (...args: any[]) => void>(fn: T, waitMs: number): ThrottledFn<T> {
+function throttle<T extends (...args: never[]) => void>(fn: T, waitMs: number): ThrottledFn<T> {
   let lastCall = 0;
   let timeoutId: number | null = null;
   let pendingArgs: Parameters<T> | null = null;
@@ -5438,6 +5476,7 @@ function updateAllEquations() {
 function wireProbeEngineControls() {
   // These toggles will eventually be wired to probe calculation config
   // For now, just log changes for testing
+  /* eslint-disable no-console */
   probeGroundReflection?.addEventListener('change', () => {
     console.log('[Probe] Ground Reflection:', probeGroundReflection.checked);
   });
@@ -5457,6 +5496,7 @@ function wireProbeEngineControls() {
   probeImpedanceModel?.addEventListener('change', () => {
     console.log('[Probe] Impedance Model:', probeImpedanceModel.value);
   });
+  /* eslint-enable no-console */
 }
 
 function wireThemeSwitcher() {
@@ -7349,8 +7389,9 @@ function applyDrag(worldPoint: Point) {
   if (activeDrag.type === 'building') {
     const building = scene.buildings.find((item) => item.id === activeDrag.id);
     if (building) {
-      building.x = targetPoint.x;
-      building.y = targetPoint.y;
+      const dx = targetPoint.x - building.x;
+      const dy = targetPoint.y - building.y;
+      building.translate(dx, dy);
       disableRayVisualization();
     }
   }
@@ -7480,7 +7521,7 @@ function applyDrag(worldPoint: Point) {
   dragDirty = true;
 }
 
-const throttledDragMove = throttle((worldPoint: any) => {
+const throttledDragMove = throttle((worldPoint: Point) => {
   applyDrag(worldPoint);
 }, DRAG_FRAME_MS);
 

@@ -15,6 +15,7 @@ import type {
   ComputeGridRequest,
   ComputeGridResponse,
 } from '@geonoise/engine';
+import type { ComputeTimings, BackendId } from '@geonoise/shared';
 
 export class CPUWorkerBackend implements Engine {
   private _enginePromise: Promise<Engine> | null = null;
@@ -35,8 +36,8 @@ export class CPUWorkerBackend implements Engine {
   private async getEngine(): Promise<Engine> {
     if (!this._enginePromise) {
       this._enginePromise = (async () => {
-        const mod = await import('@geonoise/engine');
-        return new (mod as any).CPUEngine() as Engine;
+        const mod = await import('@geonoise/engine') as typeof import('@geonoise/engine');
+        return new mod.CPUEngine() as Engine;
       })();
     }
     return this._enginePromise;
@@ -57,7 +58,7 @@ export class CPUWorkerBackend implements Engine {
   private enqueue(kind: 'grid', request: ComputeGridRequest): Promise<ComputeGridResponse>;
   private enqueue(kind: WorkerJob['kind'], request: ComputeRequest): Promise<ComputeResponse> {
     return new Promise((resolve, reject) => {
-      const requestId = (request as any).requestId as string | undefined;
+      const requestId = request.requestId;
       const seq = requestId ? (this.requestSeqMap.get(requestId) ?? 0) + 1 : 0;
       if (requestId) this.requestSeqMap.set(requestId, seq);
 
@@ -121,11 +122,11 @@ export class CPUWorkerBackend implements Engine {
     const computeStart = performance.now();
     let response: ComputeResponse;
     if (kind === 'receivers') {
-      response = await engine.computeReceivers(clonedRequest as any);
+      response = await engine.computeReceivers(clonedRequest as ComputeReceiversRequest);
     } else if (kind === 'panel') {
-      response = await engine.computePanel(clonedRequest as any);
+      response = await engine.computePanel(clonedRequest as ComputePanelRequest);
     } else {
-      response = await engine.computeGrid(clonedRequest as any);
+      response = await engine.computeGrid(clonedRequest as ComputeGridRequest);
     }
     const computeMs = performance.now() - computeStart;
 
@@ -133,21 +134,23 @@ export class CPUWorkerBackend implements Engine {
     const clonedResponse = this.clone(response);
     const transferMs = performance.now() - transferStart;
 
-    const timings = {
-      ...(clonedResponse as any).timings,
+    const existingTimings = clonedResponse.timings;
+    const timings: ComputeTimings = {
+      ...existingTimings,
       setupMs,
       computeMs,
       transferMs,
-    } as import('@geonoise/shared').ComputeTimings;
-    if (typeof timings.totalMs !== 'number') {
-      timings.totalMs = setupMs + computeMs + transferMs;
-    }
+      totalMs: existingTimings.totalMs ?? (setupMs + computeMs + transferMs),
+    };
 
-    (clonedResponse as any).backendId = this.id;
-    (clonedResponse as any).warnings = (clonedResponse as any).warnings ?? [];
-    (clonedResponse as any).timings = timings;
+    const result: ComputeResponse = {
+      ...clonedResponse,
+      backendId: this.id as BackendId,
+      warnings: clonedResponse.warnings ?? [],
+      timings,
+    };
 
-    return clonedResponse;
+    return result;
   }
 }
 

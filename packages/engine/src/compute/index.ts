@@ -579,7 +579,7 @@ export class CPUEngine implements Engine {
       return {
         kind: 'panel',
         result: {
-          panelId: request.payload.panelId as any,
+          panelId: request.payload.panelId,
           sampleCount: 0,
           LAeq_min: MIN_LEVEL,
           LAeq_max: MIN_LEVEL,
@@ -659,7 +659,7 @@ export class CPUEngine implements Engine {
       ? Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1))
       : 0;
     const result: PanelResult = {
-      panelId: request.payload.panelId as any, sampleCount: samples.length,
+      panelId: request.payload.panelId, sampleCount: samples.length,
       LAeq_min: laeqs.length ? Math.min(...laeqs) : MIN_LEVEL,
       LAeq_max: laeqs.length ? Math.max(...laeqs) : MIN_LEVEL,
       LAeq_avg: laeqs.length ? sumDecibels(laeqs) - 10 * Math.log10(laeqs.length) : MIN_LEVEL,
