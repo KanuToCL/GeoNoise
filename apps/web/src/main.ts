@@ -152,9 +152,7 @@ import {
 
 // === Modals Module ===
 import {
-  openAbout as openAboutModule,
   closeAbout as closeAboutModule,
-  setAboutTab as setAboutTabModule,
   wireAboutModal as wireAboutModalModule,
   wireAuthorModal as wireAuthorModalModule,
   wireCollapsibleSections as wireCollapsibleSectionsModule,
@@ -174,7 +172,6 @@ import {
   type DisplayBand,
   OCTAVE_BAND_LABELS,
   type Tool,
-  type SelectableElementType,
   type SelectionItem,
   type Selection,
   type DragState,
@@ -5795,15 +5792,6 @@ function wireActionOverflow() {
 }
 
 // === About/Author Modals (delegating to ui/modals module) ===
-
-function setAboutTab(tabId: string) {
-  setAboutTabModule(tabId, aboutTabs, aboutPanels);
-}
-
-function openAbout() {
-  aboutOpen = true;
-  openAboutModule(aboutModal, aboutClose, setAboutTab);
-}
 
 function closeAbout() {
   aboutOpen = false;
