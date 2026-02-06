@@ -25,114 +25,126 @@ The main entry point contains too many responsibilities:
 **Proposed Split:**
 ```
 apps/web/src/
-├── main.ts                    # Entry point ONLY (~200-400 lines max)
+├── main.ts                    # Entry point ONLY (~200-400 lines max) 🔲 Currently 8,566 lines
 │
 ├── entities/                  # Entity definitions and helpers
 │   ├── building.ts            # Building class ✅ Done
 │   ├── barrier.ts             # Barrier type + helpers ✅ Done
-│   ├── source.ts              # Source type + helpers
-│   ├── receiver.ts            # Receiver type + helpers
-│   ├── panel.ts               # Solar panel type + helpers
+│   ├── source.ts              # Source type + helpers 🔲 Todo (types in types.ts)
+│   ├── receiver.ts            # Receiver type + helpers 🔲 Todo (types in types.ts)
+│   ├── panel.ts               # Panel type + helpers 🔲 Todo (types in types.ts)
+│   ├── probe.ts               # Probe type + helpers 🔲 Todo (types in types.ts)
 │   ├── types.ts               # Shared entity types ✅ Done
 │   └── index.ts               # Barrel exports ✅ Done
 │
-├── state/                     # Application state management
-│   ├── scene.ts               # Scene data (sources, receivers, buildings, barriers)
-│   ├── selection.ts           # What's selected, multi-select state
-│   ├── history.ts             # Undo/redo stack
-│   ├── tools.ts               # Active tool, tool modes, drawing state
-│   ├── viewport.ts            # Pan, zoom, camera state
-│   └── index.ts
+├── state/                     # Application state management ✅ ALL DONE
+│   ├── scene.ts               # Scene data ✅ Done
+│   ├── selection.ts           # Selection state ✅ Done
+│   ├── history.ts             # Undo/redo stack ✅ Done
+│   ├── tools.ts               # Active tool, drawing state ✅ Done
+│   ├── viewport.ts            # Pan, zoom, camera ✅ Done
+│   └── index.ts               # Barrel exports ✅ Done
 │
-├── rendering/                 # Canvas rendering functions
-│   ├── canvas.ts              # Core canvas setup, context, transforms
-│   ├── buildings.ts           # drawBuildings, building shadows
-│   ├── barriers.ts            # drawBarriers
-│   ├── sources.ts             # drawSources
-│   ├── receivers.ts           # drawReceivers
-│   ├── noiseMap.ts            # Heatmap/noise grid rendering
-│   ├── grid.ts                # Background grid
-│   ├── controls.ts            # Handles, grips, rotation controls
-│   ├── rays.ts                # Ray visualization paths
-│   ├── measure.ts             # Measurement tool rendering
-│   └── index.ts
+├── rendering/                 # Canvas rendering functions ✅ ALL DONE
+│   ├── types.ts               # Render types ✅ Done
+│   ├── primitives.ts          # Lines, circles, handles ✅ Done
+│   ├── grid.ts                # Background grid ✅ Done
+│   ├── noiseMap.ts            # Heatmap rendering ✅ Done
+│   ├── sources.ts             # drawSources ✅ Done
+│   ├── receivers.ts           # drawReceivers ✅ Done
+│   ├── barriers.ts            # drawBarriers ✅ Done
+│   ├── buildings.ts           # drawBuildings ✅ Done
+│   ├── probes.ts              # drawProbes ✅ Done
+│   ├── panels.ts              # drawPanels, samples ✅ Done
+│   ├── measure.ts             # Measurement, select box ✅ Done
+│   ├── rays.ts                # Ray visualization 🔲 Todo
+│   └── index.ts               # Barrel exports ✅ Done
 │
-├── interactions/              # User interaction handlers
-│   ├── pointer.ts             # Mouse/touch events, hit testing
-│   ├── keyboard.ts            # Keyboard shortcuts
-│   ├── drag/                  # Drag handling subsystem
-│   │   ├── handlers.ts        # Unified drag system, DragHandler interface
-│   │   ├── building.ts        # Building-specific drag logic
-│   │   ├── barrier.ts         # Barrier drag (endpoints, translate)
-│   │   ├── vertex.ts          # Vertex editing drag
-│   │   └── index.ts
-│   ├── tools/                 # Tool-specific interaction logic
-│   │   ├── select.ts          # Selection tool logic
-│   │   ├── building.ts        # Building drawing tool
-│   │   ├── barrier.ts         # Barrier drawing tool
-│   │   ├── measure.ts         # Measure tool
-│   │   └── index.ts
-│   └── index.ts
+├── interactions/              # User interaction handlers ⚠️ PARTIAL
+│   ├── hitTest.ts             # Hit testing, box selection ✅ Done
+│   ├── keyboard.ts            # Keyboard shortcuts ✅ Done
+│   ├── pointer.ts             # Mouse/touch events 🔲 Todo (~400 lines in main.ts)
+│   ├── drag/                  # Drag handling subsystem 🔲 Todo
+│   │   ├── handlers.ts        # Unified drag system 🔲 Todo
+│   │   ├── building.ts        # Building-specific drag 🔲 Todo
+│   │   ├── barrier.ts         # Barrier drag 🔲 Todo
+│   │   ├── vertex.ts          # Vertex editing drag 🔲 Todo
+│   │   └── index.ts           # 🔲 Todo
+│   ├── tools/                 # Tool-specific interaction 🔲 Todo
+│   │   ├── select.ts          # Selection tool logic 🔲 Todo
+│   │   ├── building.ts        # Building drawing tool 🔲 Todo
+│   │   ├── barrier.ts         # Barrier drawing tool 🔲 Todo
+│   │   ├── measure.ts         # Measure tool 🔲 Todo
+│   │   └── index.ts           # 🔲 Todo
+│   └── index.ts               # Barrel exports ✅ Done
 │
-├── ui/                        # UI wiring and components
+├── ui/                        # UI wiring and components ⚠️ PARTIAL
 │   ├── panels/                # Side panels
-│   │   ├── properties.ts      # Properties panel for selected entities
-│   │   ├── layers.ts          # Layer visibility toggles
-│   │   ├── settings.ts        # Settings panel
-│   │   └── index.ts
+│   │   ├── properties.ts      # Properties panel 🔲 Todo (~300 lines in main.ts)
+│   │   ├── layers.ts          # Layer toggles ✅ Done
+│   │   ├── settings.ts        # Settings panel 🔲 Todo (~200 lines in main.ts)
+│   │   └── index.ts           # 🔲 Todo
 │   ├── modals/                # Modal dialogs
-│   │   ├── export.ts          # Export dialog
-│   │   ├── import.ts          # Import dialog
-│   │   ├── help.ts            # Help/about modal
-│   │   └── index.ts
-│   ├── toolbar.ts             # Top toolbar wiring
-│   ├── statusbar.ts           # Status bar updates
-│   └── index.ts
+│   │   ├── about.ts           # About/help modal ✅ Done
+│   │   ├── export.ts          # Export dialog 🔲 Todo
+│   │   ├── import.ts          # Import dialog 🔲 Todo
+│   │   └── index.ts           # 🔲 Todo
+│   ├── toolbar.ts             # Tool grid, dock ✅ Done
+│   ├── statusbar.ts           # Status bar updates 🔲 Todo
+│   └── index.ts               # Barrel exports ✅ Done
 │
-├── io/                        # File I/O and serialization
-│   ├── serialize.ts           # Scene to JSON
-│   ├── deserialize.ts         # JSON to scene
+├── io/                        # File I/O and serialization ✅ ALL DONE
+│   ├── types.ts               # I/O types ✅ Done
+│   ├── serialize.ts           # Scene to JSON ✅ Done
+│   ├── deserialize.ts         # JSON to scene ✅ Done
+│   ├── import.ts              # Import handling ✅ Done
 │   ├── formats/               # Export format handlers
-│   │   ├── png.ts             # PNG export
-│   │   ├── pdf.ts             # PDF export
-│   │   ├── csv.ts             # CSV data export
-│   │   └── index.ts
-│   ├── import.ts              # Import handling
-│   └── index.ts
+│   │   ├── png.ts             # PNG export ✅ Done
+│   │   ├── pdf.ts             # PDF export ✅ Done
+│   │   ├── csv.ts             # CSV data export ✅ Done
+│   │   └── index.ts           # ✅ Done
+│   └── index.ts               # Barrel exports ✅ Done
 │
-├── compute/                   # Computation orchestration
-│   ├── noiseGrid.ts           # Grid computation orchestration
-│   ├── workerPool.ts          # Web worker management and lifecycle
-│   ├── progress.ts            # Progress tracking for long computations
-│   └── index.ts
+├── compute/                   # Computation orchestration ✅ ALL DONE
+│   ├── types.ts               # Compute types ✅ Done
+│   ├── noiseGrid.ts           # Grid computation ✅ Done
+│   ├── workerPool.ts          # Web worker management ✅ Done
+│   ├── progress.ts            # Progress tracking ✅ Done
+│   └── index.ts               # Barrel exports ✅ Done
 │
-├── probeWorker/               # Acoustic probe worker modules ✅ Done
-│   ├── types.ts               # ✅ Recreated
-│   ├── geometry.ts            # ✅ Recreated
-│   ├── physics.ts             # ✅ Recreated
-│   ├── groundReflection.ts    # ✅ Recreated
-│   ├── pathTracing.ts         # ✅ Recreated
-│   └── index.ts               # ✅ Recreated
+├── probeWorker/               # Acoustic probe worker ✅ ALL DONE
+│   ├── types.ts               # ✅ Done
+│   ├── geometry.ts            # ✅ Done
+│   ├── physics.ts             # ✅ Done
+│   ├── groundReflection.ts    # ✅ Done
+│   ├── pathTracing.ts         # ✅ Done
+│   └── index.ts               # ✅ Done
 │
-├── types/                     # Shared type definitions ✅ Done
-│   ├── ui.ts
-│   ├── theme.ts
-│   └── index.ts
+├── types/                     # Shared type definitions ✅ ALL DONE
+│   ├── ui.ts                  # ✅ Done
+│   ├── theme.ts               # ✅ Done
+│   └── index.ts               # ✅ Done
 │
-├── utils/                     # Utility functions ✅ Done
-│   ├── audio.ts
-│   ├── colors.ts
-│   ├── geometry.ts
-│   ├── throttle.ts
-│   └── index.ts
+├── utils/                     # Utility functions ✅ ALL DONE
+│   ├── audio.ts               # ✅ Done
+│   ├── colors.ts              # ✅ Done
+│   ├── geometry.ts            # ✅ Done
+│   ├── throttle.ts            # ✅ Done
+│   └── index.ts               # ✅ Done
 │
 ├── constants.ts               # App-wide constants ✅ Done
-├── mapbox.ts                  # Mapbox core integration
-├── mapboxUI.ts                # Mapbox UI controls (~1100 lines - consider splitting)
-└── probeWorker.ts             # Worker entry point (needs refactor to use probeWorker/)
+├── mapbox.ts                  # Mapbox core integration ✅ Done
+├── mapboxUI.ts                # Mapbox UI controls (~1100 lines) ⚠️ Consider splitting
+└── probeWorker.ts             # Worker entry point 🔲 Needs refactor to use probeWorker/
 ```
 
-**Target:** Reduce `main.ts` from ~9200 lines to ~200-400 lines (entry point only)
+**Summary:**
+- ✅ **Complete modules:** state/, rendering/, io/, compute/, probeWorker/, types/, utils/, entities/ (partial)
+- ⚠️ **Partial modules:** interactions/ (hitTest, keyboard done), ui/ (layers, about, toolbar done)
+- 🔲 **Still in main.ts:** pointer events, drag handlers, tool logic, properties panel, settings panel
+- 🔲 **Needs integration:** All modules need to be wired into main.ts to remove duplicate code
+
+**Target:** Reduce `main.ts` from ~8,566 lines to ~200-400 lines (entry point only)
 
 ### What main.ts Should Contain After Refactoring
 
