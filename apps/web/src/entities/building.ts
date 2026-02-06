@@ -213,3 +213,21 @@ export class Building {
     ctx.restore();
   }
 }
+
+// =============================================================================
+// FACTORY FUNCTIONS
+// =============================================================================
+
+import { createId, BUILDING_PREFIX } from '../utils/id.js';
+
+/**
+ * Duplicate a building with a new ID
+ *
+ * @param building - The building to duplicate
+ * @param seq - Sequence number for new ID
+ * @returns A new Building object with copied properties
+ */
+export function duplicateBuilding(building: Building, seq: number): Building {
+  const newId = createId(BUILDING_PREFIX, seq);
+  return new Building({ ...building.toData(), id: newId });
+}

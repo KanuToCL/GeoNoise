@@ -82,3 +82,64 @@ export function setBarrierFromMidpointAndRotation(
     y: midpoint.y + sin * halfLength,
   };
 }
+
+// =============================================================================
+// FACTORY FUNCTIONS
+// =============================================================================
+
+import { createId, BARRIER_PREFIX } from '../utils/id.js';
+
+/** Default barrier height in meters */
+export const BARRIER_DEFAULT_HEIGHT = 3;
+
+export interface CreateBarrierOptions {
+  /** Barrier ID - auto-generated if not provided */
+  id?: string;
+  /** Barrier name */
+  name?: string;
+  /** First endpoint */
+  p1: Point;
+  /** Second endpoint */
+  p2: Point;
+  /** Barrier height in meters (default: 3) */
+  height?: number;
+  /** Transmission loss in dB (optional, for future use) */
+  transmissionLoss?: number;
+}
+
+/**
+ * Create a new Barrier entity
+ *
+ * @param seq - Sequence number for ID generation (required if id not provided)
+ * @param options - Barrier configuration options
+ * @returns A new Barrier object
+ */
+export function createBarrier(seq: number, options: CreateBarrierOptions): Barrier {
+  const id = options.id ?? createId(BARRIER_PREFIX, seq);
+
+  return {
+    id,
+    name: options.name,
+    p1: { ...options.p1 },
+    p2: { ...options.p2 },
+    height: options.height ?? BARRIER_DEFAULT_HEIGHT,
+    transmissionLoss: options.transmissionLoss,
+  };
+}
+
+/**
+ * Duplicate a barrier with a new ID
+ *
+ * @param barrier - The barrier to duplicate
+ * @param seq - Sequence number for new ID
+ * @returns A new Barrier object with copied properties
+ */
+export function duplicateBarrier(barrier: Barrier, seq: number): Barrier {
+  const newId = createId(BARRIER_PREFIX, seq);
+  return {
+    ...barrier,
+    id: newId,
+    p1: { ...barrier.p1 },
+    p2: { ...barrier.p2 },
+  };
+}

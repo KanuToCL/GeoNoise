@@ -42,6 +42,12 @@ import {
   type Receiver,
   type Panel,
   type Probe,
+  duplicateSource as duplicateSourceEntity,
+  duplicateReceiver as duplicateReceiverEntity,
+  duplicatePanel as duplicatePanelEntity,
+  duplicateProbe as duplicateProbeEntity,
+  duplicateBarrier as duplicateBarrierEntity,
+  duplicateBuilding as duplicateBuildingEntity,
 } from './entities/index.js';
 
 // KaTeX auto-render function (loaded from CDN)
@@ -103,7 +109,6 @@ import {
   DEFAULT_MAP_RANGE,
   DEFAULT_MAP_BAND_STEP,
   DEFAULT_MAP_BAND_STEP_PERBAND,
-  MAX_MAP_LEGEND_LABELS,
   RES_HIGH,
   RES_LOW,
   REFINE_POINTS,
@@ -134,7 +139,13 @@ import {
   drawSelectBox as drawSelectBoxModule,
 } from './rendering/index.js';
 import { nextSequence } from './io/index.js';
-import { getGridCounts } from './compute/index.js';
+import {
+  getGridCounts,
+  computeMapRange,
+  mergeBounds,
+  buildBandedLegendLabels,
+} from './compute/index.js';
+import { shouldLiveUpdateMap } from './interactions/index.js';
 
 const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
 const debugX = document.querySelector('#debug-x') as HTMLSpanElement | null;
@@ -829,18 +840,6 @@ function formatLegendLevel(value: number) {
   return text.endsWith('.0') ? text.slice(0, -2) : text;
 }
 
-function computeMapRange(values: number[]): MapRange | null {
-  let min = Infinity;
-  let max = -Infinity;
-  for (const value of values) {
-    if (!Number.isFinite(value) || value <= MIN_LEVEL) continue;
-    if (value < min) min = value;
-    if (value > max) max = value;
-  }
-  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
-  return { min, max };
-}
-
 function getActiveMapRange(): MapRange {
   if (mapAutoScale && currentMapRange) return currentMapRange;
   return DEFAULT_MAP_RANGE;
@@ -857,30 +856,6 @@ function snapMapValue(value: number) {
   if (mapRenderStyle !== 'Contours') return value;
   const step = getMapBandStep();
   return Math.floor(value / step) * step;
-}
-
-function buildBandedLegendLabels(range: MapRange, step: number) {
-  const clampedStep = Math.min(20, Math.max(1, step));
-  const start = Math.floor(range.min / clampedStep) * clampedStep;
-  const end = Math.ceil(range.max / clampedStep) * clampedStep;
-  const labels: number[] = [];
-
-  if (!Number.isFinite(start) || !Number.isFinite(end)) {
-    return [range.min, range.max];
-  }
-
-  for (let value = start; value <= end + 1e-6; value += clampedStep) {
-    labels.push(value);
-  }
-
-  if (labels.length <= MAX_MAP_LEGEND_LABELS) {
-    return labels;
-  }
-
-  const inner = labels.slice(1, -1);
-  const stride = Math.ceil(inner.length / (MAX_MAP_LEGEND_LABELS - 2));
-  const sampled = inner.filter((_, index) => index % stride === 0);
-  return [labels[0], ...sampled, labels[labels.length - 1]];
 }
 
 function buildNoiseMapTexture(grid: ComputeGridResponse['result'], range: MapRange) {
@@ -1242,16 +1217,6 @@ function getViewportBounds() {
     minY: Math.min(topLeft.y, bottomRight.y),
     maxX: Math.max(topLeft.x, bottomRight.x),
     maxY: Math.max(topLeft.y, bottomRight.y),
-  };
-}
-
-function mergeBounds(a: { minX: number; minY: number; maxX: number; maxY: number }, b: { minX: number; minY: number; maxX: number; maxY: number }) {
-  // Union of two AABBs.
-  return {
-    minX: Math.min(a.minX, b.minX),
-    minY: Math.min(a.minY, b.minY),
-    maxX: Math.max(a.maxX, b.maxX),
-    maxY: Math.max(a.maxY, b.maxY),
   };
 }
 
@@ -3748,48 +3713,27 @@ function renderSources() {
 }
 
 function duplicateSource(source: Source): Source {
-  const newId = createId('s', sourceSeq++);
-  return {
-    ...source,
-    id: newId,
-    name: `${source.name || source.id.toUpperCase()} Copy`,
-    spectrum: [...source.spectrum] as Spectrum9,
-  };
+  return duplicateSourceEntity(source, sourceSeq++);
 }
 
 function duplicateReceiver(receiver: Receiver): Receiver {
-  const newId = createId('r', receiverSeq++);
-  return { ...receiver, id: newId };
+  return duplicateReceiverEntity(receiver, receiverSeq++);
 }
 
 function duplicateProbe(probe: Probe): Probe {
-  const newId = createId('pr', probeSeq++);
-  return { ...probe, id: newId };
+  return duplicateProbeEntity(probe, probeSeq++);
 }
 
 function duplicatePanel(panel: Panel): Panel {
-  const newId = createId('p', panelSeq++);
-  return {
-    ...panel,
-    id: newId,
-    points: panel.points.map((pt) => ({ ...pt })),
-    sampling: { ...panel.sampling },
-  };
+  return duplicatePanelEntity(panel, panelSeq++);
 }
 
 function duplicateBarrier(barrier: Barrier): Barrier {
-  const newId = createId('b', barrierSeq++);
-  return {
-    ...barrier,
-    id: newId,
-    p1: { ...barrier.p1 },
-    p2: { ...barrier.p2 },
-  };
+  return duplicateBarrierEntity(barrier, barrierSeq++);
 }
 
 function duplicateBuilding(building: Building): Building {
-  const newId = createId('bd', buildingSeq++);
-  return new Building({ ...building.toData(), id: newId });
+  return duplicateBuildingEntity(building, buildingSeq++);
 }
 
 function setActiveTool(tool: Tool) {
@@ -6151,22 +6095,6 @@ function setInteractionActive(active: boolean) {
   ctx.imageSmoothingEnabled = active;
   // Switching smoothing affects map draw, so request a frame.
   requestRender();
-}
-
-function shouldLiveUpdateMap(activeDrag: DragState | null) {
-  if (!activeDrag) return false;
-  // Any drag that modifies geometry should trigger map recalculation
-  const geometryDragTypes = [
-    'source',
-    'barrier',
-    'barrier-endpoint',
-    'barrier-rotate',
-    'building',
-    'building-resize',
-    'building-rotate',
-    'move-multi',
-  ];
-  return geometryDragTypes.includes(activeDrag.type);
 }
 
 function startInteractionForDrag(activeDrag: DragState | null) {

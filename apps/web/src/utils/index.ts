@@ -33,4 +33,12 @@ export {
   energyToDb,
 } from './audio.js';
 
-export { createId } from './id.js';
+export {
+  createId,
+  SOURCE_PREFIX,
+  RECEIVER_PREFIX,
+  PROBE_PREFIX,
+  PANEL_PREFIX,
+  BUILDING_PREFIX,
+  BARRIER_PREFIX,
+} from './id.js';
