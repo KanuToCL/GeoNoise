@@ -46,3 +46,19 @@ export {
   shouldLiveUpdateMap,
   setBarrierFromMidpointAndRotation,
 } from './drag/index.js';
+
+// Tool-specific interactions
+export {
+  getMeasureStart,
+  getMeasureEnd,
+  isMeasureLocked,
+  setMeasureStart,
+  setMeasureEnd,
+  setMeasureLocked,
+  startMeasurement,
+  updateMeasurement,
+  lockMeasurement,
+  clearMeasurement,
+  hasMeasurement,
+  getMeasurePoints,
+} from './tools/index.js';

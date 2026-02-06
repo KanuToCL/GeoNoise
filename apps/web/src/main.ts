@@ -132,6 +132,8 @@ import {
   drawMeasurement as drawMeasurementModule,
   drawSelectBox as drawSelectBoxModule,
 } from './rendering/index.js';
+import { nextSequence } from './io/index.js';
+import { getGridCounts } from './compute/index.js';
 
 const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
 const debugX = document.querySelector('#debug-x') as HTMLSpanElement | null;
@@ -878,16 +880,6 @@ function buildBandedLegendLabels(range: MapRange, step: number) {
   const stride = Math.ceil(inner.length / (MAX_MAP_LEGEND_LABELS - 2));
   const sampled = inner.filter((_, index) => index % stride === 0);
   return [labels[0], ...sampled, labels[labels.length - 1]];
-}
-
-function getGridCounts(bounds: ComputeGridResponse['result']['bounds'], resolution: number) {
-  // Derive cols/rows deterministically from bounds+resolution.
-  // We avoid trusting backend-provided cols/rows because (for the current CPU engine)
-  // the values array is produced by nested loops (x outer, y inner) and must match
-  // the exact count implied by bounds/resolution.
-  const cols = Math.max(1, Math.floor((bounds.maxX - bounds.minX) / resolution + 1e-6) + 1);
-  const rows = Math.max(1, Math.floor((bounds.maxY - bounds.minY) / resolution + 1e-6) + 1);
-  return { cols, rows };
 }
 
 function buildNoiseMapTexture(grid: ComputeGridResponse['result'], range: MapRange) {
@@ -7322,18 +7314,6 @@ function downloadScene() {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
-}
-
-function nextSequence(prefix: string, ids: Array<{ id: string }>) {
-  let max = 0;
-  for (const item of ids) {
-    if (!item.id.startsWith(prefix)) continue;
-    const value = Number.parseInt(item.id.slice(prefix.length), 10);
-    if (!Number.isNaN(value)) {
-      max = Math.max(max, value);
-    }
-  }
-  return Math.max(max + 1, ids.length + 1);
 }
 
 function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
