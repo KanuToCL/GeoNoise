@@ -3,24 +3,27 @@
 This document tracks architectural issues, inconsistencies, and refactoring opportunities in the GeoNoise codebase.
 
 **Last Updated:** 2026-02-06
-**Overall Health Score:** 7.0/10 (improved: state/, interactions/, ui/, rendering/ modules extracted)
+**Overall Health Score:** 6.5/10 (main.ts still 7,911 lines; extraction strategy defined)
+**Next Milestone:** Reduce main.ts to ~2,000 lines via 12 module extractions
 
 ---
 
 ## Critical Issues
 
-### 1. Monolithic main.ts (~9200+ lines)
+### 1. Monolithic main.ts (~7,911 lines)
 **Priority:** High
 **Effort:** Large
 **Location:** `apps/web/src/main.ts`
 
-The main entry point contains too many responsibilities:
-- `Building` class definition
-- All UI wiring functions (`wireTools`, `wireKeyboard`, `wirePointer`, etc.)
-- Rendering logic (`drawNoiseMap`, `drawBuildings`, `drawBarriers`, etc.)
-- Drag handlers for all entity types
-- Scene state management
-- Undo/redo system
+The main entry point still contains 232 functions across multiple responsibilities:
+- Probe system (charts, inspector, ray viz, pinning)
+- Compute orchestration (receivers, panels, incremental)
+- Pointer/interaction handlers (mouse events, hit testing)
+- Context panel and properties rendering
+- UI wiring (dock, settings, equations, propagation)
+- Scene I/O (save, load, download)
+
+**See:** [Main.ts Extraction Strategy](#maints-extraction-strategy-7911--2000-lines) for detailed plan.
 
 **Proposed Split:**
 ```
@@ -142,7 +145,7 @@ apps/web/src/
 - 🔲 **Still in main.ts:** pointer events, drag handlers, tool logic, properties panel, settings panel
 - 🔲 **Needs integration:** All modules need to be wired into main.ts to remove duplicate code
 
-**Target:** Reduce `main.ts` from ~8,566 lines to ~200-400 lines (entry point only)
+**Target:** Reduce `main.ts` from ~7,911 lines to ~2,000 lines (see extraction strategy)
 
 ### What main.ts Should Contain After Refactoring
 
@@ -324,11 +327,11 @@ interface Draggable {
 
 ## Growing Files to Watch
 
-| File | Lines | Status |
-|------|-------|--------|
-| `main.ts` | ~9200 | 🔴 Critical |
-| `mapboxUI.ts` | ~1100 | 🟡 Growing |
-| `index.html` | ~1600 | 🟡 Large |
+| File | Lines | Status | Action |
+|------|-------|--------|--------|
+| `main.ts` | ~7,911 | 🔴 Critical | See extraction strategy below |
+| `mapboxUI.ts` | ~1,100 | 🟡 Growing | Monitor, consider split if >1,500 |
+| `index.html` | ~1,600 | 🟡 Large | Extract inline styles to CSS |
 
 ---
 
@@ -543,6 +546,241 @@ The physics engine correctly computes building diffraction paths (over-roof and 
 **Impact:** When ray visualization is enabled, building diffraction rays (which may be the dominant path when buildings block line-of-sight) are invisible to the user.
 
 **Fix:** Add path collection loop after line 1727 to extract 2D points from `buildingDiffPaths[].waypoints`.
+
+---
+
+---
+
+## Main.ts Extraction Strategy (7,911 → 2,000 lines)
+
+**Date:** 2026-02-06
+**Current:** 7,911 lines, 232 functions
+**Target:** ~2,000 lines (orchestration + minimal glue code)
+**Estimated Extraction:** ~5,900 lines across 12 new/extended modules
+
+### Why This Matters (From modular-architecture.md)
+
+> **"Rule of thumb:** If an agent needs to read >500 lines to make a 10-line change, the code is too coupled."
+
+| Scenario | Lines Read | ~Tokens | Context Used |
+|----------|------------|---------|--------------|
+| Read current main.ts (7,911 lines) | 7,911 | ~31,644 | 31% of 100k |
+| Read focused module (200 lines) | 200 | ~800 | 0.8% of 100k |
+
+**Current pain points:**
+- Agent must load entire 7,911 lines to understand any subsystem
+- No clear boundaries between probe system, compute, UI, interactions
+- Can't test subsystems in isolation
+- Changes to one area risk breaking unrelated code
+
+---
+
+### Function Category Analysis
+
+| Category | Line Range | ~Lines | Functions | Extraction Target |
+|----------|------------|--------|-----------|-------------------|
+| **Probe system** | 1882-2831 | 950 | 27 | `probe/` module |
+| **Spectrum editor** | 3052-3546 | 494 | 6 | `ui/spectrum/` module |
+| **Pointer handlers** | 5121-6769 | 1,648 | 23 | `interactions/pointer/` |
+| **Context panel** | 2831-4136 | 1,305 | 12 | `ui/contextPanel/` |
+| **Compute orchestration** | 1069-1812 | 743 | 20 | `compute/orchestration/` |
+| **Scene I/O** | 7121-7252 | 131 | 4 | `io/scene.ts` |
+| **Modals/popovers** | 4277-4602 | 325 | 9 | `ui/settings/` |
+| **Dock system** | 4811-5105 | 294 | 7 | `ui/dock/` |
+| **Equations UI** | 4602-4714 | 112 | 8 | `ui/equations/` |
+| **Propagation controls** | 7522-7830 | 308 | 3 | `ui/propagation/` |
+| **Drawing wrappers** | 5733-5951 | 218 | 13 | Inline into render loop |
+| **Init/globals** | 160-540, 7830+ | 450 | 15 | Keep in main.ts |
+
+---
+
+### New Module Structure
+
+```
+apps/web/src/
+├── main.ts                           # ← TARGET: ~2,000 lines (orchestration only)
+│
+├── probe/                            # NEW: Acoustic probe subsystem (~950 lines)
+│   ├── types.ts                      # ProbeState, PinnedProbe, ProbeSnapshot
+│   ├── worker.ts                     # initProbeWorker, sendProbeRequest, handleProbeResult
+│   ├── chart.ts                      # renderProbeChart, resizeProbeChart, renderProbeChartOn
+│   ├── inspector.ts                  # renderProbeInspector, getProbeStatusLabel
+│   ├── pinning.ts                    # pinProbe, unpinProbe, createPinnedProbePanel
+│   ├── snapshots.ts                  # createProbeSnapshot, renderProbeSnapshots
+│   ├── rays.ts                       # renderRayVisualization, disableRayVisualization, drawTracedRays
+│   └── index.ts                      # Barrel exports
+│
+├── compute/                          # EXTEND: Computation orchestration (~743 lines)
+│   ├── orchestration/                # NEW: Scene computation coordination
+│   │   ├── scene.ts                  # buildEngineScene, computeScene, cancelCompute
+│   │   ├── receivers.ts              # computeReceivers, computeReceiversIncremental
+│   │   ├── panels.ts                 # computePanel, computePanelIncremental
+│   │   ├── incremental.ts            # primeDragContribution, applyReceiverDelta, applyPanelDelta
+│   │   └── index.ts                  # Barrel exports
+│   ├── noiseGrid.ts                  # ✅ Already exists
+│   ├── workerPool.ts                 # ✅ Already exists
+│   └── index.ts                      # Update barrel
+│
+├── ui/                               # EXTEND: UI subsystems
+│   ├── contextPanel/                 # NEW: Context/properties panel (~500 lines)
+│   │   ├── types.ts                  # PinnedPanel state
+│   │   ├── panel.ts                  # renderContextPanel, updateContextTitle
+│   │   ├── properties.ts             # renderPropertiesFor, createInputRow
+│   │   ├── pinning.ts                # createPinnedContextPanel, refreshPinnedContextPanels
+│   │   └── index.ts                  # Barrel exports
+│   │
+│   ├── spectrum/                     # NEW: Spectrum editing (~494 lines)
+│   │   ├── editor.ts                 # createSpectrumEditor, createInlineField
+│   │   ├── chart.ts                  # renderSourceChartOn
+│   │   ├── bar.ts                    # createSpectrumBar
+│   │   └── index.ts                  # Barrel exports
+│   │
+│   ├── settings/                     # NEW: Settings popovers (~325 lines)
+│   │   ├── map.ts                    # wireMapSettings, updateMapSettingsControls
+│   │   ├── display.ts                # wireDisplaySettings
+│   │   ├── layers.ts                 # wireLayersPopover (move from panels/)
+│   │   └── index.ts                  # Barrel exports
+│   │
+│   ├── dock/                         # NEW: Dock system (~294 lines)
+│   │   ├── labels.ts                 # wireDockLabels, resetDockInactivityTimer
+│   │   ├── expand.ts                 # wireDockExpand
+│   │   ├── submenu.ts                # showDrawingModeSubmenu, hideDrawingModeSubmenu
+│   │   └── index.ts                  # Barrel exports
+│   │
+│   ├── equations/                    # NEW: Physics equation display (~112 lines)
+│   │   ├── equations.ts              # updateAllEquations, rerenderKatex
+│   │   ├── collapsibles.ts           # wireEquationCollapsibles
+│   │   └── index.ts                  # Barrel exports
+│   │
+│   ├── propagation/                  # NEW: Propagation controls (~308 lines)
+│   │   ├── controls.ts               # wirePropagationControls, updatePropagationControls
+│   │   └── index.ts                  # Barrel exports
+│   │
+│   ├── status/                       # NEW: Status indicators (~100 lines)
+│   │   ├── compute.ts                # setComputeChip, updateComputeButtonState, updateComputeUI
+│   │   ├── map.ts                    # setMapToast, updateMapUI, updateMapButtonState
+│   │   └── index.ts                  # Barrel exports
+│   │
+│   ├── panels/                       # ✅ Exists (layers.ts)
+│   ├── modals/                       # ✅ Exists (about.ts)
+│   └── toolbar.ts                    # ✅ Exists
+│
+├── interactions/                     # EXTEND: Pointer handlers (~1,648 lines)
+│   ├── pointer/                      # NEW: Mouse/touch event handling
+│   │   ├── types.ts                  # PointerState, HitResult
+│   │   ├── handlers.ts               # handlePointerDown, handlePointerMove, handlePointerUp
+│   │   ├── wheel.ts                  # handleWheel, wireWheel
+│   │   └── index.ts                  # Barrel exports
+│   │
+│   ├── selection/                    # NEW: Selection operations (~300 lines)
+│   │   ├── delete.ts                 # deleteSelection
+│   │   ├── duplicate.ts              # duplicateMultiSelection
+│   │   ├── selectAll.ts              # selectAll
+│   │   ├── boxSelect.ts              # getElementsInSelectBox
+│   │   └── index.ts                  # Barrel exports
+│   │
+│   ├── commit/                       # NEW: Draft commit operations (~400 lines)
+│   │   ├── barrier.ts                # commitBarrierDraft, commitBarrierCenterDraft
+│   │   ├── building.ts               # commitBuildingDraft, commitBuildingCenterDraft, commitBuildingPolygonDraft
+│   │   ├── entities.ts               # addSourceAt, addReceiverAt, addProbeAt, addPanelAt
+│   │   └── index.ts                  # Barrel exports
+│   │
+│   ├── hitTest.ts                    # ✅ Exists
+│   ├── keyboard.ts                   # ✅ Exists
+│   └── drag/                         # ✅ Exists
+│
+├── io/                               # EXTEND: Scene persistence (~131 lines)
+│   ├── scene.ts                      # NEW: buildScenePayload, downloadScene, applyLoadedScene
+│   ├── serialize.ts                  # ✅ Exists
+│   └── deserialize.ts                # ✅ Exists
+│
+└── results/                          # NEW: Results rendering (~200 lines)
+    ├── receivers.ts                  # getReceiverDisplayLevel, renderResults
+    ├── panels.ts                     # panelSamplesToEnergy, recomputePanelStats, renderPanelStats
+    ├── legend.ts                     # renderNoiseMapLegend, renderPanelLegend
+    └── index.ts                      # Barrel exports
+```
+
+---
+
+### Extraction Priority Order
+
+Based on the **Four Questions Test** from modular-architecture.md:
+
+| Priority | Module | Lines | Cohesion Test | Why First |
+|----------|--------|-------|---------------|-----------|
+| 1 | `probe/` | 950 | ✅ Single purpose: acoustic probes | Most self-contained, no external dependencies |
+| 2 | `ui/spectrum/` | 494 | ✅ Single purpose: spectrum editing | High cohesion, used in multiple places |
+| 3 | `compute/orchestration/` | 743 | ✅ Single purpose: compute coordination | Critical path, complex but isolated |
+| 4 | `interactions/pointer/` | 700 | ✅ Single purpose: mouse events | Largest chunk, clears main.ts significantly |
+| 5 | `interactions/selection/` | 300 | ✅ Single purpose: selection ops | Depends on entities, but isolated logic |
+| 6 | `interactions/commit/` | 400 | ✅ Single purpose: draft → entity | Related to pointer handlers |
+| 7 | `ui/contextPanel/` | 500 | ✅ Single purpose: property editing | UI-heavy, depends on entities |
+| 8 | `results/` | 200 | ✅ Single purpose: result display | Small, quick win |
+| 9 | `ui/settings/` | 325 | ⚠️ "Settings AND layers" | Could split further, but OK |
+| 10 | `ui/dock/` | 294 | ✅ Single purpose: dock behavior | UI polish, low priority |
+| 11 | `ui/equations/` | 112 | ✅ Single purpose: equation display | Small, quick win |
+| 12 | `io/scene.ts` | 131 | ✅ Single purpose: scene I/O | Small, quick win |
+
+---
+
+### What Remains in main.ts (~2,000 lines)
+
+After full extraction, `main.ts` should contain only:
+
+```typescript
+// === Imports (~100 lines) ===
+import { initScene } from './state/scene.js';
+import { initProbe, wireProbePanel } from './probe/index.js';
+import { wirePointer } from './interactions/pointer/index.js';
+// ... all module imports
+
+// === DOM Element Queries (~100 lines) ===
+const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
+// ... essential DOM refs
+
+// === Thin Wrapper Functions (~400 lines) ===
+// Functions that coordinate between modules but contain no logic
+function updateCounts() { /* calls state + UI */ }
+function refreshCanvasTheme() { /* calls theme + rendering */ }
+
+// === Global State Bindings (~200 lines) ===
+// Necessary to wire module callbacks together
+let noiseMapTexture: ImageData | null = null;
+let renderPending = false;
+
+// === Render Loop (~100 lines) ===
+function requestRender() { ... }
+function renderLoop() { ... }
+
+// === Init Function (~100 lines) ===
+function init() {
+  initScene();
+  initProbe();
+  wirePointer(canvasEl);
+  wireKeyboard();
+  // ... module initialization calls
+}
+
+// === DOMContentLoaded ===
+document.addEventListener('DOMContentLoaded', init);
+```
+
+**Key principle:** Any function in main.ts should either:
+1. Be <20 lines (thin wrapper/coordinator)
+2. Be directly related to wiring modules together
+3. Manage the render loop
+
+---
+
+### Token Efficiency After Refactoring
+
+| Scenario | Before | After | Savings |
+|----------|--------|-------|---------|
+| "Fix probe chart rendering" | 7,911 lines | 200 lines | **97.5%** |
+| "Add new spectrum weighting" | 7,911 lines | 494 lines | **93.8%** |
+| "Debug incremental compute" | 7,911 lines | 743 lines | **90.6%** |
+| "Add new pointer gesture" | 7,911 lines | 700 lines | **91.2%** |
 
 ---
 

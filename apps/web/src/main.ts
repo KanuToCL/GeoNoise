@@ -20,7 +20,6 @@ import {
   type ComputeGridResponse,
   type ComputePanelResponse,
   type ComputeReceiversResponse,
-  type ProbeRequest,
   type ProbeResult,
 } from '@geonoise/engine';
 import {
@@ -89,6 +88,45 @@ import {
   energyToDb,
   createId,
 } from './utils/index.js';
+
+// === Probe Module ===
+import {
+  // Types
+  type ProbeSceneData,
+  type ProbeConfig,
+  type ProbeInspectorElements,
+  type RayVizElements,
+  // State
+  getActiveProbeId,
+  setActiveProbeId,
+  getProbeResult,
+  deleteProbeResult,
+  getPinnedProbePanels,
+  hasPinnedProbePanel,
+  cloneProbeData,
+  pruneProbeData,
+  // Worker
+  sendProbeRequest as sendProbeRequestFromModule,
+  // Panels
+  getInspectorMinTop,
+  clampPanelToParent,
+  bringPanelToFront,
+  makePanelDraggable,
+  // Pinning
+  renderPinnedProbePanel as renderPinnedProbePanelFromModule,
+  createPinnedProbePanel as createPinnedProbePanelFromModule,
+  removePinnedProbe as removePinnedProbeFromModule,
+  // Snapshots
+  renderProbeSnapshots as renderProbeSnapshotsFromModule,
+  createProbeSnapshot as createProbeSnapshotFromModule,
+  // Rays
+  clearTracedPaths,
+  disableRayVisualization as disableRayVisualizationFromModule,
+  drawTracedRays as drawTracedRaysFromModule,
+  // Inspector
+  renderProbeInspector as renderProbeInspectorFromModule,
+  resizeProbeChart as resizeProbeChartFromModule,
+} from './probe/index.js';
 import {
   type Point,
   type DisplayBand,
@@ -116,9 +154,7 @@ import {
   STATIC_POINTS,
   DRAG_POINTS,
   DRAG_FRAME_MS,
-  PROBE_UPDATE_MS,
   PROBE_DEFAULT_Z,
-  INSPECTOR_MAX_ZINDEX,
   CANVAS_HELP_KEY,
 } from './constants.js';
 import {
@@ -403,9 +439,6 @@ type PinnedContextPanel = {
 };
 const pinnedContextPanels: PinnedContextPanel[] = [];
 let pinnedContextSeq = 1;
-/** Global z-index counter for inspector panels - ensures new panels appear above existing ones.
- *  Capped well below dock z-index (99999) to ensure dock is always on top. */
-let inspectorZIndex = 100;
 let dragState: DragState = null;
 let measureStart: Point | null = null;
 let measureEnd: Point | null = null;
@@ -446,27 +479,6 @@ let buildingPolygonDraft: Point[] = [];
 let buildingPolygonPreviewPoint: Point | null = null;
 
 const results: SceneResults = { receivers: [], panels: [] };
-const probeResults = new Map<string, ProbeResult['data']>();
-let probeWorker: Worker | null = null;
-const probePending = new Set<string>();
-type ProbeSnapshot = {
-  id: string;
-  data: ProbeResult['data'];
-  panel: HTMLElement;
-  canvas: HTMLCanvasElement;
-  ctx: CanvasRenderingContext2D;
-};
-type PinnedProbePanel = {
-  id: string;
-  panel: HTMLElement;
-  canvas: HTMLCanvasElement;
-  ctx: CanvasRenderingContext2D;
-  status: HTMLSpanElement;
-};
-const probeSnapshots: ProbeSnapshot[] = [];
-// Live monitors that persist beyond selection (updated alongside the active probe).
-const pinnedProbePanels = new Map<string, PinnedProbePanel>();
-let probeSnapshotSeq = 1;
 let noiseMap: NoiseMap | null = null;
 let currentMapRange: MapRange | null = null;
 let mapRenderStyle: MapRenderStyle = 'Smooth';
@@ -751,17 +763,12 @@ function applySnapshot(snap: SceneSnapshot) {
   panelSeq = snap.panelSeq;
   probeSeq = snap.probeSeq;
   const probeIds = new Set(scene.probes.map((probe) => probe.id));
-  for (const id of probeResults.keys()) {
-    if (!probeIds.has(id)) probeResults.delete(id);
-  }
-  for (const id of probePending) {
-    if (!probeIds.has(id)) probePending.delete(id);
-  }
+  pruneProbeData(probeIds);
   prunePinnedProbes();
   buildingSeq = snap.buildingSeq;
   barrierSeq = snap.barrierSeq;
   selection = snap.selection;
-  activeProbeId = snap.activeProbeId;
+  setActiveProbeId(snap.activeProbeId);
   soloSourceId = snap.soloSourceId;
   panOffset = { ...snap.panOffset };
   zoom = snap.zoom;
@@ -1879,952 +1886,197 @@ function renderResults() {
   refreshPinnedContextPanels();
 }
 
-function setActiveProbe(nextId: string | null) {
-  const resolved = nextId && scene.probes.some((probe) => probe.id === nextId) ? nextId : null;
-  const didChange = resolved !== activeProbeId;
-  activeProbeId = resolved;
-  renderProbeInspector();
-  if (activeProbeId && didChange) {
-    requestProbeUpdate(activeProbeId, { immediate: true });
-  }
-  requestRender();
-}
-
-function getActiveProbe() {
-  if (!activeProbeId) return null;
-  return scene.probes.find((probe) => probe.id === activeProbeId) ?? null;
-}
-
-function initProbeWorker() {
-  if (probeWorker) return;
-  try {
-    probeWorker = new Worker(new URL('./probeWorker.js', import.meta.url), { type: 'module' });
-    probeWorker.addEventListener('message', (event: MessageEvent<ProbeResult>) => {
-      handleProbeResult(event.data);
-    });
-    probeWorker.addEventListener('error', () => {
-      // Worker error - will fall back to stub calculation
-    });
-  } catch {
-    probeWorker = null;
-  }
-}
-
-function buildProbeRequest(probe: Probe): ProbeRequest {
-  const sources = scene.sources
-    .filter((source) => isSourceEnabled(source))
-    .map((source) => ({
-      id: source.id,
-      position: { x: source.x, y: source.y, z: source.z },
-      spectrum: source.spectrum,
-      gain: source.gain,
-    }));
-  const walls = [
-    ...scene.barriers.map((barrier) => ({
-      id: barrier.id,
-      type: 'barrier' as const,
-      vertices: [{ ...barrier.p1 }, { ...barrier.p2 }],
-      height: barrier.height,
-    })),
-    ...scene.buildings.map((building) => ({
-      id: building.id,
-      type: 'building' as const,
-      vertices: building.getVertices().map((point) => ({ ...point })),
-      height: building.z_height,
-    })),
-  ];
-
-  return {
-    type: 'CALCULATE_PROBE',
-    probeId: probe.id,
-    position: { x: probe.x, y: probe.y, z: probe.z ?? PROBE_DEFAULT_Z },
-    sources,
-    walls,
-    config: {
-      barrierSideDiffraction: getPropagationConfig().barrierSideDiffraction ?? 'auto',
-      groundType: getPropagationConfig().groundType ?? 'mixed',
-      groundMixedFactor: getPropagationConfig().groundMixedFactor ?? 0.5,
-      atmosphericAbsorption: getPropagationConfig().atmosphericAbsorption ?? 'simple',
-      ...getMeteoConfig(),
-    },
-    includePathGeometry: ENABLE_RAY_VISUALIZATION && (rayVizToggle?.checked ?? false),
-  };
-}
-
-function calculateProbeStub(req: ProbeRequest): ProbeResult {
-  const freqs = [63, 125, 250, 500, 1000, 2000, 4000, 8000];
-  let minDist = Number.POSITIVE_INFINITY;
-  for (const source of req.sources) {
-    const dx = req.position.x - source.position.x;
-    const dy = req.position.y - source.position.y;
-    const dz = (req.position.z ?? 0) - (source.position.z ?? 0);
-    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    if (dist < minDist) minDist = dist;
-  }
-  const hasSources = req.sources.length > 0;
-  const dist = hasSources ? Math.max(minDist, 1) : 100;
-  const base = hasSources ? 100 - 20 * Math.log10(dist) : 35;
-
-  const magnitudes = freqs.map((freq) => {
-    const tilt = -2.5 * Math.log2(freq / 1000);
-    const jitter = (Math.random() - 0.5) * 2;
-    return base + tilt + jitter;
-  });
-
-  return {
-    type: 'PROBE_UPDATE',
-    probeId: req.probeId,
-    data: {
-      frequencies: freqs,
-      magnitudes,
-    },
-  };
-}
-
-function sendProbeRequest(probe: Probe) {
-  const request = buildProbeRequest(probe);
-  probePending.add(probe.id);
-  renderProbeInspector();
-  renderPinnedProbePanel(probe.id);
-  if (!probeWorker) {
-    window.setTimeout(() => {
-      handleProbeResult(calculateProbeStub(request));
-    }, 0);
-    return;
-  }
-  probeWorker.postMessage(request);
-}
+// Probe functions moved to probe/ module - see ./probe/index.ts
 
 function getProbeById(probeId: string) {
   return scene.probes.find((item) => item.id === probeId) ?? null;
 }
 
-const throttledProbeUpdate = throttle((probeIds: string[]) => {
-  for (const probeId of probeIds) {
-    const probe = getProbeById(probeId);
-    if (!probe) continue;
-    sendProbeRequest(probe);
-  }
-}, PROBE_UPDATE_MS);
-
-function requestProbeUpdates(probeIds: string[], options?: { immediate?: boolean }) {
-  const uniqueIds = Array.from(new Set(probeIds)).filter((id) => id);
-  if (!uniqueIds.length) return;
-  if (!probeWorker) initProbeWorker();
-  if (options?.immediate) {
-    for (const probeId of uniqueIds) {
-      const probe = getProbeById(probeId);
-      if (probe) {
-        sendProbeRequest(probe);
-      }
-    }
-    return;
-  }
-  throttledProbeUpdate(uniqueIds);
-}
-
-function requestProbeUpdate(probeId: string, options?: { immediate?: boolean }) {
+// requestProbeUpdate wrapper for module
+function requestProbeUpdate(probeId: string, _options?: { immediate?: boolean }) {
   if (!probeId) return;
-  requestProbeUpdates([probeId], options);
-}
-
-function getLiveProbeIds() {
-  const ids = new Set<string>();
-  if (activeProbeId) {
-    ids.add(activeProbeId);
-  }
-  for (const id of pinnedProbePanels.keys()) {
-    ids.add(id);
-  }
-  return Array.from(ids);
-}
-
-function requestLiveProbeUpdates(options?: { immediate?: boolean }) {
-  // Keep pinned monitors and the active inspector in sync with the engine.
-  const liveIds = getLiveProbeIds();
-  // Force immediate updates to ensure probe responds to scene changes
-  requestProbeUpdates(liveIds, { immediate: true, ...options });
-}
-
-function handleProbeResult(result: ProbeResult) {
-  if (!result || result.type !== 'PROBE_UPDATE') return;
-  probeResults.set(result.probeId, result.data);
-  probePending.delete(result.probeId);
-  if (activeProbeId === result.probeId) {
+  const probe = getProbeById(probeId);
+  if (!probe) return;
+  const sceneData: ProbeSceneData = {
+    sources: scene.sources,
+    barriers: scene.barriers,
+    buildings: scene.buildings,
+  };
+  const config: ProbeConfig = {
+    barrierSideDiffraction: getPropagationConfig().barrierSideDiffraction ?? 'auto',
+    groundType: getPropagationConfig().groundType ?? 'mixed',
+    groundMixedFactor: getPropagationConfig().groundMixedFactor ?? 0.5,
+    atmosphericAbsorption: getPropagationConfig().atmosphericAbsorption ?? 'simple',
+    ...getMeteoConfig(),
+  };
+  const includeRays = ENABLE_RAY_VISUALIZATION && (rayVizToggle?.checked ?? false);
+  sendProbeRequestFromModule(probe, sceneData, config, isSourceEnabled, includeRays, () => {
     renderProbeInspector();
-  }
-  renderPinnedProbePanel(result.probeId);
-}
-
-function resizeProbeCanvas(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
-  const rect = canvas.getBoundingClientRect();
-  if (!rect.width || !rect.height) return;
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = rect.width * dpr;
-  canvas.height = rect.height * dpr;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
-
-function renderProbeChartOn(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, data: ProbeResult['data'] | null) {
-  resizeProbeCanvas(canvas, ctx);
-  const rect = canvas.getBoundingClientRect();
-  const width = rect.width;
-  const height = rect.height;
-  if (!width || !height) return;
-
-  const ctxChart = ctx;
-  const padding = { left: 36, right: 60, top: 12, bottom: 24 };
-  const chartWidth = width - padding.left - padding.right;
-  const chartHeight = height - padding.top - padding.bottom;
-
-  ctxChart.clearRect(0, 0, width, height);
-  ctxChart.fillStyle = readCssVar('--probe-bg');
-  ctxChart.fillRect(0, 0, width, height);
-
-  if (!data || data.frequencies.length === 0) {
-    ctxChart.fillStyle = readCssVar('--probe-text');
-    ctxChart.font = '11px "Work Sans", sans-serif';
-    ctxChart.fillText('Drag the probe to sample.', padding.left, padding.top + 12);
-    return;
-  }
-
-  // Apply frequency weighting based on displayWeighting setting
-  const weightedMagnitudes = applyWeightingToSpectrum(data.magnitudes as Spectrum9, displayWeighting);
-  const overallLevel = calculateOverallLevel(data.magnitudes as Spectrum9, displayWeighting);
-  const weightingUnit = displayWeighting === 'Z' ? 'dB' : `dB(${displayWeighting})`;
-
-  // Check if there's essentially no energy (all bands below threshold)
-  // This avoids showing A-weighting-shaped noise floor when there's no signal.
-  // Use MIN_LEVEL as the threshold since that's what the engine returns for silence.
-  const NOISE_FLOOR_THRESHOLD = -99; // dB - only filter out MIN_LEVEL (-100)
-  const hasSignal = weightedMagnitudes.some(m => m > NOISE_FLOOR_THRESHOLD);
-
-  if (!hasSignal) {
-    ctxChart.fillStyle = readCssVar('--probe-text');
-    ctxChart.font = '11px "Work Sans", sans-serif';
-    ctxChart.fillText('No significant signal at probe location.', padding.left, padding.top + 12);
-    return;
-  }
-
-  const minFreq = Math.min(...data.frequencies);
-  const maxFreq = Math.max(...data.frequencies);
-  const logMin = Math.log10(minFreq);
-  const logMax = Math.log10(maxFreq);
-  const minMag = Math.min(...weightedMagnitudes);
-  const maxMag = Math.max(...weightedMagnitudes);
-  const magMin = Math.floor((minMag - 2) / 5) * 5;
-  const magMax = Math.ceil((maxMag + 2) / 5) * 5;
-
-  ctxChart.strokeStyle = readCssVar('--probe-grid');
-  ctxChart.lineWidth = 1;
-  ctxChart.setLineDash([4, 4]);
-  for (let i = 0; i <= 4; i += 1) {
-    const y = padding.top + (chartHeight * i) / 4;
-    ctxChart.beginPath();
-    ctxChart.moveTo(padding.left, y);
-    ctxChart.lineTo(width - padding.right, y);
-    ctxChart.stroke();
-  }
-  ctxChart.setLineDash([]);
-
-  const points = data.frequencies.map((freq, idx) => {
-    const x = padding.left + ((Math.log10(freq) - logMin) / (logMax - logMin)) * chartWidth;
-    const value = weightedMagnitudes[idx];
-    const ratio = (value - magMin) / (magMax - magMin || 1);
-    const y = padding.top + (1 - ratio) * chartHeight;
-    return { x, y, value, freq };
+    renderPinnedProbePanel(probe.id);
   });
+}
 
-  ctxChart.beginPath();
-  points.forEach((pt, index) => {
-    if (index === 0) {
-      ctxChart.moveTo(pt.x, pt.y);
-    } else {
-      ctxChart.lineTo(pt.x, pt.y);
-    }
-  });
-  ctxChart.strokeStyle = readCssVar('--probe-line');
-  ctxChart.lineWidth = 2;
-  ctxChart.stroke();
-
-  ctxChart.fillStyle = readCssVar('--probe-fill');
-  ctxChart.lineTo(points[points.length - 1].x, height - padding.bottom);
-  ctxChart.lineTo(points[0].x, height - padding.bottom);
-  ctxChart.closePath();
-  ctxChart.fill();
-
-  ctxChart.fillStyle = readCssVar('--probe-line');
-  for (const point of points) {
-    ctxChart.beginPath();
-    ctxChart.arc(point.x, point.y, 3, 0, Math.PI * 2);
-    ctxChart.fill();
-  }
-
-  ctxChart.fillStyle = readCssVar('--probe-text');
-  ctxChart.font = '10px "Work Sans", sans-serif';
-  ctxChart.fillText(`${magMax} dB`, 6, padding.top + 4);
-  ctxChart.fillText(`${magMin} dB`, 6, height - padding.bottom + 4);
-
-  // Display overall weighted level on the right side
-  ctxChart.font = 'bold 12px "Work Sans", sans-serif';
-  ctxChart.textAlign = 'right';
-  ctxChart.fillText(`${formatLevel(overallLevel)}`, width - 4, padding.top + 12);
-  ctxChart.font = '9px "Work Sans", sans-serif';
-  ctxChart.fillText(weightingUnit, width - 4, padding.top + 24);
-  ctxChart.textAlign = 'left';
-
-  const labelIndices = [0, Math.floor(points.length / 2), points.length - 1];
-  for (const idx of labelIndices) {
-    const point = points[idx];
-    const label = `${Math.round(point.freq)} Hz`;
-    ctxChart.fillText(label, point.x - 10, height - 6);
+function requestLiveProbeUpdates(_options?: { immediate?: boolean }) {
+  const activeId = getActiveProbeId();
+  const liveIds = activeId ? [activeId, ...Array.from(getPinnedProbePanels().keys())] : Array.from(getPinnedProbePanels().keys());
+  const uniqueIds = Array.from(new Set(liveIds));
+  for (const probeId of uniqueIds) {
+    requestProbeUpdate(probeId, { immediate: true });
   }
 }
 
-function resizeProbeChart() {
-  if (!probeChart || !probeChartCtx) return;
-  resizeProbeCanvas(probeChart, probeChartCtx);
-}
-
-function renderProbeChart(data: ProbeResult['data'] | null) {
-  if (!probeChart || !probeChartCtx) return;
-  renderProbeChartOn(probeChart, probeChartCtx, data);
-}
-
-function renderProbeSnapshots() {
-  if (!probeSnapshots.length) return;
-  for (const snapshot of probeSnapshots) {
-    renderProbeChartOn(snapshot.canvas, snapshot.ctx, snapshot.data);
-  }
-}
-
-function getProbeStatusLabel(probeId: string) {
-  if (probePending.has(probeId)) return 'Updating';
-  if (probeResults.has(probeId)) return 'Live';
-  return 'Idle';
-}
-
-function renderPinnedProbePanel(probeId: string) {
-  const pinned = pinnedProbePanels.get(probeId);
-  if (!pinned) return;
-  pinned.status.textContent = getProbeStatusLabel(probeId);
-  renderProbeChartOn(pinned.canvas, pinned.ctx, probeResults.get(probeId) ?? null);
-}
-
-function renderPinnedProbePanels() {
-  for (const id of pinnedProbePanels.keys()) {
-    renderPinnedProbePanel(id);
-  }
-}
-
+// renderProbeInspector wrapper for probe/ module
 function renderProbeInspector() {
-  if (!probePanel) return;
-  const probe = getActiveProbe();
-  const isPinned = probe ? pinnedProbePanels.has(probe.id) : false;
-  // Hide the inspector if its probe is now showing as a pinned monitor.
-  const isOpen = !!probe && !isPinned;
-  probePanel.classList.toggle('is-open', isOpen);
-  probePanel.classList.toggle('probe-panel--active', isOpen);
-  probePanel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
-  // Bring probe panel to front when opening so it appears above pinned panels
-  if (isOpen) {
-    bringPanelToFront(probePanel);
-  }
-  if (probePin) {
-    const pinActive = !!probe && pinnedProbePanels.has(probe.id);
-    probePin.disabled = !probe;
-    probePin.classList.toggle('is-active', pinActive);
-    probePin.setAttribute('aria-pressed', pinActive ? 'true' : 'false');
-    probePin.title = probe ? (pinActive ? 'Unpin monitoring window' : 'Pin monitoring window') : 'Pin monitoring window';
-  }
-  if (!probe || isPinned) {
-    if (probeFreeze) {
-      probeFreeze.disabled = true;
-      probeFreeze.title = 'Freeze probe snapshot';
-    }
-    return;
-  }
-  if (probeTitle) {
-    const defaultName = `Probe ${probe.id.toUpperCase()}`;
-    probeTitle.textContent = probe.name || defaultName;
-  }
-  if (probeStatus) {
-    probeStatus.textContent = getProbeStatusLabel(probe.id);
-  }
-  if (probeFreeze) {
-    const hasData = probeResults.has(probe.id);
-    probeFreeze.disabled = !hasData;
-    probeFreeze.title = hasData ? 'Freeze probe snapshot' : 'Probe data not ready yet';
-  }
-  renderProbeChart(probeResults.get(probe.id) ?? null);
-  renderRayVisualization(probeResults.get(probe.id) ?? null);
+  const elements: ProbeInspectorElements = {
+    panel: probePanel,
+    title: probeTitle,
+    close: probeClose,
+    freeze: probeFreeze,
+    pin: probePin,
+    status: probeStatus,
+    chart: probeChart,
+    chartCtx: probeChartCtx,
+  };
+  const rayVizElements: RayVizElements = {
+    card: rayVizCard,
+    toggle: rayVizToggle,
+    paths: rayVizPaths,
+    phaseInfo: rayVizPhaseInfo,
+    dominant: rayVizDominant,
+  };
+  renderProbeInspectorFromModule({
+    elements,
+    rayVizElements,
+    getProbeById,
+    displayWeighting,
+    readCssVar,
+    requestRender,
+  });
 }
 
-// ============================================================================
-// Ray Visualization
-// ============================================================================
+// resizeProbeChart wrapper
+function resizeProbeChart() {
+  resizeProbeChartFromModule(probeChart, probeChartCtx);
+}
 
-/** Current traced paths for canvas rendering */
-let currentTracedPaths: import('@geonoise/engine').TracedPath[] | null = null;
+// renderProbeSnapshots wrapper
+function renderProbeSnapshots() {
+  renderProbeSnapshotsFromModule(displayWeighting, readCssVar);
+}
 
-/** Render the ray visualization panel content */
-function renderRayVisualization(data: ProbeResult['data'] | null) {
-  if (!rayVizPaths || !rayVizPhaseInfo || !rayVizDominant) return;
+// getActiveProbe wrapper for probe/ module
+function getActiveProbe() {
+  const activeId = getActiveProbeId();
+  if (!activeId) return null;
+  return getProbeById(activeId);
+}
 
-  // Update card active state based on toggle
-  if (rayVizCard) {
-    rayVizCard.classList.toggle('is-active', rayVizToggle?.checked ?? false);
+// setActiveProbe wrapper
+function setActiveProbe(nextId: string | null) {
+  const resolved = nextId && scene.probes.some((probe) => probe.id === nextId) ? nextId : null;
+  const currentId = getActiveProbeId();
+  const didChange = resolved !== currentId;
+  setActiveProbeId(resolved);
+  renderProbeInspector();
+  if (resolved && didChange) {
+    requestProbeUpdate(resolved, { immediate: true });
   }
-
-  if (!data || !rayVizToggle?.checked) {
-    rayVizPaths.innerHTML = '';
-    rayVizPhaseInfo.innerHTML = '';
-    rayVizDominant.innerHTML = '';
-    currentTracedPaths = null;
-    requestRender();
-    return;
-  }
-
-  const paths = data.tracedPaths ?? [];
-  const phaseRels = data.phaseRelationships ?? [];
-
-  // Store for canvas rendering
-  currentTracedPaths = paths.length > 0 ? paths : null;
-
-  if (paths.length === 0) {
-    rayVizPaths.innerHTML = '<div class="ray-viz-empty">No traced paths available</div>';
-    rayVizPhaseInfo.innerHTML = '';
-    rayVizDominant.innerHTML = '';
-    requestRender();
-    return;
-  }
-
-  // Find max level for normalization
-  const maxLevel = Math.max(...paths.map(p => p.level_dB));
-  const minLevel = maxLevel - 40; // 40 dB range
-
-  // Path type icons and labels
-  const pathIcons: Record<string, string> = {
-    direct: '━━━',
-    ground: '┅┅┅',
-    wall: '•••',
-    diffraction: '━•━',
-  };
-
-  const pathLabels: Record<string, string> = {
-    direct: 'Direct',
-    ground: 'Ground Bounce',
-    wall: 'Wall Reflection',
-    diffraction: 'Diffraction',
-  };
-
-  // Render path rows
-  rayVizPaths.innerHTML = paths.map(path => {
-    const barPercent = Math.max(0, Math.min(100, ((path.level_dB - minLevel) / 40) * 100));
-    return `
-      <div class="ray-viz-path-row">
-        <span class="ray-viz-path-icon">${pathIcons[path.type] ?? '---'}</span>
-        <span class="ray-viz-path-type">${pathLabels[path.type] ?? path.type}</span>
-        <span class="ray-viz-path-level">${path.level_dB.toFixed(1)} dB</span>
-        <div class="ray-viz-path-bar">
-          <div class="ray-viz-path-bar-fill" style="width: ${barPercent}%"></div>
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  // Render phase relationships
-  if (phaseRels.length > 0) {
-    rayVizPhaseInfo.innerHTML = phaseRels.slice(0, 4).map(rel => {
-      const indicator = rel.isConstructive ? '🔵' : '🔴';
-      const indicatorClass = rel.isConstructive ? 'constructive' : 'destructive';
-      const label = rel.isConstructive ? 'Constructive' : 'Destructive';
-      return `
-        <div class="ray-viz-phase-row">
-          <span class="ray-viz-phase-indicator ${indicatorClass}">${indicator}</span>
-          <span class="ray-viz-phase-text">${label}: ${pathLabels[rel.path1Type] ?? rel.path1Type} + ${pathLabels[rel.path2Type] ?? rel.path2Type}</span>
-          <span class="ray-viz-phase-delta">(Δφ=${rel.phaseDelta_deg.toFixed(0)}°)</span>
-        </div>
-      `;
-    }).join('');
-  } else {
-    rayVizPhaseInfo.innerHTML = '';
-  }
-
-  // Render dominant path
-  if (paths.length > 0) {
-    const dominant = paths.reduce((a, b) => a.level_dB > b.level_dB ? a : b);
-    rayVizDominant.innerHTML = `Dominant: ${pathLabels[dominant.type] ?? dominant.type} (${dominant.level_dB.toFixed(1)} dB)`;
-  } else {
-    rayVizDominant.innerHTML = '';
-  }
-
   requestRender();
 }
 
-/** Disable ray visualization toggle (called on scene changes) */
-function disableRayVisualization() {
-  if (rayVizToggle && rayVizToggle.checked) {
-    rayVizToggle.checked = false;
-    if (rayVizCard) {
-      rayVizCard.classList.remove('is-active');
-    }
-    currentTracedPaths = null;
-    if (rayVizPaths) rayVizPaths.innerHTML = '';
-    if (rayVizPhaseInfo) rayVizPhaseInfo.innerHTML = '';
-    if (rayVizDominant) rayVizDominant.innerHTML = '';
-    requestRender();
-  }
-}
-
-/** Draw traced rays on the map canvas */
-function drawTracedRays() {
-  if (!currentTracedPaths || currentTracedPaths.length === 0) return;
-
-  // Find max level for opacity calculation
-  const maxLevel = Math.max(...currentTracedPaths.map(p => p.level_dB));
-
-  for (const path of currentTracedPaths) {
-    if (path.points.length < 2) continue;
-
-    // Calculate opacity based on relative level (brighter = louder)
-    const relativeLevel = path.level_dB - maxLevel;
-    const opacity = Math.max(0.3, 1 + relativeLevel / 40);
-
-    // Set line style based on path type
-    ctx.save();
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    switch (path.type) {
-      case 'direct':
-        ctx.strokeStyle = `rgba(45, 140, 255, ${opacity})`;
-        ctx.setLineDash([]);
-        break;
-      case 'ground':
-        ctx.strokeStyle = `rgba(76, 175, 80, ${opacity})`;
-        ctx.setLineDash([6, 4]);
-        break;
-      case 'wall':
-        ctx.strokeStyle = `rgba(255, 152, 0, ${opacity})`;
-        ctx.setLineDash([2, 3]);
-        break;
-      case 'diffraction':
-        ctx.strokeStyle = `rgba(156, 39, 176, ${opacity})`;
-        ctx.setLineDash([8, 3, 2, 3]);
-        break;
-      default:
-        ctx.strokeStyle = `rgba(100, 100, 100, ${opacity})`;
-        ctx.setLineDash([]);
-    }
-
-    // Draw the path
-    ctx.beginPath();
-    const firstPoint = worldToCanvas(path.points[0]);
-    ctx.moveTo(firstPoint.x, firstPoint.y);
-
-    for (let i = 1; i < path.points.length; i++) {
-      const point = worldToCanvas(path.points[i]);
-      ctx.lineTo(point.x, point.y);
-    }
-    ctx.stroke();
-
-    // Draw reflection/diffraction point marker if present
-    const markerPoint = path.reflectionPoint ?? path.diffractionEdge;
-    if (markerPoint) {
-      const mp = worldToCanvas(markerPoint);
-      ctx.setLineDash([]);
-      ctx.fillStyle = ctx.strokeStyle;
-      ctx.beginPath();
-      ctx.arc(mp.x, mp.y, 4, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.restore();
-  }
-}
-
-function cloneProbeData(data: ProbeResult['data']): ProbeResult['data'] {
-  return {
-    frequencies: [...data.frequencies],
-    magnitudes: [...data.magnitudes],
-    interferenceDetails: data.interferenceDetails ? { ...data.interferenceDetails } : undefined,
-    };
-}
-
-/** Get the minimum top position for inspector panels (below the topbar) */
-function getInspectorMinTop(parent: HTMLElement, padding: number): number {
-  const topbar = document.querySelector('.topbar') as HTMLElement | null;
-  if (topbar) {
-    const topbarRect = topbar.getBoundingClientRect();
-    const parentRect = parent.getBoundingClientRect();
-    // Return position below topbar with padding, relative to parent
-    return topbarRect.bottom - parentRect.top + padding;
-  }
-  return padding;
-}
-
-function clampPanelToParent(panel: HTMLElement, parent: HTMLElement, left: number, top: number, padding: number, minTop?: number) {
-  const maxLeft = parent.clientWidth - panel.offsetWidth - padding;
-  const maxTop = parent.clientHeight - panel.offsetHeight - padding;
-  // Use provided minTop (e.g., below topbar) or fall back to padding
-  const effectiveMinTop = minTop ?? padding;
-  const clampedLeft = Math.min(Math.max(left, padding), Math.max(padding, maxLeft));
-  const clampedTop = Math.min(Math.max(top, effectiveMinTop), Math.max(effectiveMinTop, maxTop));
-  panel.style.left = `${clampedLeft}px`;
-  panel.style.top = `${clampedTop}px`;
-  panel.style.right = 'auto';
-  panel.style.bottom = 'auto';
-}
-
-/** Bring an inspector panel to the front by incrementing the global z-index counter.
- *  Z-index is capped at INSPECTOR_MAX_ZINDEX to ensure dock always stays on top. */
-function bringPanelToFront(panel: HTMLElement) {
-  inspectorZIndex++;
-  // Cap at max to keep dock always on top
-  if (inspectorZIndex > INSPECTOR_MAX_ZINDEX) {
-    inspectorZIndex = INSPECTOR_MAX_ZINDEX;
-  }
-  panel.style.zIndex = String(inspectorZIndex);
-}
-
-function makePanelDraggable(
-  panel: HTMLElement,
-  handle: HTMLElement,
-  options: { parent?: HTMLElement | null; padding?: number; ignoreSelector?: string } = {}
-) {
-  const parent = options.parent ?? panel.parentElement ?? document.body;
-  const padding = options.padding ?? 12;
-  const ignoreSelector = options.ignoreSelector ?? 'button';
-  const originalUserSelect = document.body.style.userSelect;
-  let isDragging = false;
-  let dragOffsetX = 0;
-  let dragOffsetY = 0;
-
-  const handleMouseMove = (event: MouseEvent) => {
-    if (!isDragging) return;
-    const parentRect = parent.getBoundingClientRect();
-    const nextLeft = event.clientX - parentRect.left - dragOffsetX;
-    const nextTop = event.clientY - parentRect.top - dragOffsetY;
-    clampPanelToParent(panel, parent, nextLeft, nextTop, padding, getInspectorMinTop(parent, padding));
-  };
-
-  const handleMouseUp = () => {
-    if (!isDragging) return;
-    isDragging = false;
-    document.body.style.userSelect = originalUserSelect;
-    window.removeEventListener('mousemove', handleMouseMove);
-    window.removeEventListener('mouseup', handleMouseUp);
-  };
-
-  handle.addEventListener('mousedown', (event) => {
-    if (event.button !== 0) return;
-    if ((event.target as HTMLElement | null)?.closest(ignoreSelector)) return;
-    const panelRect = panel.getBoundingClientRect();
-    const parentRect = parent.getBoundingClientRect();
-    dragOffsetX = event.clientX - panelRect.left;
-    dragOffsetY = event.clientY - panelRect.top;
-    panel.style.position = 'absolute';
-    panel.style.left = `${panelRect.left - parentRect.left}px`;
-    panel.style.top = `${panelRect.top - parentRect.top}px`;
-    panel.style.right = 'auto';
-    panel.style.bottom = 'auto';
-    isDragging = true;
-    document.body.style.userSelect = 'none';
-    // Bring panel to front when starting to drag
-    bringPanelToFront(panel);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  });
-}
-
-function removePinnedProbe(probeId: string) {
-  const pinned = pinnedProbePanels.get(probeId);
-  if (!pinned) return false;
-  pinnedProbePanels.delete(probeId);
-  pinned.panel.remove();
-  return true;
-}
-
-function clearPinnedProbes() {
-  for (const id of Array.from(pinnedProbePanels.keys())) {
-    removePinnedProbe(id);
-  }
-}
-
-function prunePinnedProbes() {
-  const probeIds = new Set(scene.probes.map((probe) => probe.id));
-  for (const id of Array.from(pinnedProbePanels.keys())) {
-    if (!probeIds.has(id)) {
-      removePinnedProbe(id);
-    }
-  }
-}
-
-function createPinnedProbePanel(probeId: string) {
-  if (!uiLayer) return;
-  // Pinned panels are live monitors that stay on-screen until explicitly closed.
-  const panel = document.createElement('aside');
-  panel.className = 'probe-panel probe-panel--pinned is-open';
-  panel.setAttribute('aria-hidden', 'false');
-  panel.dataset.probeId = probeId;
-
-  // Get the probe to check for custom name
-  const probe = scene.probes.find(p => p.id === probeId);
-  const defaultName = `Probe ${probeId.toUpperCase()}`;
-  const displayName = probe?.name || defaultName;
-
-  const header = document.createElement('div');
-  header.className = 'probe-header';
-
-  const titleWrap = document.createElement('div');
-  titleWrap.className = 'probe-title-wrap';
-  const title = document.createElement('div');
-  title.className = 'probe-title';
-  title.textContent = displayName;
-  const badge = document.createElement('span');
-  badge.className = 'probe-title-badge';
-  badge.textContent = 'Pinned';
-  titleWrap.appendChild(title);
-  titleWrap.appendChild(badge);
-
-  const actions = document.createElement('div');
-  actions.className = 'probe-actions';
-  const closeButton = document.createElement('button');
-  closeButton.className = 'probe-close ui-button';
-  closeButton.type = 'button';
-  closeButton.setAttribute('aria-label', 'Unpin probe monitor');
-  closeButton.title = 'Unpin probe monitor';
-  closeButton.textContent = 'x';
-  actions.appendChild(closeButton);
-
-  header.appendChild(titleWrap);
-  header.appendChild(actions);
-
-  const meta = document.createElement('div');
-  meta.className = 'probe-meta';
-  const metaLeft = document.createElement('span');
-  metaLeft.textContent = 'Frequency Response';
-  const metaRight = document.createElement('span');
-  metaRight.textContent = getProbeStatusLabel(probeId);
-  meta.appendChild(metaLeft);
-  meta.appendChild(metaRight);
-
-  const chart = document.createElement('div');
-  chart.className = 'probe-chart';
-  const canvas = document.createElement('canvas');
-  chart.appendChild(canvas);
-
-  const footer = document.createElement('div');
-  footer.className = 'probe-footer';
-  const footerLeft = document.createElement('span');
-  footerLeft.textContent = 'Frequency (Hz)';
-  const footerRight = document.createElement('span');
-  footerRight.textContent = 'Amplitude (dB)';
-  footer.appendChild(footerLeft);
-  footer.appendChild(footerRight);
-
-  panel.appendChild(header);
-  panel.appendChild(meta);
-  panel.appendChild(chart);
-  panel.appendChild(footer);
-  uiLayer.appendChild(panel);
-
-  // Bring new panel to front of all inspector windows
-  bringPanelToFront(panel);
-
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
-    panel.remove();
-    return;
-  }
-
-  const pinned: PinnedProbePanel = { id: probeId, panel, canvas, ctx, status: metaRight };
-  pinnedProbePanels.set(probeId, pinned);
-
-  const parent = uiLayer;
-  requestAnimationFrame(() => {
-    const parentRect = parent.getBoundingClientRect();
-    const panelRect = panel.getBoundingClientRect();
-    const anchorRect = probePanel?.getBoundingClientRect() ?? null;
-    const stackOffset = 18 * ((pinnedProbePanels.size - 1) % 4);
-    const offset = 12 + stackOffset;
-    const initialLeft = anchorRect
-      ? anchorRect.left - parentRect.left + offset
-      : parentRect.width - panelRect.width - offset;
-    const initialTop = anchorRect
-      ? anchorRect.top - parentRect.top + offset
-      : parentRect.height - panelRect.height - offset;
-    clampPanelToParent(panel, parent, initialLeft, initialTop, 12, getInspectorMinTop(parent, 12));
-    renderProbeChartOn(canvas, ctx, probeResults.get(probeId) ?? null);
-  });
-
-  makePanelDraggable(panel, header, { parent, padding: 12, ignoreSelector: 'button' });
-  closeButton.addEventListener('click', () => {
-    unpinProbe(probeId);
-  });
-}
-
+// pinProbe wrapper
 function pinProbe(probeId: string) {
-  if (!probeId || pinnedProbePanels.has(probeId)) return;
-  if (!getProbeById(probeId)) return;
-  createPinnedProbePanel(probeId);
+  if (!probeId || hasPinnedProbePanel(probeId)) return;
+  const probe = getProbeById(probeId);
+  if (!probe) return;
+  if (!uiLayer) return;
+
+  createPinnedProbePanelFromModule({
+    probeId,
+    probe,
+    uiLayer,
+    probePanel,
+    displayWeighting,
+    readCssVar,
+    onUnpin: unpinProbe,
+  });
   requestProbeUpdate(probeId, { immediate: true });
   renderProbeInspector();
 }
 
+// unpinProbe wrapper
 function unpinProbe(probeId: string) {
-  if (!removePinnedProbe(probeId)) return;
+  if (!removePinnedProbeFromModule(probeId)) return;
   renderProbeInspector();
 }
 
+// togglePinProbe wrapper
 function togglePinProbe(probeId: string) {
-  if (pinnedProbePanels.has(probeId)) {
+  if (hasPinnedProbePanel(probeId)) {
     unpinProbe(probeId);
     return;
   }
   pinProbe(probeId);
 }
 
-function createProbeSnapshot(data: ProbeResult['data'], sourceProbeName?: string, coordinates?: { x: number; y: number }) {
+// renderPinnedProbePanel wrapper
+function renderPinnedProbePanel(probeId: string) {
+  renderPinnedProbePanelFromModule(probeId, displayWeighting, readCssVar);
+}
+
+// renderPinnedProbePanels wrapper
+function renderPinnedProbePanels() {
+  for (const id of getPinnedProbePanels().keys()) {
+    renderPinnedProbePanel(id);
+  }
+}
+
+// createProbeSnapshot wrapper
+function createProbeSnapshotWrapper(data: ProbeResult['data'], sourceProbeName?: string, coordinates?: { x: number; y: number }) {
   if (!uiLayer) return;
-  const snapshotIndex = probeSnapshotSeq++;
-  const snapshotId = `snapshot-${snapshotIndex}`;
-  const panel = document.createElement('aside');
-  panel.className = 'probe-panel probe-panel--snapshot is-open';
-  panel.setAttribute('aria-hidden', 'false');
-  panel.dataset.snapshotId = snapshotId;
+  createProbeSnapshotFromModule({
+    data,
+    sourceProbeName,
+    coordinates,
+    uiLayer,
+    probePanel,
+    displayWeighting,
+    readCssVar,
+  });
+}
 
-  const header = document.createElement('div');
-  header.className = 'probe-header';
-  const titleWrap = document.createElement('div');
-  titleWrap.className = 'probe-title-wrap';
-  const title = document.createElement('div');
-  title.className = 'probe-title';
-  // Show source probe name if provided
-  const displayTitle = sourceProbeName ? `${sourceProbeName}` : `Snapshot ${snapshotIndex}`;
-  title.textContent = displayTitle;
-  title.title = 'Double-click to edit name';
-  title.style.cursor = 'text';
-  const badge = document.createElement('span');
-  badge.className = 'probe-title-badge';
-  badge.textContent = 'Frozen';
-  titleWrap.appendChild(title);
-  titleWrap.appendChild(badge);
+// disableRayVisualization wrapper
+function disableRayVisualization() {
+  const rayVizElements: RayVizElements = {
+    card: rayVizCard,
+    toggle: rayVizToggle,
+    paths: rayVizPaths,
+    phaseInfo: rayVizPhaseInfo,
+    dominant: rayVizDominant,
+  };
+  disableRayVisualizationFromModule(rayVizElements, requestRender);
+}
 
-  const actions = document.createElement('div');
-  actions.className = 'probe-actions';
-  const closeButton = document.createElement('button');
-  closeButton.className = 'probe-close ui-button';
-  closeButton.type = 'button';
-  closeButton.setAttribute('aria-label', 'Close snapshot');
-  closeButton.textContent = 'x';
-  actions.appendChild(closeButton);
-  header.appendChild(titleWrap);
-  header.appendChild(actions);
+// drawTracedRays wrapper
+function drawTracedRays() {
+  drawTracedRaysFromModule(ctx, worldToCanvas);
+}
 
-  const meta = document.createElement('div');
-  meta.className = 'probe-meta';
-  const metaLeft = document.createElement('span');
-  metaLeft.textContent = 'Frequency Response';
-  const metaRight = document.createElement('span');
-  metaRight.textContent = 'Frozen';
-  meta.appendChild(metaLeft);
-  meta.appendChild(metaRight);
-
-  // Add coordinates info if provided
-  let coordsInfo: HTMLDivElement | null = null;
-  if (coordinates) {
-    coordsInfo = document.createElement('div');
-    coordsInfo.className = 'probe-coords';
-    coordsInfo.textContent = `Position: X: ${coordinates.x.toFixed(1)}m, Y: ${coordinates.y.toFixed(1)}m`;
+// prunePinnedProbes wrapper
+function prunePinnedProbes() {
+  const probeIds = new Set(scene.probes.map((probe) => probe.id));
+  for (const id of Array.from(getPinnedProbePanels().keys())) {
+    if (!probeIds.has(id)) {
+      removePinnedProbeFromModule(id);
+    }
   }
+}
 
-  const chart = document.createElement('div');
-  chart.className = 'probe-chart';
-  const canvas = document.createElement('canvas');
-  chart.appendChild(canvas);
-
-  const footer = document.createElement('div');
-  footer.className = 'probe-footer';
-  const footerLeft = document.createElement('span');
-  footerLeft.textContent = 'Frequency (Hz)';
-  const footerRight = document.createElement('span');
-  footerRight.textContent = 'Amplitude (dB)';
-  footer.appendChild(footerLeft);
-  footer.appendChild(footerRight);
-
-  panel.appendChild(header);
-  panel.appendChild(meta);
-  if (coordsInfo) panel.appendChild(coordsInfo);
-  panel.appendChild(chart);
-  panel.appendChild(footer);
-  uiLayer.appendChild(panel);
-
-  // Bring new panel to front of all inspector windows
-  bringPanelToFront(panel);
-
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
-    panel.remove();
-    return;
+// clearPinnedProbes wrapper
+function clearPinnedProbes() {
+  for (const id of Array.from(getPinnedProbePanels().keys())) {
+    removePinnedProbeFromModule(id);
   }
-
-  const snapshot: ProbeSnapshot = { id: snapshotId, data, panel, canvas, ctx };
-  probeSnapshots.push(snapshot);
-
-  const parent = uiLayer;
-  requestAnimationFrame(() => {
-    const parentRect = parent.getBoundingClientRect();
-    const panelRect = panel.getBoundingClientRect();
-    const anchorRect = probePanel?.getBoundingClientRect() ?? null;
-    const stackOffset = 18 * ((probeSnapshots.length - 1) % 4);
-    const offset = 24 + stackOffset;
-    const initialLeft = (anchorRect ? anchorRect.left - parentRect.left + offset : parentRect.width - panelRect.width - offset);
-    const initialTop = (anchorRect ? anchorRect.top - parentRect.top + offset : parentRect.height - panelRect.height - offset);
-      clampPanelToParent(panel, parent, initialLeft, initialTop, 12, getInspectorMinTop(parent, 12));
-    renderProbeChartOn(canvas, ctx, data);
-  });
-
-  // Add double-click to edit title
-  title.addEventListener('dblclick', () => {
-    const currentName = title.textContent || '';
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'context-title-input';
-    input.value = currentName;
-    input.placeholder = `Snapshot ${snapshotIndex}`;
-
-    title.style.display = 'none';
-    title.parentElement?.insertBefore(input, title);
-    input.focus();
-    input.select();
-
-    const finishEditing = () => {
-      const newValue = input.value.trim() || `Snapshot ${snapshotIndex}`;
-      title.textContent = newValue;
-      input.remove();
-      title.style.display = '';
-    };
-
-    input.addEventListener('blur', finishEditing);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        finishEditing();
-      } else if (e.key === 'Escape') {
-        input.remove();
-        title.style.display = '';
-      }
-    });
-  });
-
-  makePanelDraggable(panel, header, { parent, padding: 12, ignoreSelector: 'button' });
-  closeButton.addEventListener('click', () => {
-    const idx = probeSnapshots.findIndex((item) => item.id === snapshotId);
-    if (idx >= 0) probeSnapshots.splice(idx, 1);
-    panel.remove();
-  });
 }
 
 /** Create a pinned inspector panel for a non-probe element */
@@ -5288,10 +4540,9 @@ function deleteSelection(target: Selection) {
       }
       if (item.elementType === 'probe') {
         scene.probes = scene.probes.filter((p) => p.id !== item.id);
-        probeResults.delete(item.id);
-        probePending.delete(item.id);
+        deleteProbeResult(item.id);
         unpinProbe(item.id);
-        if (activeProbeId === item.id) {
+        if (getActiveProbeId() === item.id) {
           setActiveProbe(null);
         }
       }
@@ -5319,10 +4570,9 @@ function deleteSelection(target: Selection) {
   }
   if (target.type === 'probe') {
     scene.probes = scene.probes.filter((item) => item.id !== target.id);
-    probeResults.delete(target.id);
-    probePending.delete(target.id);
+    deleteProbeResult(target.id);
     unpinProbe(target.id);
-    if (activeProbeId === target.id) {
+    if (getActiveProbeId() === target.id) {
       setActiveProbe(null);
     }
   }
@@ -7090,10 +6340,10 @@ function wireProbePanel() {
   probeFreeze?.addEventListener('click', () => {
     const probe = getActiveProbe();
     if (!probe) return;
-    const data = probeResults.get(probe.id);
+    const data = getProbeResult(probe.id);
     if (!data) return;
     const probeName = probe.name || `Probe ${probe.id.toUpperCase()}`;
-    createProbeSnapshot(cloneProbeData(data), probeName, { x: probe.x, y: probe.y });
+    createProbeSnapshotWrapper(cloneProbeData(data), probeName, { x: probe.x, y: probe.y });
   });
 
   // Ray visualization toggle
@@ -7109,7 +6359,7 @@ function wireProbePanel() {
       }
     } else {
       // Clear paths when toggled off
-      currentTracedPaths = null;
+      clearTracedPaths();
       if (rayVizPaths) rayVizPaths.innerHTML = '';
       if (rayVizPhaseInfo) rayVizPhaseInfo.innerHTML = '';
       if (rayVizDominant) rayVizDominant.innerHTML = '';
@@ -7195,9 +6445,10 @@ function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
   buildingDraft = null;
   buildingDraftAnchored = false;
   buildingDragActive = false;
-  activeProbeId = null;
-  probeResults.clear();
-  probePending.clear();
+  setActiveProbeId(null);
+  // Clear probe data using module functions
+  const emptySet = new Set<string>();
+  pruneProbeData(emptySet);
   clearPinnedProbes();
   if (payload.propagation) {
     updatePropagationConfig(payload.propagation);

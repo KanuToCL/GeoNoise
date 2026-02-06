@@ -42,3 +42,33 @@ export {
   wireDockExpand,
   updateToolButtons,
 } from './toolbar.js';
+
+// Spectrum
+export {
+  type OnChangeSpectrum,
+  type OnChangeGain,
+  type SpectrumEditorConfig,
+  type ChartRenderConfig,
+  type ChartPadding,
+  type ReadCssVar,
+  renderSourceChartOn,
+  createFieldLabel,
+  createInlineField,
+  createSpectrumEditor,
+  createSpectrumBar,
+} from './spectrum/index.js';
+
+// Context Panel
+export {
+  type PinnedContextPanel,
+  getPinnedContextPanels,
+  addPinnedContextPanel,
+  removePinnedContextPanel,
+  clearPinnedContextPanels,
+  nextPinnedContextSeq,
+  getPinnedContextPanelCount,
+  createInputRow,
+  createTextInputRow,
+  createSelectRow,
+  createCheckboxRow,
+} from './contextPanel/index.js';

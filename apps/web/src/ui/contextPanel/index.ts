@@ -1,0 +1,31 @@
+/**
+ * Context Panel Module
+ *
+ * Barrel exports for the context/properties panel system.
+ *
+ * This module handles:
+ * - Pinned context panels for element properties
+ * - Form field creation (inputs, selects, checkboxes)
+ * - Property editing UI components
+ */
+
+// === Types ===
+export type { PinnedContextPanel } from './types.js';
+export {
+  getPinnedContextPanels,
+  addPinnedContextPanel,
+  removePinnedContextPanel,
+  clearPinnedContextPanels,
+  nextPinnedContextSeq,
+  getPinnedContextPanelCount,
+} from './types.js';
+
+// === Field Utilities ===
+export {
+  createFieldLabel,
+  createInlineField,
+  createInputRow,
+  createTextInputRow,
+  createSelectRow,
+  createCheckboxRow,
+} from './fields.js';
