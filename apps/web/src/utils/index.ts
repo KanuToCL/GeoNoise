@@ -32,3 +32,5 @@ export {
   dbToEnergy,
   energyToDb,
 } from './audio.js';
+
+export { createId } from './id.js';
