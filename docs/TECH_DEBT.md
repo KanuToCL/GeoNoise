@@ -25,15 +25,15 @@ The main entry point contains too many responsibilities:
 **Proposed Split:**
 ```
 apps/web/src/
-├── main.ts                    # Entry point ONLY (~200-400 lines max) 🔲 Currently 8,072 lines
+├── main.ts                    # Entry point ONLY (~200-400 lines max) 🔲 Currently 7,915 lines
 │
 ├── entities/                  # Entity definitions and helpers
 │   ├── building.ts            # Building class ✅ Done
 │   ├── barrier.ts             # Barrier type + helpers ✅ Done
-│   ├── source.ts              # Source type + helpers 🔲 Todo (types in types.ts)
-│   ├── receiver.ts            # Receiver type + helpers 🔲 Todo (types in types.ts)
-│   ├── panel.ts               # Panel type + helpers 🔲 Todo (types in types.ts)
-│   ├── probe.ts               # Probe type + helpers 🔲 Todo (types in types.ts)
+│   ├── source.ts              # Source type + helpers ✅ Done
+│   ├── receiver.ts            # Receiver type + helpers ✅ Done
+│   ├── panel.ts               # Panel type + helpers ✅ Done
+│   ├── probe.ts               # Probe type + helpers ✅ Done
 │   ├── types.ts               # Shared entity types ✅ Done
 │   └── index.ts               # Barrel exports ✅ Done
 │
