@@ -8,27 +8,11 @@ import type { Point } from '../../types/ui.js';
 import type { DragState, SelectionItem } from '../../types/ui.js';
 import type { Source, Receiver, Panel, Probe, Barrier } from '../../entities/index.js';
 import type { Building } from '../../entities/building.js';
+import { setBarrierFromMidpointAndRotation } from '../../entities/barrier.js';
 import { BUILDING_MIN_SIZE, type DragApplyConfig, type DragApplyResult, type SceneData } from './types.js';
 
-// =============================================================================
-// HELPER FUNCTIONS
-// =============================================================================
-
-/**
- * Set a barrier's position from its midpoint and rotation.
- */
-export function setBarrierFromMidpointAndRotation(
-  barrier: { p1: Point; p2: Point },
-  midpoint: Point,
-  rotation: number,
-  length: number
-): void {
-  const halfLen = length / 2;
-  const dx = Math.cos(rotation) * halfLen;
-  const dy = Math.sin(rotation) * halfLen;
-  barrier.p1 = { x: midpoint.x - dx, y: midpoint.y - dy };
-  barrier.p2 = { x: midpoint.x + dx, y: midpoint.y + dy };
-}
+// Re-export for convenience
+export { setBarrierFromMidpointAndRotation };
 
 // =============================================================================
 // INDIVIDUAL DRAG HANDLERS
