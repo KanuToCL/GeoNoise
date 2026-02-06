@@ -2,8 +2,8 @@
 
 This document tracks architectural issues, inconsistencies, and refactoring opportunities in the GeoNoise codebase.
 
-**Last Updated:** 2026-02-05
-**Overall Health Score:** 5.5/10 (downgraded due to lost refactoring work)
+**Last Updated:** 2026-02-06
+**Overall Health Score:** 6.5/10 (improved: state/, interactions/, ui/ modules extracted)
 
 ---
 
@@ -335,16 +335,18 @@ interface Draggable {
 | Create constants file | Low | Small | ✅ Done |
 | Create probeWorker/ modules | High | Medium | ✅ Recreated |
 
-### Phase 1: State Management (Priority: High)
+### Phase 1: State Management (Priority: High) ✅ COMPLETE
 
 | Task | Effort | Status | Notes |
 |------|--------|--------|-------|
-| Create `state/scene.ts` | Medium | 🔲 Todo | Sources, receivers, buildings, barriers arrays |
-| Create `state/selection.ts` | Small | 🔲 Todo | Selected entity tracking, multi-select |
-| Create `state/history.ts` | Medium | 🔲 Todo | Undo/redo stack implementation |
-| Create `state/tools.ts` | Small | 🔲 Todo | Active tool, tool modes, drawing state |
-| Create `state/viewport.ts` | Small | 🔲 Todo | Pan, zoom, camera state |
-| Create `state/index.ts` | Small | 🔲 Todo | Barrel exports |
+| Create `state/scene.ts` | Medium | ✅ Done | Sources, receivers, buildings, barriers arrays |
+| Create `state/selection.ts` | Small | ✅ Done | Selected entity tracking, multi-select |
+| Create `state/history.ts` | Medium | ✅ Done | Undo/redo stack implementation |
+| Create `state/tools.ts` | Small | ✅ Done | Active tool, tool modes, drawing state |
+| Create `state/viewport.ts` | Small | ✅ Done | Pan, zoom, camera state |
+| Create `state/index.ts` | Small | ✅ Done | Barrel exports |
+
+**Commit:** `df42938` (1,331 lines)
 
 ### Phase 2: Rendering (Priority: High - Largest chunk of main.ts)
 
@@ -362,12 +364,14 @@ interface Draggable {
 | Create `rendering/measure.ts` | Small | 🔲 Todo | Measurement tool rendering |
 | Create `rendering/index.ts` | Small | 🔲 Todo | Barrel exports |
 
-### Phase 3: Interactions (Priority: High)
+### Phase 3: Interactions (Priority: High) ✅ PARTIAL
 
 | Task | Effort | Status | Notes |
 |------|--------|--------|-------|
-| Create `interactions/pointer.ts` | Large | 🔲 Todo | Mouse/touch events, hit testing |
-| Create `interactions/keyboard.ts` | Medium | 🔲 Todo | Keyboard shortcuts |
+| Create `interactions/hitTest.ts` | Medium | ✅ Done | Hit testing, box selection, selection helpers |
+| Create `interactions/keyboard.ts` | Medium | ✅ Done | Keyboard shortcuts and handler factory |
+| Create `interactions/index.ts` | Small | ✅ Done | Barrel exports |
+| Create `interactions/pointer.ts` | Large | 🔲 Todo | Mouse/touch events (still in main.ts) |
 | Create `interactions/drag/handlers.ts` | Medium | 🔲 Todo | Unified Draggable interface |
 | Create `interactions/drag/building.ts` | Medium | 🔲 Todo | Building-specific drag |
 | Create `interactions/drag/barrier.ts` | Small | 🔲 Todo | Barrier drag (endpoints, translate) |
@@ -377,18 +381,23 @@ interface Draggable {
 | Create `interactions/tools/barrier.ts` | Small | 🔲 Todo | Barrier drawing tool |
 | Create `interactions/tools/measure.ts` | Small | 🔲 Todo | Measure tool |
 
-### Phase 4: UI (Priority: Medium)
+**Commit:** `3d5bc66` (557 lines)
+
+### Phase 4: UI (Priority: Medium) ✅ PARTIAL
 
 | Task | Effort | Status | Notes |
 |------|--------|--------|-------|
+| Create `ui/panels/layers.ts` | Small | ✅ Done | Layer toggles and popover management |
+| Create `ui/modals/about.ts` | Small | ✅ Done | Help/about modal with collapsible sections |
+| Create `ui/toolbar.ts` | Medium | ✅ Done | Tool grid, drawing mode submenu, dock expansion |
+| Create `ui/index.ts` | Small | ✅ Done | Barrel exports |
 | Create `ui/panels/properties.ts` | Medium | 🔲 Todo | Properties panel |
-| Create `ui/panels/layers.ts` | Small | 🔲 Todo | Layer toggles |
 | Create `ui/panels/settings.ts` | Medium | 🔲 Todo | Settings panel |
 | Create `ui/modals/export.ts` | Medium | 🔲 Todo | Export dialog |
 | Create `ui/modals/import.ts` | Medium | 🔲 Todo | Import dialog |
-| Create `ui/modals/help.ts` | Small | 🔲 Todo | Help/about modal |
-| Create `ui/toolbar.ts` | Medium | 🔲 Todo | Top toolbar wiring |
 | Create `ui/statusbar.ts` | Small | 🔲 Todo | Status bar updates |
+
+**Commit:** `56b96c3` (750 lines)
 
 ### Phase 5: I/O (Priority: Medium)
 
