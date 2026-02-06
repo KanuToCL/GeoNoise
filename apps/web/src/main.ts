@@ -141,6 +141,19 @@ import {
   updatePropagationControls as updatePropagationControlsModule,
   wirePropagationControls as wirePropagationControlsModule,
 } from './ui/panels/propagation.js';
+
+// === Equations Module ===
+import {
+  type EquationElements,
+  rerenderKatex,
+  updateGroundModelEquation as updateGroundModelEquationModule,
+  updateSpreadingEquation as updateSpreadingEquationModule,
+  updateImpedanceEquation as updateImpedanceEquationModule,
+  updateMixedInterpEquation as updateMixedInterpEquationModule,
+  updateSideDiffractionEquation as updateSideDiffractionEquationModule,
+  updateAtmAbsorptionEquation as updateAtmAbsorptionEquationModule,
+  updateAllEquations as updateAllEquationsModule,
+} from './ui/equations.js';
 import {
   type Point,
   type DisplayBand,
@@ -3434,115 +3447,48 @@ if (!header || !content) return;
   updateAtmAbsorptionEquation();
 }
 
-function updateGroundModelEquation() {
-  if (!groundModelEquation) return;
-  const model = propagationGroundModel?.value ?? 'twoRayPhasor';
+// === Equation Functions (delegating to ui/equations module) ===
 
-  if (model === 'legacy') {
-    groundModelEquation.textContent = '$A_{gr} = A_s + A_r + A_m$';
-  } else {
-    groundModelEquation.textContent = '$A_{gr} = -20\\log_{10}|1 + \\Gamma \\cdot (r_1/r_2) \\cdot e^{jk(r_2-r_1)}|$';
-  }
-  rerenderKatex(groundModelEquation);
+/** Build EquationElements from global DOM references */
+function buildEquationElements(): EquationElements {
+  return {
+    groundModelEquation,
+    impedanceEquation,
+    propagationGroundModel,
+    propagationSpreading,
+    probeImpedanceModel,
+    propagationGroundMixedSigmaModel,
+    propagationBarrierSideDiffraction,
+    propagationAbsorption,
+  };
+}
+
+function updateGroundModelEquation() {
+  updateGroundModelEquationModule(buildEquationElements());
 }
 
 function updateSpreadingEquation() {
-  const collapsible = document.querySelector('[data-equation="spreading"]') as HTMLDivElement | null;
-  if (!collapsible) return;
-
-  const mainEq = collapsible.querySelector('.equation-main') as HTMLDivElement | null;
-  if (!mainEq) return;
-
-  const spreading = propagationSpreading?.value ?? 'spherical';
-
-  if (spreading === 'cylindrical') {
-    mainEq.textContent = '$A_{div} = 10\\log_{10}(d) + 10\\log_{10}(2\\pi)$';
-  } else {
-    mainEq.textContent = '$A_{div} = 20\\log_{10}(d) + 10\\log_{10}(4\\pi)$';
-  }
-  rerenderKatex(mainEq);
+  updateSpreadingEquationModule(buildEquationElements());
 }
 
 function updateImpedanceEquation() {
-  if (!impedanceEquation) return;
-  const model = probeImpedanceModel?.value ?? 'delanyBazleyMiki';
-
-  if (model === 'delanyBazley') {
-    impedanceEquation.textContent = '$Z_n = 1 + 9.08(f/\\sigma)^{-0.75} - j \\cdot 11.9(f/\\sigma)^{-0.73}$';
-  } else {
-    impedanceEquation.textContent = '$Z_n = 1 + 9.08(f/\\sigma)^{-0.75} - j \\cdot 11.9(f/\\sigma)^{-0.73}$';
-  }
-  rerenderKatex(impedanceEquation);
+  updateImpedanceEquationModule(buildEquationElements());
 }
 
 function updateMixedInterpEquation() {
-  const mixedInterpEquation = document.querySelector('#mixedInterpEquation') as HTMLDivElement | null;
-  if (!mixedInterpEquation) return;
-  const model = propagationGroundMixedSigmaModel?.value ?? 'iso9613';
-
-  if (model === 'logarithmic') {
-    mixedInterpEquation.textContent = '$\\sigma_{eff} = \\sigma_{soft}^G \\times \\sigma_{hard}^{1-G}$';
-  } else {
-    mixedInterpEquation.textContent = '$\\sigma_{eff} = \\sigma_{soft} / G$';
-  }
-  rerenderKatex(mixedInterpEquation);
+  updateMixedInterpEquationModule(buildEquationElements());
 }
 
 function updateSideDiffractionEquation() {
-  const sideDiffractionEquation = document.querySelector('#sideDiffractionEquation') as HTMLDivElement | null;
-  if (!sideDiffractionEquation) return;
-  const mode = propagationBarrierSideDiffraction?.value ?? 'auto';
-
-  if (mode === 'off') {
-    sideDiffractionEquation.textContent = '$\\delta = A + B - d_{direct}$';
-  } else {
-    sideDiffractionEquation.textContent = '$\\delta = \\min(\\delta_{top}, \\delta_{left}, \\delta_{right})$';
-  }
-  rerenderKatex(sideDiffractionEquation);
+  updateSideDiffractionEquationModule(buildEquationElements());
 }
 
 function updateAtmAbsorptionEquation() {
-  const atmAbsorptionEquation = document.querySelector('#atmAbsorptionEquation') as HTMLDivElement | null;
-  if (!atmAbsorptionEquation) return;
-  const model = propagationAbsorption?.value ?? 'iso9613';
-
-if (model === 'none') {
-    atmAbsorptionEquation.textContent = '$A_{atm} = 0$';
-  } else if (model === 'simple') {
-    atmAbsorptionEquation.textContent = '$A_{atm} = \\alpha(f) \\cdot d / 1000$';
-  } else {
-    atmAbsorptionEquation.textContent = '$A_{atm} = \\alpha(f, T, RH, p) \\cdot d / 1000$';
-  }
-  rerenderKatex(atmAbsorptionEquation);
+  updateAtmAbsorptionEquationModule(buildEquationElements());
 }
 
-/**
- * Re-render KaTeX for a specific element after content change.
- * Uses the global renderMathInElement from KaTeX auto-render.
- */
-function rerenderKatex(element: HTMLElement) {
-  if (typeof renderMathInElement === 'function') {
-    renderMathInElement(element, {
-      delimiters: [
-        { left: '$$', right: '$$', display: true },
-        { left: '$', right: '$', display: false },
-      ],
-      throwOnError: false,
-    });
-  }
-}
-
-/**
- * Update all equation displays to match current dropdown values.
- * Call this after programmatically changing dropdown values.
- */
 function updateAllEquations() {
-  updateGroundModelEquation();
-  updateSpreadingEquation();
-  updateImpedanceEquation();
-  updateMixedInterpEquation();
-  updateSideDiffractionEquation();
-  updateAtmAbsorptionEquation();
+  updateAllEquationsModule(buildEquationElements());
 }
 
 // Wire up Probe Engine controls (future: connect to probe config)
