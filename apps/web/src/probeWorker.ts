@@ -96,7 +96,7 @@ import {
   type ProbeConfig,
   type BuildingFootprint,
   type BuildingDiffractionPath,
-} from './probeWorker/types';
+} from './probeWorker/types.js';
 
 import {
   distance2D,
@@ -105,7 +105,7 @@ import {
   findAllBlockingBuildings,
   calculateGroundReflectionGeometry,
   EPSILON,
-} from './probeWorker/geometry';
+} from './probeWorker/geometry.js';
 
 import {
   OCTAVE_BANDS,
@@ -121,9 +121,9 @@ import {
   doubleEdgeDiffraction,
   applyGainToSpectrum,
   sumMultipleSpectra,
-} from './probeWorker/physics';
+} from './probeWorker/physics.js';
 
-import { getGroundReflectionCoeff } from './probeWorker/groundReflection';
+import { getGroundReflectionCoeff } from './probeWorker/groundReflection.js';
 
 import {
   extractWallSegments,
@@ -133,7 +133,7 @@ import {
   traceBarrierDiffractionPaths,
   traceBuildingDiffractionPaths,
   type WallReflectionPath,
-} from './probeWorker/pathTracing';
+} from './probeWorker/pathTracing.js';
 
 // ============================================================================
 // Configuration

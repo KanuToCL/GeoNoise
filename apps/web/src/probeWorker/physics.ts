@@ -5,7 +5,7 @@
  * and diffraction calculations based on ISO 9613 standards.
  */
 
-import type { AtmosphericAbsorptionModel } from './types';
+import type { AtmosphericAbsorptionModel } from './types.js';
 
 // ============================================================================
 // Constants

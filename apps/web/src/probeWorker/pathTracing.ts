@@ -3,8 +3,8 @@
  */
 
 import type { ProbeRequest } from '@geonoise/engine';
-import type { Point2D, Point3D, WallSegment, RayPath, BuildingFootprint, BuildingDiffractionPath, BarrierDiffractionResult, ProbeConfig, BarrierSideDiffractionMode } from './types';
-import { distance2D, distance3D, cross2D, segmentIntersection, mirrorPoint2D, isPathBlocked, pointInPolygon, segmentIntersectsPolygon, findBlockingBuilding, findVisibleCorners, EPSILON } from './geometry';
+import type { Point2D, Point3D, WallSegment, RayPath, BuildingFootprint, BuildingDiffractionPath, BarrierDiffractionResult, ProbeConfig, BarrierSideDiffractionMode } from './types.js';
+import { distance2D, distance3D, cross2D, segmentIntersection, mirrorPoint2D, isPathBlocked, pointInPolygon, segmentIntersectsPolygon, findBlockingBuilding, findVisibleCorners, EPSILON } from './geometry.js';
 
 export interface WallReflectionPath extends RayPath { reflectionPoint2D: Point2D; }
 

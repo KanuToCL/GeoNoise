@@ -2,7 +2,7 @@
  * Ground Reflection Module for Probe Worker
  */
 
-import type { Complex, ImpedanceModel, GroundReflectionCoeff } from './types';
+import type { Complex, ImpedanceModel, GroundReflectionCoeff } from './types.js';
 
 const EPSILON = 1e-10;
 

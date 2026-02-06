@@ -446,6 +446,29 @@ interface Draggable {
 
 ---
 
+### Parallel Agent Strategy
+
+To accelerate the refactoring, work can be split between two agents working in parallel:
+
+| Agent | Focus Area | Files | Notes |
+|-------|------------|-------|-------|
+| **Agent A** | State + Interactions | `state/`, `interactions/` | Sequential - interactions depends on state |
+| **Agent B** | Rendering + I/O | `rendering/`, `io/` | Can work independently |
+
+**Rules:**
+1. Both agents read `main.ts` but only extract their assigned sections
+2. Agent A commits first (state is foundational)
+3. Agent B rebases onto Agent A's commits before pushing
+4. Neither agent touches physics (`probeWorker.ts`, `probeWorker/`)
+5. After both complete, a single pass wires everything together in `main.ts`
+
+**Merge order:**
+```
+main ← Agent A (state/) ← Agent A (interactions/) ← Agent B (rendering/) ← Agent B (io/) ← final cleanup
+```
+
+---
+
 ## Ray Visualization Incomplete Implementation
 
 ### 8. Building Diffraction Paths Not Collected for Visualization
