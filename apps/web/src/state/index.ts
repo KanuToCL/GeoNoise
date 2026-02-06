@@ -41,6 +41,7 @@ export {
   findBuilding,
   findBarrier,
   getEnabledSources,
+  isSourceEnabled,
 } from './scene.js';
 
 // Selection state

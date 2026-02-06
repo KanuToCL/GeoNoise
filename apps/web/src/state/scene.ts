@@ -236,3 +236,10 @@ export function getEnabledSources(): Source[] {
   }
   return scene.sources.filter((s) => s.enabled);
 }
+
+/** Check if a source is currently enabled (respecting solo mode) */
+export function isSourceEnabled(source: Source): boolean {
+  if (!source.enabled) return false;
+  if (soloSourceId) return source.id === soloSourceId;
+  return true;
+}

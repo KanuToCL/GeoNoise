@@ -154,6 +154,7 @@ import {
   getSelectedCount,
   selectionTypeLabel,
   toolLabel,
+  isSourceEnabled,
 } from './state/index.js';
 
 const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
@@ -1063,12 +1064,6 @@ function getComputePreference(): ComputePreference {
   if (preferenceSelect) return preferenceSelect.value as ComputePreference;
   const stored = loadPreference();
   return stored === 'auto' ? 'cpu' : stored;
-}
-
-function isSourceEnabled(source: Source) {
-  if (!source.enabled) return false;
-  if (soloSourceId) return source.id === soloSourceId;
-  return true;
 }
 
 function buildEngineScene() {
