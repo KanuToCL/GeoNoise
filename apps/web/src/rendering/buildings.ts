@@ -7,7 +7,7 @@
 import type { Point } from '../entities/index.js';
 import type { Building } from '../entities/index.js';
 import type { CanvasTheme } from '../types/theme.js';
-import { drawPolygon, drawDashedRect, drawDimensionBox, drawHandle, drawPolyline } from './primitives.js';
+import { drawPolygon, drawDashedRect, drawDimensionBox } from './primitives.js';
 import {
   BUILDING_HANDLE_RADIUS,
   BUILDING_ROTATION_HANDLE_RADIUS,
