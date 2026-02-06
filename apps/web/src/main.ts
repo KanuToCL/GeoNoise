@@ -132,6 +132,15 @@ import {
   createSpectrumEditor as createSpectrumEditorModule,
   createSpectrumBar as createSpectrumBarModule,
 } from './ui/spectrum/index.js';
+
+// === Propagation Controls Module ===
+import {
+  type PropagationElements,
+  type MeteoElements,
+  type PropagationCallbacks,
+  updatePropagationControls as updatePropagationControlsModule,
+  wirePropagationControls as wirePropagationControlsModule,
+} from './ui/panels/propagation.js';
 import {
   type Point,
   type DisplayBand,
@@ -6344,312 +6353,65 @@ function updateCollapsibleAria(section: HTMLElement, isOpen: boolean) {
   }
 }
 
-function updatePropagationControls() {
-  const current = getPropagationConfig();
-  const groundEnabled = current.groundReflection;
-  if (propagationSpreading) propagationSpreading.value = current.spreading;
-  if (propagationAbsorption) propagationAbsorption.value = current.atmosphericAbsorption;
-  if (propagationGroundReflection) propagationGroundReflection.checked = groundEnabled;
-  if (propagationGroundModel) {
-    propagationGroundModel.value = current.groundModel;
-    propagationGroundModel.disabled = !groundEnabled;
-  }
-  if (propagationGroundType) {
-    propagationGroundType.value = current.groundType;
-    propagationGroundType.disabled = !groundEnabled;
-  }
-  // Mixed Ground Model dropdown: only visible when ground reflection is enabled AND ground type is "mixed"
-  const mixedModelVisible = groundEnabled && current.groundType === 'mixed';
-  if (propagationGroundMixedSigmaModel) {
-    propagationGroundMixedSigmaModel.value = current.groundMixedSigmaModel ?? 'iso9613';
-    propagationGroundMixedSigmaModel.disabled = !mixedModelVisible;
-  }
-  if (propagationGroundMixedSigmaModelRow) {
-    propagationGroundMixedSigmaModelRow.classList.toggle('is-hidden', !mixedModelVisible);
-  }
-  if (propagationMaxDistance) propagationMaxDistance.value = current.maxDistance.toString();
-  if (propagationBarrierSideDiffraction) {
-    propagationBarrierSideDiffraction.value = current.barrierSideDiffraction ?? 'auto';
-  }
-  if (propagationGroundDetails) {
-    propagationGroundDetails.classList.toggle('is-hidden', !groundEnabled);
-  }
-  if (propagationGroundHelp) {
-    propagationGroundHelp.classList.toggle('is-hidden', !groundEnabled);
-  }
-  if (propagationGroundModelHelp) {
-    if (!groundEnabled) {
-      propagationGroundModelHelp.textContent = '';
-    } else if (current.groundModel === 'legacy') {
-      propagationGroundModelHelp.textContent = 'Best for quick A-weighted maps; does not model interference ripples.';
-    } else {
-      propagationGroundModelHelp.textContent = 'Models interference between direct + reflected sound; results vary by frequency and geometry.';
-    }
-  }
+// === Propagation Controls (delegating to ui/panels/propagation module) ===
+
+/** Build PropagationElements from global DOM references */
+function buildPropagationElements(): PropagationElements {
+  return {
+    spreading: propagationSpreading,
+    absorption: propagationAbsorption,
+    groundReflection: propagationGroundReflection,
+    groundModel: propagationGroundModel,
+    groundType: propagationGroundType,
+    groundMixedSigmaModel: propagationGroundMixedSigmaModel,
+    groundMixedSigmaModelRow: propagationGroundMixedSigmaModelRow,
+    maxDistance: propagationMaxDistance,
+    groundDetails: propagationGroundDetails,
+    groundHelp: propagationGroundHelp,
+    groundModelHelp: propagationGroundModelHelp,
+    barrierSideDiffraction: propagationBarrierSideDiffraction,
+    calculationProfile: calculationProfile,
+    profileIndicator: settingsProfileIndicator,
+  };
 }
 
+/** Build MeteoElements from global DOM references */
+function buildMeteoElements(): MeteoElements {
+  return {
+    temperature: meteoTemperature,
+    humidity: meteoHumidity,
+    pressure: meteoPressure,
+  };
+}
+
+/** Build PropagationCallbacks from global functions */
+function buildPropagationCallbacks(): PropagationCallbacks {
+  return {
+    getPropagationConfig,
+    updatePropagationConfig,
+    getMeteoState: () => meteoState,
+    setMeteoState: (next) => {
+      Object.assign(meteoState, next);
+    },
+    markDirty,
+    computeScene,
+    updateSpeedOfSoundDisplay,
+    updateAllEquations,
+  };
+}
+
+/** Update propagation UI controls to match current config */
+function updatePropagationControls() {
+  updatePropagationControlsModule(buildPropagationElements(), getPropagationConfig());
+}
+
+/** Wire up all propagation control event listeners */
 function wirePropagationControls() {
-  if (!propagationSpreading && !propagationAbsorption && !propagationGroundReflection && !propagationGroundType && !propagationMaxDistance) {
-    return;
-  }
-
-  updatePropagationControls();
-
-  propagationSpreading?.addEventListener('change', () => {
-    updatePropagationConfig({ spreading: propagationSpreading.value as PropagationConfig['spreading'] });
-    markDirty();
-    computeScene();
-  });
-
-  propagationAbsorption?.addEventListener('change', () => {
-    updatePropagationConfig({ atmosphericAbsorption: propagationAbsorption.value as PropagationConfig['atmosphericAbsorption'] });
-    markDirty();
-    computeScene();
-  });
-
-  propagationGroundReflection?.addEventListener('change', () => {
-    updatePropagationConfig({ groundReflection: propagationGroundReflection.checked });
-    updatePropagationControls();
-    markDirty();
-    computeScene();
-  });
-
-  propagationGroundModel?.addEventListener('change', () => {
-    updatePropagationConfig({ groundModel: propagationGroundModel.value as PropagationConfig['groundModel'] });
-    updatePropagationControls();
-    markDirty();
-    computeScene();
-  });
-
-  propagationBarrierSideDiffraction?.addEventListener('change', () => {
-    updatePropagationConfig({ barrierSideDiffraction: propagationBarrierSideDiffraction.value as PropagationConfig['barrierSideDiffraction'] });
-    markDirty();
-    computeScene();
-  });
-
-  // ================================================================
-  // Calculation Profile Selector Logic
-  // ================================================================
-
-  type CalculationProfile = 'iso9613' | 'accurate' | 'custom';
-
-  // Profile definitions
-  interface ProfileSettings {
-    spreadingLoss: string;
-    groundType: string;
-    groundReflection: boolean;
-    groundModel: string;
-    groundMixedSigmaModel: string;
-    barrierSideDiffraction: string;
-    atmosphericAbsorption: string;
-  }
-
-  const ISO9613_PROFILE: ProfileSettings = {
-    spreadingLoss: 'spherical',
-    groundType: 'mixed',
-    groundReflection: true,
-    groundModel: 'legacy',            // ISO 9613-2 tables
-    groundMixedSigmaModel: 'iso9613', // Linear interpolation
-    barrierSideDiffraction: 'off',    // ISO assumes infinite barriers (over-top only)
-    atmosphericAbsorption: 'iso9613'
-  };
-
-  const ACCURATE_PROFILE: ProfileSettings = {
-    spreadingLoss: 'spherical',
-    groundType: 'mixed',
-    groundReflection: true,
-    groundModel: 'twoRayPhasor',      // Full wave interference
-    groundMixedSigmaModel: 'logarithmic', // More physically accurate
-    barrierSideDiffraction: 'auto',   // Side diffraction for finite barriers
-    atmosphericAbsorption: 'iso9613'
-  };
-
-  let currentProfile: CalculationProfile = 'accurate';
-
-  function updateProfileIndicator(profile: CalculationProfile) {
-    if (!settingsProfileIndicator) return;
-
-    switch (profile) {
-      case 'iso9613':
-        settingsProfileIndicator.textContent = 'iso 9613-2:1996';
-        settingsProfileIndicator.classList.remove('is-custom');
-        break;
-      case 'accurate':
-        settingsProfileIndicator.textContent = 'physically accurate';
-        settingsProfileIndicator.classList.remove('is-custom');
-        break;
-      case 'custom':
-        settingsProfileIndicator.textContent = 'custom';
-        settingsProfileIndicator.classList.add('is-custom');
-        break;
-    }
-  }
-
-  function updateProfileDropdown(profile: CalculationProfile) {
-    if (!calculationProfile) return;
-
-    // Update dropdown value
-    calculationProfile.value = profile;
-
-    // Enable/disable Custom option based on current profile
-    const customOption = calculationProfile.querySelector('option[value="custom"]') as HTMLOptionElement | null;
-    if (customOption) {
-      customOption.disabled = profile !== 'custom';
-    }
-  }
-
-  function applyProfile(profile: ProfileSettings) {
-    // Update DOM elements
-    if (propagationSpreading) propagationSpreading.value = profile.spreadingLoss;
-    if (propagationGroundType) propagationGroundType.value = profile.groundType;
-    if (propagationGroundReflection) propagationGroundReflection.checked = profile.groundReflection;
-    if (propagationGroundModel) propagationGroundModel.value = profile.groundModel;
-    if (propagationGroundMixedSigmaModel) propagationGroundMixedSigmaModel.value = profile.groundMixedSigmaModel;
-    if (propagationBarrierSideDiffraction) propagationBarrierSideDiffraction.value = profile.barrierSideDiffraction;
-    if (propagationAbsorption) propagationAbsorption.value = profile.atmosphericAbsorption;
-
-    // Update propagation config
-    updatePropagationConfig({
-      spreading: profile.spreadingLoss as PropagationConfig['spreading'],
-      groundType: profile.groundType as PropagationConfig['groundType'],
-      groundReflection: profile.groundReflection,
-      groundModel: profile.groundModel as PropagationConfig['groundModel'],
-      groundMixedSigmaModel: profile.groundMixedSigmaModel as PropagationConfig['groundMixedSigmaModel'],
-      barrierSideDiffraction: profile.barrierSideDiffraction as PropagationConfig['barrierSideDiffraction'],
-      atmosphericAbsorption: profile.atmosphericAbsorption as PropagationConfig['atmosphericAbsorption']
-    });
-
-    // Update all controls UI
-    updatePropagationControls();
-
-    // Update all equation displays to match new dropdown values
-    updateAllEquations();
-
-    // Recalculate scene with new settings
-    markDirty();
-    computeScene();
-  }
-
-  function getCurrentSettingsAsProfile(): ProfileSettings {
-    return {
-      spreadingLoss: propagationSpreading?.value ?? 'spherical',
-      groundType: propagationGroundType?.value ?? 'mixed',
-      groundReflection: propagationGroundReflection?.checked ?? true,
-      groundModel: propagationGroundModel?.value ?? 'twoRayPhasor',
-      groundMixedSigmaModel: propagationGroundMixedSigmaModel?.value ?? 'logarithmic',
-      barrierSideDiffraction: propagationBarrierSideDiffraction?.value ?? 'auto',
-      atmosphericAbsorption: propagationAbsorption?.value ?? 'iso9613'
-    };
-  }
-
-  function settingsMatchProfile(current: ProfileSettings, target: ProfileSettings): boolean {
-    return (
-      current.spreadingLoss === target.spreadingLoss &&
-      current.groundType === target.groundType &&
-      current.groundReflection === target.groundReflection &&
-      current.groundModel === target.groundModel &&
-      current.groundMixedSigmaModel === target.groundMixedSigmaModel &&
-      current.barrierSideDiffraction === target.barrierSideDiffraction &&
-      current.atmosphericAbsorption === target.atmosphericAbsorption
-    );
-  }
-
-  function detectCurrentProfile(): CalculationProfile {
-    const current = getCurrentSettingsAsProfile();
-
-    if (settingsMatchProfile(current, ISO9613_PROFILE)) return 'iso9613';
-    if (settingsMatchProfile(current, ACCURATE_PROFILE)) return 'accurate';
-    return 'custom';
-  }
-
-  function updateProfileFromSettings() {
-    currentProfile = detectCurrentProfile();
-    updateProfileDropdown(currentProfile);
-    updateProfileIndicator(currentProfile);
-  }
-
-  // Wire up profile dropdown change
-  calculationProfile?.addEventListener('change', () => {
-    const selectedProfile = calculationProfile.value as CalculationProfile;
-
-    if (selectedProfile === 'iso9613') {
-      currentProfile = 'iso9613';
-      applyProfile(ISO9613_PROFILE);
-    } else if (selectedProfile === 'accurate') {
-      currentProfile = 'accurate';
-      applyProfile(ACCURATE_PROFILE);
-    }
-    // Custom is not selectable manually - it's auto-detected
-
-    updateProfileDropdown(currentProfile);
-    updateProfileIndicator(currentProfile);
-    markDirty();
-    computeScene();
-  });
-
-  // Hook into all physics setting changes to detect when profile should switch to Custom
-  const profileAffectingControls = [
-    propagationSpreading,
-    propagationGroundType,
-    propagationGroundReflection,
-    propagationGroundModel,
-    propagationGroundMixedSigmaModel,
-    propagationBarrierSideDiffraction,
-    propagationAbsorption
-  ];
-
-  for (const control of profileAffectingControls) {
-    if (control) {
-      control.addEventListener('change', () => {
-        // Use setTimeout to ensure the change is processed first
-        setTimeout(() => updateProfileFromSettings(), 0);
-      });
-    }
-  }
-
-  // Initialize profile state on load
-  updateProfileFromSettings();
-
-  // Environmental conditions (meteo) controls
-  meteoTemperature?.addEventListener('change', () => {
-    const next = Number(meteoTemperature.value);
-    if (!Number.isFinite(next)) {
-      meteoTemperature.value = String(meteoState.temperature);
-      return;
-    }
-    meteoState.temperature = Math.max(-10, Math.min(40, next));
-    meteoTemperature.value = String(meteoState.temperature);
-    updateSpeedOfSoundDisplay();
-    markDirty();
-    computeScene();
-  });
-
-  meteoHumidity?.addEventListener('change', () => {
-    const next = Number(meteoHumidity.value);
-    if (!Number.isFinite(next)) {
-      meteoHumidity.value = String(meteoState.humidity);
-      return;
-    }
-    meteoState.humidity = Math.max(10, Math.min(100, next));
-    meteoHumidity.value = String(meteoState.humidity);
-    markDirty();
-    computeScene();
-  });
-
-  meteoPressure?.addEventListener('change', () => {
-    const next = Number(meteoPressure.value);
-    if (!Number.isFinite(next)) {
-      meteoPressure.value = String(meteoState.pressure);
-      return;
-    }
-    meteoState.pressure = Math.max(95, Math.min(108, next));
-    meteoPressure.value = String(meteoState.pressure.toFixed(3));
-    markDirty();
-    computeScene();
-  });
-
-  // Initialize speed of sound display
-  updateSpeedOfSoundDisplay();
+  wirePropagationControlsModule(
+    buildPropagationElements(),
+    buildMeteoElements(),
+    buildPropagationCallbacks()
+  );
 }
 
 function init() {
