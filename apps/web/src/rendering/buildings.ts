@@ -182,26 +182,33 @@ export function drawBuildingCenterDraft(
 }
 
 /**
- * Draw polygon building draft preview
+ * Draw polygon building draft preview with validation
  */
 export function drawBuildingPolygonDraft(
   ctx: CanvasRenderingContext2D,
   points: Point[],
   previewPoint: Point | null,
   worldToCanvas: (point: Point) => Point,
-  theme: CanvasTheme
+  theme: CanvasTheme,
+  isValidQuadrilateral?: (p0: Point, p1: Point, p2: Point, p3: Point) => boolean,
+  canvasWidth?: number
 ): void {
   if (points.length === 0) return;
 
   const canvasPoints = points.map((p) => worldToCanvas(p));
 
   // Draw edges between placed points
+  ctx.strokeStyle = theme.barrierStroke;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 6]);
+
   if (canvasPoints.length >= 2) {
-    drawPolyline(ctx, canvasPoints, {
-      color: theme.barrierStroke,
-      width: 2,
-      dash: [6, 6],
-    });
+    ctx.beginPath();
+    ctx.moveTo(canvasPoints[0].x, canvasPoints[0].y);
+    for (let i = 1; i < canvasPoints.length; i++) {
+      ctx.lineTo(canvasPoints[i].x, canvasPoints[i].y);
+    }
+    ctx.stroke();
   }
 
   // Draw preview line to mouse position
@@ -209,29 +216,72 @@ export function drawBuildingPolygonDraft(
     const previewCanvas = worldToCanvas(previewPoint);
     const lastPoint = canvasPoints[canvasPoints.length - 1];
 
-    ctx.strokeStyle = theme.barrierStroke;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 6]);
     ctx.beginPath();
     ctx.moveTo(lastPoint.x, lastPoint.y);
     ctx.lineTo(previewCanvas.x, previewCanvas.y);
     ctx.stroke();
-    ctx.setLineDash([]);
+
+    // If this would be the 4th point, show closing line and validation preview
+    if (canvasPoints.length === 3 && isValidQuadrilateral) {
+      // Draw closing line preview
+      ctx.beginPath();
+      ctx.moveTo(previewCanvas.x, previewCanvas.y);
+      ctx.lineTo(canvasPoints[0].x, canvasPoints[0].y);
+      ctx.stroke();
+
+      // Check if this position would create valid quadrilateral
+      const [p0, p1, p2] = points;
+      const p3 = previewPoint;
+      const isValid = isValidQuadrilateral(p0, p1, p2, p3);
+
+      // Show semi-transparent fill preview
+      ctx.beginPath();
+      ctx.moveTo(canvasPoints[0].x, canvasPoints[0].y);
+      ctx.lineTo(canvasPoints[1].x, canvasPoints[1].y);
+      ctx.lineTo(canvasPoints[2].x, canvasPoints[2].y);
+      ctx.lineTo(previewCanvas.x, previewCanvas.y);
+      ctx.closePath();
+      ctx.fillStyle = isValid ? 'rgba(100, 200, 100, 0.2)' : 'rgba(255, 100, 100, 0.2)';
+      ctx.fill();
+    }
   }
+  ctx.setLineDash([]);
 
-  // Draw corner point markers
-  canvasPoints.forEach((pt, i) => {
-    drawHandle(ctx, pt, {
-      fillColor: i === 0 ? 'rgba(255, 136, 0, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-      strokeColor: theme.barrierStroke,
-      radius: 5,
-    });
+  // Draw corner points with numbers
+  for (let i = 0; i < canvasPoints.length; i++) {
+    const point = canvasPoints[i];
 
-    // Number labels
+    // Corner circle
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 136, 0, 0.9)';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Corner number
     ctx.fillStyle = '#fff';
-    ctx.font = '10px "Work Sans", sans-serif';
+    ctx.font = 'bold 10px "Work Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(i + 1), pt.x, pt.y);
-  });
+    ctx.fillText(String(i + 1), point.x, point.y);
+  }
+
+  // Show instruction text
+  if (canvasWidth !== undefined) {
+    const instruction = points.length < 4
+      ? `Click corner ${points.length + 1} of 4`
+      : 'Validating...';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.font = '12px "Work Sans", sans-serif';
+    const textWidth = ctx.measureText(instruction).width;
+    const textX = canvasWidth / 2;
+    const textY = 60;
+    ctx.fillRect(textX - textWidth / 2 - 8, textY - 10, textWidth + 16, 20);
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(instruction, textX, textY);
+  }
 }

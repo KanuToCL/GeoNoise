@@ -221,6 +221,7 @@ import {
   drawBuildings as drawBuildingsModule,
   drawBuildingDraft,
   drawBuildingCenterDraft,
+  drawBuildingPolygonDraft as drawBuildingPolygonDraftModule,
   drawMeasurement as drawMeasurementModule,
   drawSelectBox as drawSelectBoxModule,
 } from './rendering/index.js';
@@ -4509,92 +4510,15 @@ function drawBuildings() {
 
   // Draw polygon building draft preview (with validation)
   if (buildingPolygonDraft.length > 0) {
-    const points = buildingPolygonDraft.map(p => worldToCanvas(p));
-
-    // Draw edges between placed points
-    ctx.strokeStyle = canvasTheme.barrierStroke;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 6]);
-
-    if (points.length >= 2) {
-      ctx.beginPath();
-      ctx.moveTo(points[0].x, points[0].y);
-      for (let i = 1; i < points.length; i++) {
-        ctx.lineTo(points[i].x, points[i].y);
-      }
-      ctx.stroke();
-    }
-
-    // Draw preview line to mouse position
-    if (buildingPolygonPreviewPoint && points.length < 4) {
-      const previewCanvas = worldToCanvas(buildingPolygonPreviewPoint);
-      const lastPoint = points[points.length - 1];
-
-      ctx.beginPath();
-      ctx.moveTo(lastPoint.x, lastPoint.y);
-      ctx.lineTo(previewCanvas.x, previewCanvas.y);
-      ctx.stroke();
-
-      // If this would be the 4th point, also show closing line preview
-      if (points.length === 3) {
-        ctx.beginPath();
-        ctx.moveTo(previewCanvas.x, previewCanvas.y);
-        ctx.lineTo(points[0].x, points[0].y);
-        ctx.stroke();
-
-        // Check if this position would create valid quadrilateral
-        const [p0, p1, p2] = buildingPolygonDraft;
-        const p3 = buildingPolygonPreviewPoint;
-        const isValid = isValidQuadrilateral(p0, p1, p2, p3);
-
-        // Show semi-transparent fill preview
-        ctx.beginPath();
-        ctx.moveTo(points[0].x, points[0].y);
-        ctx.lineTo(points[1].x, points[1].y);
-        ctx.lineTo(points[2].x, points[2].y);
-        ctx.lineTo(previewCanvas.x, previewCanvas.y);
-        ctx.closePath();
-        ctx.fillStyle = isValid ? 'rgba(100, 200, 100, 0.2)' : 'rgba(255, 100, 100, 0.2)';
-        ctx.fill();
-      }
-    }
-    ctx.setLineDash([]);
-
-    // Draw corner points with numbers
-    for (let i = 0; i < points.length; i++) {
-      const point = points[i];
-
-      // Corner circle
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 136, 0, 0.9)';
-      ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      // Corner number
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 10px "Work Sans", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(String(i + 1), point.x, point.y);
-    }
-
-    // Show instruction text
-    const instruction = buildingPolygonDraft.length < 4
-      ? `Click corner ${buildingPolygonDraft.length + 1} of 4`
-      : 'Validating...';
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-    ctx.font = '12px "Work Sans", sans-serif';
-    const textWidth = ctx.measureText(instruction).width;
-    const textX = canvas.width / 2;
-    const textY = 60;
-    ctx.fillRect(textX - textWidth / 2 - 8, textY - 10, textWidth + 16, 20);
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(instruction, textX, textY);
+    drawBuildingPolygonDraftModule(
+      ctx,
+      buildingPolygonDraft,
+      buildingPolygonPreviewPoint,
+      worldToCanvas,
+      canvasTheme,
+      isValidQuadrilateral,
+      canvas.width
+    );
   }
 }
 
