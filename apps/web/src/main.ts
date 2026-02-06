@@ -106,8 +106,6 @@ import {
   sendProbeRequest as sendProbeRequestFromModule,
   setProbeResultHandler,
   // Panels
-  getInspectorMinTop,
-  clampPanelToParent,
   bringPanelToFront,
   makePanelDraggable,
   // Pinning
@@ -146,6 +144,14 @@ import {
   type PropertiesCallbacks,
   renderPropertiesFor as renderPropertiesForModule,
 } from './ui/contextPanel/properties.js';
+
+// === Context Panel Pinned Panel Module ===
+import {
+  type PinnedPanelCallbacks,
+  type PinnedPanelElements,
+  createPinnedContextPanel as createPinnedContextPanelModule,
+  refreshPinnedContextPanels as refreshPinnedContextPanelsModule,
+} from './ui/contextPanel/pinnedPanel.js';
 
 // === Equations Module ===
 import {
@@ -498,7 +504,6 @@ type PinnedContextPanel = {
   statsContainer?: HTMLElement; // For grid panels
 };
 const pinnedContextPanels: PinnedContextPanel[] = [];
-let pinnedContextSeq = 1;
 let dragState: DragState = null;
 let measureStart: Point | null = null;
 let measureEnd: Point | null = null;
@@ -2140,212 +2145,37 @@ function clearPinnedProbes() {
 }
 
 /** Create a pinned inspector panel for a non-probe element */
-function createPinnedContextPanel(sel: Selection) {
-  if (!uiLayer || sel.type === 'none' || sel.type === 'probe') return;
-
-  const panelId = `pinned-context-${pinnedContextSeq++}`;
-
-  // Get element name
-  if (sel.type === 'multi') return; // Can't pin multi-selection
-  let elementName = `${selectionTypeLabel(sel.type)} ${sel.id.toUpperCase()}`;
-  if (sel.type === 'source') {
-    const source = scene.sources.find(s => s.id === sel.id);
-    elementName = source?.name || elementName;
-  } else if (sel.type === 'receiver') {
-    const receiver = scene.receivers.find(r => r.id === sel.id);
-    elementName = receiver?.name || elementName;
-  } else if (sel.type === 'panel') {
-    const panel = scene.panels.find(p => p.id === sel.id);
-    elementName = panel?.name || `Grid ${sel.id.toUpperCase()}`;
-  } else if (sel.type === 'barrier') {
-    const barrier = scene.barriers.find(b => b.id === sel.id);
-    elementName = barrier?.name || elementName;
-  } else if (sel.type === 'building') {
-    const building = scene.buildings.find(b => b.id === sel.id);
-    elementName = building?.name || elementName;
-  }
-
-  // Create the panel
-  const panel = document.createElement('aside');
-  panel.className = 'context-panel context-panel--pinned is-open';
-  panel.setAttribute('aria-hidden', 'false');
-  panel.dataset.pinnedId = panelId;
-
-  // Header
-  const header = document.createElement('div');
-  header.className = 'context-header';
-
-  const titleWrap = document.createElement('div');
-  titleWrap.className = 'context-title-wrap';
-  const title = document.createElement('div');
-  title.className = 'context-title';
-  title.textContent = elementName;
-  title.title = 'Double-click to edit name';
-  title.style.cursor = 'text';
-  const badge = document.createElement('span');
-  badge.className = 'probe-title-badge';
-  badge.textContent = 'Pinned';
-  titleWrap.appendChild(title);
-  titleWrap.appendChild(badge);
-
-  const actions = document.createElement('div');
-  actions.className = 'probe-actions';
-  const closeButton = document.createElement('button');
-  closeButton.className = 'context-close ui-button';
-  closeButton.type = 'button';
-  closeButton.setAttribute('aria-label', 'Close pinned inspector');
-  closeButton.textContent = '×';
-  actions.appendChild(closeButton);
-  header.appendChild(titleWrap);
-  header.appendChild(actions);
-
-  // Body with properties
-  const body = document.createElement('div');
-  body.className = 'inspector-body';
-
-  // Render properties based on element type
-  const propertiesSection = document.createElement('div');
-  propertiesSection.className = 'context-section';
-  const propTitle = document.createElement('div');
-  propTitle.className = 'context-section-title';
-  propTitle.textContent = 'Properties';
-  const propBody = document.createElement('div');
-  propBody.className = 'properties';
-  propertiesSection.appendChild(propTitle);
-  propertiesSection.appendChild(propBody);
-
-  // Render full interactive properties for the element
-  renderPropertiesFor(sel, propBody);
-
-  body.appendChild(propertiesSection);
-
-  // For panel/grid selections, add legend and stats sections
-  let legendContainer: HTMLElement | undefined;
-  let statsContainer: HTMLElement | undefined;
-  if (sel.type === 'panel') {
-    // Legend section
-    const legendSection = document.createElement('div');
-    legendSection.className = 'context-section';
-    const legendTitle = document.createElement('div');
-    legendTitle.className = 'context-section-title';
-    legendTitle.textContent = 'Color Range';
-    legendContainer = document.createElement('div');
-    legendContainer.className = 'panel-legend';
-    legendSection.appendChild(legendTitle);
-    legendSection.appendChild(legendContainer);
-    renderPanelLegendFor(sel.id, legendContainer);
-    body.appendChild(legendSection);
-
-    // Stats section
-    const statsSection = document.createElement('div');
-    statsSection.className = 'context-section';
-    const statsTitle = document.createElement('div');
-    statsTitle.className = 'context-section-title';
-    statsTitle.textContent = 'Statistics';
-    statsContainer = document.createElement('div');
-    statsContainer.className = 'panel-stats';
-    statsSection.appendChild(statsTitle);
-    statsSection.appendChild(statsContainer);
-    renderPanelStatsFor(sel.id, statsContainer);
-    body.appendChild(statsSection);
-  }
-
-  panel.appendChild(header);
-  panel.appendChild(body);
-  uiLayer.appendChild(panel);
-
-  // Bring new panel to front of all inspector windows
-  bringPanelToFront(panel);
-
-  // Store the pinned panel with properties container reference
-  const pinnedPanel: PinnedContextPanel = {
-    selection: sel,
-    panel,
-    propertiesContainer: propBody,
-    legendContainer,
-    statsContainer,
+/** Build elements for pinned panel creation */
+function buildPinnedPanelElements(): PinnedPanelElements {
+  return {
+    uiLayer: uiLayer!,
+    contextPanel,
   };
-  pinnedContextPanels.push(pinnedPanel);
+}
 
-  // Position the panel with offset based on number of pinned panels
-  const parent = uiLayer;
-  requestAnimationFrame(() => {
-    const parentRect = parent.getBoundingClientRect();
-    const panelRect = panel.getBoundingClientRect();
-    const anchorRect = contextPanel?.getBoundingClientRect() ?? null;
-    const stackOffset = 18 * ((pinnedContextPanels.length - 1) % 4);
-    const offset = 12 + stackOffset;
-    const initialLeft = anchorRect
-      ? anchorRect.left - parentRect.left + offset
-      : parentRect.width - panelRect.width - offset;
-    const initialTop = anchorRect
-      ? anchorRect.top - parentRect.top + offset
-      : parentRect.height - panelRect.height - offset;
-      clampPanelToParent(panel, parent, initialLeft, initialTop, 12, getInspectorMinTop(parent, 12));
-  });
+/** Build callbacks for pinned panel operations */
+function buildPinnedPanelCallbacks(): PinnedPanelCallbacks {
+  return {
+    selectionTypeLabel,
+    renderPropertiesFor,
+    renderPanelLegendFor,
+    renderPanelStatsFor,
+  };
+}
 
-  // Make panel draggable
-  makePanelDraggable(panel, header, { parent, padding: 12, ignoreSelector: 'button, input' });
-
-  // Close button handler
-  closeButton.addEventListener('click', () => {
-    const idx = pinnedContextPanels.findIndex((p) => p.panel === panel);
-    if (idx >= 0) pinnedContextPanels.splice(idx, 1);
-    panel.remove();
-  });
-
-  // Double-click to edit title
-  title.addEventListener('dblclick', () => {
-    const currentName = title.textContent || '';
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'context-title-input';
-    input.value = currentName;
-    input.placeholder = elementName;
-
-    title.style.display = 'none';
-    title.parentElement?.insertBefore(input, title);
-    input.focus();
-    input.select();
-
-    const finishEditing = () => {
-      const newValue = input.value.trim() || elementName;
-      title.textContent = newValue;
-      input.remove();
-      title.style.display = '';
-    };
-
-    input.addEventListener('blur', finishEditing);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        finishEditing();
-      } else if (e.key === 'Escape') {
-        input.remove();
-        title.style.display = '';
-      }
-    });
-  });
+/** Create a pinned inspector panel for a non-probe element */
+function createPinnedContextPanel(sel: Selection) {
+  if (!uiLayer) return;
+  createPinnedContextPanelModule(sel, buildPinnedPanelElements(), scene, buildPinnedPanelCallbacks());
 }
 
 /** Refresh all pinned context panels (e.g., when element data changes via drag) */
 function refreshPinnedContextPanels() {
-  for (const pinned of pinnedContextPanels) {
-    // Skip source panels - they have complex spectrum editors that shouldn't be recreated during drag
-    // The spectrum editor maintains its own state and doesn't need position-based updates
-    if (pinned.selection.type === 'source') {
-      continue;
-    }
-    renderPropertiesFor(pinned.selection, pinned.propertiesContainer);
-    // Also refresh legend and stats for panel type pins
-    if (pinned.selection.type === 'panel') {
-      if (pinned.legendContainer) {
-        renderPanelLegendFor(pinned.selection.id, pinned.legendContainer);
-      }
-      if (pinned.statsContainer) {
-        renderPanelStatsFor(pinned.selection.id, pinned.statsContainer);
-      }
-    }
-  }
+  refreshPinnedContextPanelsModule({
+    renderPropertiesFor,
+    renderPanelLegendFor,
+    renderPanelStatsFor,
+  });
 }
 
 function refreshNoiseMapVisualization() {

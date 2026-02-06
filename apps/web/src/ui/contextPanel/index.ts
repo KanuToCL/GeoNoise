@@ -37,3 +37,12 @@ export {
   createInputRow as createPropertyInputRow,
   renderPropertiesFor,
 } from './properties.js';
+
+// === Pinned Panel Creator ===
+export {
+  type PinnedPanelSceneData,
+  type PinnedPanelCallbacks,
+  type PinnedPanelElements,
+  createPinnedContextPanel,
+  refreshPinnedContextPanels,
+} from './pinnedPanel.js';
