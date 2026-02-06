@@ -38,10 +38,12 @@ export function initProbeWorker(): void {
     probeWorker.addEventListener('message', (event: MessageEvent<ProbeResult>) => {
       handleProbeResultInternal(event.data);
     });
-    probeWorker.addEventListener('error', () => {
-      // Worker error - will fall back to stub calculation
+    probeWorker.addEventListener('error', (err) => {
+      console.error('[ProbeWorker] Worker error:', err);
+      probeWorker = null;
     });
-  } catch {
+  } catch (err) {
+    console.error('[ProbeWorker] Failed to create worker:', err);
     probeWorker = null;
   }
 }
@@ -78,6 +80,7 @@ export function buildProbeRequest(
       spectrum: source.spectrum,
       gain: source.gain,
     }));
+
   const walls = [
     ...sceneData.barriers.map((barrier) => ({
       id: barrier.id,
@@ -153,6 +156,11 @@ export function sendProbeRequest(
   includePathGeometry: boolean,
   onPending?: () => void
 ): void {
+  // Ensure worker is initialized
+  if (!probeWorker) {
+    initProbeWorker();
+  }
+
   const request = buildProbeRequest(probe, sceneData, config, isSourceEnabled, includePathGeometry);
   addProbePending(probe.id);
   onPending?.();

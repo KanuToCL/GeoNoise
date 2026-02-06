@@ -107,6 +107,7 @@ import {
   pruneProbeData,
   // Worker
   sendProbeRequest as sendProbeRequestFromModule,
+  setProbeResultHandler,
   // Panels
   getInspectorMinTop,
   clampPanelToParent,
@@ -7119,6 +7120,13 @@ wireSettingsPopover();
   wireSceneName();
   wireContextPanel();
   wireProbePanel();
+
+  // Set up probe result handler to re-render when worker returns results
+  setProbeResultHandler((result) => {
+    renderProbeInspector();
+    renderPinnedProbePanel(result.probeId);
+  });
+
   wireSaveLoad();
   wireCanvasHelp();
   wireActionOverflow();
