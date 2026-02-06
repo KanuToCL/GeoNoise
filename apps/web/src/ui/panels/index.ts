@@ -33,3 +33,15 @@ export {
   detectCurrentProfile,
   wirePropagationControls,
 } from './propagation.js';
+
+// Collapsible sections
+export {
+  type CollapsibleElements,
+  updateCollapsibleAria,
+  toggleCollapsibleSection,
+  expandAllSections,
+  collapseAllSections,
+  areAllSectionsOpen,
+  wireCollapsibleSections,
+  queryCollapsibleElements,
+} from './collapsible.js';

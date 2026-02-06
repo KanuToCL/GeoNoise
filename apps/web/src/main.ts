@@ -146,13 +146,8 @@ import {
 import {
   type EquationElements,
   rerenderKatex,
-  updateGroundModelEquation as updateGroundModelEquationModule,
-  updateSpreadingEquation as updateSpreadingEquationModule,
-  updateImpedanceEquation as updateImpedanceEquationModule,
-  updateMixedInterpEquation as updateMixedInterpEquationModule,
-  updateSideDiffractionEquation as updateSideDiffractionEquationModule,
-  updateAtmAbsorptionEquation as updateAtmAbsorptionEquationModule,
   updateAllEquations as updateAllEquationsModule,
+  wireEquationCollapsibles as wireEquationCollapsiblesModule,
 } from './ui/equations.js';
 import {
   type Point,
@@ -3392,59 +3387,7 @@ function wireSettingsPopover() {
 
 // Wire up equation collapsible toggles
 function wireEquationCollapsibles() {
-  const collapsibles = document.querySelectorAll('.equation-collapsible') as NodeListOf<HTMLDivElement>;
-
-  collapsibles.forEach((collapsible) => {
-    const header = collapsible.querySelector('.equation-header') as HTMLDivElement | null;
-    const content = collapsible.querySelector('.equation-content') as HTMLDivElement | null;
-
-if (!header || !content) return;
-
-    const toggle = () => {
-      const isExpanded = collapsible.classList.contains('is-expanded');
-      if (isExpanded) {
-        collapsible.classList.remove('is-expanded');
-        content.hidden = true;
-      } else {
-        collapsible.classList.add('is-expanded');
-        content.hidden = false;
-        // Re-render KaTeX in the expanded content
-        rerenderKatex(content);
-      }
-    };
-
-    header.addEventListener('click', toggle);
-    header.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        toggle();
-      }
-    });
-  });
-
-// Update ground model equation when dropdown changes
-  propagationGroundModel?.addEventListener('change', updateGroundModelEquation);
-  updateGroundModelEquation();
-
-  // Update spreading equation when dropdown changes
-  propagationSpreading?.addEventListener('change', updateSpreadingEquation);
-  updateSpreadingEquation();
-
-  // Update impedance equation when dropdown changes
-  probeImpedanceModel?.addEventListener('change', updateImpedanceEquation);
-  updateImpedanceEquation();
-
-  // Update mixed interpolation equation when dropdown changes
-  propagationGroundMixedSigmaModel?.addEventListener('change', updateMixedInterpEquation);
-  updateMixedInterpEquation();
-
-// Update side diffraction equation when dropdown changes
-  propagationBarrierSideDiffraction?.addEventListener('change', updateSideDiffractionEquation);
-  updateSideDiffractionEquation();
-
-  // Update atmospheric absorption equation when dropdown changes
-  propagationAbsorption?.addEventListener('change', updateAtmAbsorptionEquation);
-  updateAtmAbsorptionEquation();
+  wireEquationCollapsiblesModule(buildEquationElements());
 }
 
 // === Equation Functions (delegating to ui/equations module) ===
@@ -3463,30 +3406,7 @@ function buildEquationElements(): EquationElements {
   };
 }
 
-function updateGroundModelEquation() {
-  updateGroundModelEquationModule(buildEquationElements());
-}
-
-function updateSpreadingEquation() {
-  updateSpreadingEquationModule(buildEquationElements());
-}
-
-function updateImpedanceEquation() {
-  updateImpedanceEquationModule(buildEquationElements());
-}
-
-function updateMixedInterpEquation() {
-  updateMixedInterpEquationModule(buildEquationElements());
-}
-
-function updateSideDiffractionEquation() {
-  updateSideDiffractionEquationModule(buildEquationElements());
-}
-
-function updateAtmAbsorptionEquation() {
-  updateAtmAbsorptionEquationModule(buildEquationElements());
-}
-
+/** Update all equation displays to match current dropdown values */
 function updateAllEquations() {
   updateAllEquationsModule(buildEquationElements());
 }
