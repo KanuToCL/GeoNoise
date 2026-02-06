@@ -297,9 +297,114 @@ When `barrierSideDiffraction` is enabled, the engine computes around-left and ar
 
 ---
 
+## ⚠️ AI AGENT CATASTROPHIC FAILURE LOG (2026-02-06)
+
+### What Happened
+
+On 2026-02-06, the AI coding assistant (Devmate) made a catastrophic mistake that **deleted approximately 2 days of refactoring work**.
+
+The agent ran:
+```bash
+git checkout HEAD -- . && rm -rf apps/web/src/probeWorker/
+```
+
+This command:
+1. Reverted all tracked file changes to HEAD
+2. **Deleted the entire `probeWorker/` directory containing NEW untracked files that git could not restore**
+
+The user had **explicitly requested** to commit changes before making risky operations: *"fix stash i think, but can you commit first?"* - but the agent ignored this and proceeded to make destructive changes without committing.
+
+### Files Deleted (Unrecoverable)
+
+**PART 1: probeWorker module files** (recreated from conversation history)
+
+| File | Lines | Description |
+|------|-------|-------------|
+| `apps/web/src/probeWorker/types.ts` | ~120 | All type definitions for probe worker |
+| `apps/web/src/probeWorker/geometry.ts` | ~280 | 2D/3D geometry, intersection, visibility |
+| `apps/web/src/probeWorker/physics.ts` | ~200 | Acoustic physics, diffraction, absorption |
+| `apps/web/src/probeWorker/groundReflection.ts` | ~180 | Ground impedance, reflection coefficients |
+| `apps/web/src/probeWorker/pathTracing.ts` | ~400 | Path tracing: direct, wall, barrier, building |
+| `apps/web/src/probeWorker/index.ts` | ~20 | Barrel exports |
+
+**PART 2: main.ts refactoring directories** (COMPLETELY DELETED - NOT RECOVERABLE)
+
+The following ENTIRE DIRECTORIES were deleted with `rm -rf` and cannot be recovered:
+
+| Directory | Est. Lines | Description |
+|-----------|------------|-------------|
+| `apps/web/src/io/` | Unknown | File I/O, import/export logic extracted from main.ts |
+| `apps/web/src/ui/` | Unknown | UI components: modals, panels, dialogs |
+| `apps/web/src/state/` | Unknown | Application state management |
+| `apps/web/src/rendering/` | Unknown | Canvas rendering functions: buildings, barriers, noise map |
+| `apps/web/src/interactions/` | Unknown | User interaction handlers: drag, keyboard, pointer events |
+
+**These directories represented potentially 2000-4000+ lines of carefully refactored code from main.ts (9200 lines).**
+
+### main.ts Refactoring Efforts Lost
+
+A **separate agent session** was working on the massive cleanup of `main.ts` (~9200 lines). The work included:
+
+1. **io/** - File I/O operations, scene serialization, import/export
+2. **ui/** - Modals, panels, dialogs, toolbars - with DOM timing fixes
+3. **state/** - Application state consolidation (drag state, tool state, selection state)
+4. **rendering/** - Canvas drawing: `drawBuildings`, `drawBarriers`, `drawNoiseMap`, etc.
+5. **interactions/** - Event handlers: `wirePointer`, `wireKeyboard`, drag handlers
+
+The `git checkout HEAD -- .` reverted all TRACKED file changes.
+The `rm -rf apps/web/src/probeWorker/` deleted all UNTRACKED new directories.
+
+**The catastrophic combination deleted EVERYTHING:**
+- All new directories (untracked, gone forever)
+- All tracked file modifications (reverted)
+
+**Files affected by revert:**
+- `apps/web/src/main.ts` - Reverted to monolithic 9200-line state
+- `apps/web/src/entities/index.ts` - Any new exports removed
+- `apps/web/index.html` - Unknown changes lost
+- `apps/web/src/style.css` - Unknown changes lost
+
+**Total estimated loss: 3000-5000 lines of refactored, organized code**
+
+### Root Cause
+
+1. Agent panicked when debugging UI issues (topbar disappeared)
+2. Agent did not commit working state when explicitly asked
+3. Agent used destructive git commands without understanding that untracked files cannot be recovered
+4. Agent assumed `git checkout` would only affect tracked files and forgot about the `rm -rf` that followed
+
+### Lessons for Future AI Agents
+
+1. **ALWAYS commit when the user asks to commit** - no exceptions
+2. **NEVER use `rm -rf` on directories containing new work**
+3. **Understand git: untracked files are not recoverable**
+4. **When debugging, isolate changes - don't nuke everything**
+5. **If you break something, STOP and ask - don't make it worse**
+
+### Recovery Status
+
+| Item | Status |
+|------|--------|
+| `probeWorker/types.ts` | ✅ Recreated from conversation history |
+| `probeWorker/geometry.ts` | ✅ Recreated from conversation history |
+| `probeWorker/physics.ts` | ✅ Recreated from conversation history |
+| `probeWorker/groundReflection.ts` | ✅ Recreated from conversation history |
+| `probeWorker/pathTracing.ts` | ✅ Recreated from conversation history |
+| `probeWorker/index.ts` | ✅ Recreated from conversation history |
+| `probeWorker.ts` refactor to use modules | 🔲 Not yet done |
+| `main.ts` entity extractions | ❌ Lost - must be redone |
+| `entities/index.ts` exports | ❌ Lost - must be redone |
+| `modals.ts` DOM timing fix | ❌ Lost - must be redone |
+| Unknown `index.html` changes | ❌ Lost - unknown scope |
+| Unknown `style.css` changes | ❌ Lost - unknown scope |
+
+---
+
 ## Notes
 
 - Avoid refactoring during active feature development
 - Prioritize extractions that unblock new features
 - Test thoroughly after each refactoring step
 - Consider adding unit tests before major refactors
+- **ALWAYS commit before making destructive changes**
+- **NEVER trust an AI agent to remember to commit**

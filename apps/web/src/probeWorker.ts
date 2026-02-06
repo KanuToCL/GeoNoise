@@ -86,73 +86,58 @@
 
 import type { ProbeRequest, ProbeResult } from '@geonoise/engine';
 
-// ============================================================================
-// Constants
-// ============================================================================
+// Import from modules
+import {
+  type Point2D,
+  type Point3D,
+  type WallSegment,
+  type Phasor,
+  type Spectrum9,
+  type ProbeConfig,
+  type BuildingFootprint,
+  type BuildingDiffractionPath,
+} from './probeWorker/types';
 
-const OCTAVE_BANDS = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000] as const;
-const OCTAVE_BAND_COUNT = 9;
-const MIN_LEVEL = -100;
-const SPEED_OF_SOUND = 343;
-const P_REF = 2e-5; // Pa - reference pressure
-const EPSILON = 1e-10;
+import {
+  distance2D,
+  segmentIntersection,
+  findBlockingBuilding,
+  findAllBlockingBuildings,
+  calculateGroundReflectionGeometry,
+  EPSILON,
+} from './probeWorker/geometry';
 
-// ============================================================================
-// Types
-// ============================================================================
+import {
+  OCTAVE_BANDS,
+  OCTAVE_BAND_COUNT,
+  MIN_LEVEL,
+  SPEED_OF_SOUND,
+  dBToPressure,
+  pressureTodB,
+  spreadingLoss,
+  atmosphericAbsorptionCoeff,
+  maekawaDiffraction,
+  singleEdgeDiffraction,
+  doubleEdgeDiffraction,
+  applyGainToSpectrum,
+  sumMultipleSpectra,
+} from './probeWorker/physics';
 
-interface Point2D { x: number; y: number }
-interface Point3D { x: number; y: number; z: number }
+import { getGroundReflectionCoeff } from './probeWorker/groundReflection';
 
-interface Segment2D {
-  p1: Point2D;
-  p2: Point2D;
-}
-
-interface WallSegment extends Segment2D {
-  height: number;
-  type: 'barrier' | 'building';
-  id: string;
-}
-
-interface Phasor {
-  pressure: number;  // Pa (linear)
-  phase: number;     // radians
-}
-
-interface RayPath {
-  type: 'direct' | 'ground' | 'wall' | 'diffracted';
-  totalDistance: number;
-  directDistance: number;
-  pathDifference: number;
-  reflectionPhaseChange: number;
-  absorptionFactor: number;
-  valid: boolean;
-}
-
-type Spectrum9 = [number, number, number, number, number, number, number, number, number];
+import {
+  extractWallSegments,
+  extractBuildingFootprints,
+  traceDirectPath,
+  traceWallReflectionPaths,
+  traceBarrierDiffractionPaths,
+  traceBuildingDiffractionPaths,
+  type WallReflectionPath,
+} from './probeWorker/pathTracing';
 
 // ============================================================================
 // Configuration
 // ============================================================================
-
-type BarrierSideDiffractionMode = 'off' | 'auto' | 'on';
-type AtmosphericAbsorptionModel = 'none' | 'simple' | 'iso9613';
-
-interface ProbeConfig {
-  groundReflection: boolean;
-  groundType: 'hard' | 'soft' | 'mixed';
-  groundMixedFactor: number;
-  wallReflections: boolean;
-  barrierDiffraction: boolean;
-  barrierSideDiffraction: BarrierSideDiffractionMode;
-  coherentSummation: boolean;
-  atmosphericAbsorption: AtmosphericAbsorptionModel;
-  temperature: number;
-  humidity: number;
-  pressure: number;
-  speedOfSound: number;
-}
 
 const DEFAULT_CONFIG: ProbeConfig = {
   groundReflection: true,
@@ -170,1345 +155,15 @@ const DEFAULT_CONFIG: ProbeConfig = {
 };
 
 // ============================================================================
-// Pressure/dB Conversion
+// Coherent Spectral Computation Types
 // ============================================================================
-
-function dBToPressure(dB: number): number {
-  if (!Number.isFinite(dB) || dB < -200) return 1e-12;
-  return P_REF * Math.pow(10, dB / 20);
-}
-
-function pressureTodB(pressure: number): number {
-  if (!Number.isFinite(pressure) || pressure <= 0) return -200;
-  return 20 * Math.log10(pressure / P_REF);
-}
-
-// ============================================================================
-// Geometry Utilities
-// ============================================================================
-
-function distance2D(a: Point2D, b: Point2D): number {
-  return Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
-}
-
-function distance3D(a: Point3D, b: Point3D): number {
-  return Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2 + (b.z - a.z) ** 2);
-}
-
-function cross2D(a: Point2D, b: Point2D): number {
-  return a.x * b.y - a.y * b.x;
-}
-
-function segmentIntersection(
-  p1: Point2D, p2: Point2D,
-  q1: Point2D, q2: Point2D
-): Point2D | null {
-  const r = { x: p2.x - p1.x, y: p2.y - p1.y };
-  const s = { x: q2.x - q1.x, y: q2.y - q1.y };
-  const rxs = cross2D(r, s);
-  const qmp = { x: q1.x - p1.x, y: q1.y - p1.y };
-
-  if (Math.abs(rxs) < EPSILON) return null;
-
-  const t = cross2D(qmp, s) / rxs;
-  const u = cross2D(qmp, r) / rxs;
-
-  if (t < -EPSILON || t > 1 + EPSILON || u < -EPSILON || u > 1 + EPSILON) {
-    return null;
-  }
-
-  return { x: p1.x + t * r.x, y: p1.y + t * r.y };
-}
-
-function mirrorPoint2D(point: Point2D, segment: Segment2D): Point2D {
-  const { p1, p2 } = segment;
-  const dx = p2.x - p1.x;
-  const dy = p2.y - p1.y;
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq < EPSILON) return point;
-
-  const t = ((point.x - p1.x) * dx + (point.y - p1.y) * dy) / lenSq;
-  const projX = p1.x + t * dx;
-  const projY = p1.y + t * dy;
-
-  return { x: 2 * projX - point.x, y: 2 * projY - point.y };
-}
-
-function isPathBlocked(
-  from: Point2D,
-  to: Point2D,
-  barriers: WallSegment[],
-  excludeId?: string
-): boolean {
-  for (const barrier of barriers) {
-    if (barrier.type !== 'barrier') continue;
-    if (barrier.id === excludeId) continue;
-    const intersection = segmentIntersection(from, to, barrier.p1, barrier.p2);
-    if (intersection) {
-      const distToFrom = distance2D(intersection, from);
-      const distToTo = distance2D(intersection, to);
-      if (distToFrom > EPSILON && distToTo > EPSILON) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-// ============================================================================
-// Building Occlusion (Polygon-Based)
-// ============================================================================
-//
-// IMPLEMENTATION NOTES (Jan 7, 2026):
-//
-// Buildings block sound paths using polygon-based intersection detection.
-// Unlike barriers (thin screens), buildings are THICK obstacles that require:
-//
-// 1. Polygon intersection test (not just line-segment intersection)
-// 2. 3D height awareness (paths that clear the roof are not blocked)
-// 3. Separate entry/exit points for diffraction calculations
-//
-// The approach:
-//   - For each source→receiver path, check if it crosses any building footprint
-//   - If it crosses AND the path height < building height, the path is BLOCKED
-//   - When blocked, compute diffraction paths (over roof + around corners)
-//   - All diffraction paths are summed coherently with proper phase
-//
-// This is more expensive than barrier checking but provides physically accurate
-// results for building occlusion.
-// ============================================================================
-
-/**
- * Building footprint data structure for occlusion and diffraction calculations.
- *
- * Contains the 2D polygon representing the building footprint, plus height
- * information for 3D occlusion checks.
- */
-interface BuildingFootprint {
-  id: string;
-  vertices: Point2D[];
-  height: number;
-  groundElevation: number;
-}
-
-/**
- * Result of building occlusion check with intersection details.
- *
- * When a path is blocked, we store the entry/exit points on the building
- * footprint for use in diffraction calculations (the diffraction points
- * are placed at roof height above these 2D intersection points).
- */
-interface BuildingOcclusionResult {
-  blocked: boolean;
-  building: BuildingFootprint | null;
-  entryPoint: Point2D | null;
-  exitPoint: Point2D | null;
-}
-
-/**
- * Building diffraction path geometry.
- *
- * Represents a path that diffracts around or over a building:
- * - 'roof': Over-the-top path with TWO diffraction points (double-edge)
- * - 'corner-left'/'corner-right': Around-corner with ONE diffraction point (single-edge)
- *
- * The `diffractionPoints` count determines which Maekawa coefficient to use:
- * - 2 points (roof): coefficient 40, max 25 dB loss
- * - 1 point (corner): coefficient 20, max 20 dB loss
- */
-interface BuildingDiffractionPath {
-  type: 'roof' | 'corner-left' | 'corner-right';
-  waypoints: Point3D[];
-  totalDistance: number;
-  pathDifference: number;
-  valid: boolean;
-  diffractionPoints: number;  // 1 for corner, 2 for roof
-}
-
-/**
- * Point-in-polygon test using ray casting algorithm.
- *
- * Casts a ray from the point to infinity (positive X direction)
- * and counts how many polygon edges it crosses. Odd count = inside.
- *
- * This is the standard ray casting algorithm with O(n) complexity
- * where n = number of polygon vertices.
- *
- * @param point - The 2D point to test
- * @param vertices - The polygon vertices (closed loop implied)
- * @returns true if point is inside the polygon
- */
-function pointInPolygon(point: Point2D, vertices: Point2D[]): boolean {
-  let inside = false;
-  const n = vertices.length;
-
-  for (let i = 0, j = n - 1; i < n; j = i++) {
-    const xi = vertices[i].x, yi = vertices[i].y;
-    const xj = vertices[j].x, yj = vertices[j].y;
-
-    // Check if ray from point crosses this edge
-    const intersects = ((yi > point.y) !== (yj > point.y)) &&
-      (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
-
-    if (intersects) {
-      inside = !inside;
-    }
-  }
-
-  return inside;
-}
-
-/**
- * Check if a line segment intersects with a polygon (crosses any edge or endpoints inside).
- */
-function segmentIntersectsPolygon(
-  from: Point2D,
-  to: Point2D,
-  vertices: Point2D[]
-): { intersects: boolean; entryPoint: Point2D | null; exitPoint: Point2D | null } {
-  const intersectionPoints: { point: Point2D; t: number }[] = [];
-  const n = vertices.length;
-
-  // Check intersection with each polygon edge
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n;
-    const intersection = segmentIntersection(from, to, vertices[i], vertices[j]);
-    if (intersection) {
-      // Calculate parameter t along the from→to segment
-      const dx = to.x - from.x;
-      const dy = to.y - from.y;
-      const len = Math.sqrt(dx * dx + dy * dy);
-      if (len > EPSILON) {
-        const t = ((intersection.x - from.x) * dx + (intersection.y - from.y) * dy) / (len * len);
-        if (t > EPSILON && t < 1 - EPSILON) {
-          intersectionPoints.push({ point: intersection, t });
-        }
-      }
-    }
-  }
-
-  // Check if either endpoint is inside polygon
-  const fromInside = pointInPolygon(from, vertices);
-  const toInside = pointInPolygon(to, vertices);
-
-  if (fromInside || toInside || intersectionPoints.length > 0) {
-    // Sort intersections by parameter t
-    intersectionPoints.sort((a, b) => a.t - b.t);
-
-    let entryPoint: Point2D | null = null;
-    let exitPoint: Point2D | null = null;
-
-    if (fromInside) {
-      entryPoint = from;
-      exitPoint = intersectionPoints.length > 0 ? intersectionPoints[0].point : to;
-    } else if (intersectionPoints.length >= 2) {
-      entryPoint = intersectionPoints[0].point;
-      exitPoint = intersectionPoints[intersectionPoints.length - 1].point;
-    } else if (intersectionPoints.length === 1) {
-      entryPoint = intersectionPoints[0].point;
-      exitPoint = toInside ? to : intersectionPoints[0].point;
-    }
-
-    return { intersects: true, entryPoint, exitPoint };
-  }
-
-  return { intersects: false, entryPoint: null, exitPoint: null };
-}
-
-/**
- * Calculate the height of a path at a given point along its length.
- * Assumes linear interpolation between source and receiver heights.
- */
-function pathHeightAtPoint(
-  from: Point3D,
-  to: Point3D,
-  point: Point2D
-): number {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const d = Math.sqrt(dx * dx + dy * dy);
-
-  if (d < EPSILON) return Math.min(from.z, to.z);
-
-  // Calculate parameter t along the path
-  const t = ((point.x - from.x) * dx + (point.y - from.y) * dy) / (d * d);
-  const tClamped = Math.max(0, Math.min(1, t));
-
-  return from.z + tClamped * (to.z - from.z);
-}
-
-/**
- * Extract building footprints from wall segments.
- */
-function extractBuildingFootprints(walls: ProbeRequest['walls']): BuildingFootprint[] {
-  const buildings: BuildingFootprint[] = [];
-
-  for (const wall of walls) {
-    if (wall.type === 'building' && wall.vertices.length >= 3) {
-      buildings.push({
-        id: wall.id,
-        vertices: wall.vertices,
-        height: wall.height,
-        groundElevation: 0,
-      });
-    }
-  }
-
-  return buildings;
-}
-
-/**
- * Check if a 3D path is blocked by any building, with height consideration.
- *
- * A path is blocked if:
- * 1. The 2D projection crosses the building footprint
- * 2. The path height at the intersection points is below the building top
- *
- * Returns ALL blocking buildings, not just the first one.
- */
-function findAllBlockingBuildings(
-  from: Point3D,
-  to: Point3D,
-  buildings: BuildingFootprint[]
-): BuildingOcclusionResult[] {
-  const results: BuildingOcclusionResult[] = [];
-
-  for (const building of buildings) {
-    const result = segmentIntersectsPolygon(
-      { x: from.x, y: from.y },
-      { x: to.x, y: to.y },
-      building.vertices
-    );
-
-    if (result.intersects && result.entryPoint && result.exitPoint) {
-      const buildingTop = building.groundElevation + building.height;
-
-      // Check height at entry and exit points
-      const heightAtEntry = pathHeightAtPoint(from, to, result.entryPoint);
-      const heightAtExit = pathHeightAtPoint(from, to, result.exitPoint);
-
-      // Path is blocked if it's below building top at any intersection point
-      if (heightAtEntry < buildingTop || heightAtExit < buildingTop) {
-        results.push({
-          blocked: true,
-          building,
-          entryPoint: result.entryPoint,
-          exitPoint: result.exitPoint,
-        });
-      }
-    }
-  }
-
-  return results;
-}
-
-/**
- * Legacy function - returns first blocking building only.
- * Kept for backwards compatibility with existing code.
- */
-function findBlockingBuilding(
-  from: Point3D,
-  to: Point3D,
-  buildings: BuildingFootprint[]
-): BuildingOcclusionResult {
-  const allBlocking = findAllBlockingBuildings(from, to, buildings);
-  if (allBlocking.length > 0) {
-    return allBlocking[0];
-  }
-  return { blocked: false, building: null, entryPoint: null, exitPoint: null };
-}
-
-/**
- * Find building corners visible from a point (for around-corner diffraction).
- *
- * A corner is "visible" if:
- * 1. The line from the point to the corner doesn't cross the building interior
- * 2. The corner is on the "correct side" to form a valid diffraction path
- */
-function findVisibleCorners(
-  point: Point2D,
-  building: BuildingFootprint
-): Point2D[] {
-  const visibleCorners: Point2D[] = [];
-
-  for (const corner of building.vertices) {
-    // Check if line from point to corner intersects building (excluding the corner itself)
-    let blocked = false;
-    const n = building.vertices.length;
-
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n;
-      const v1 = building.vertices[i];
-      const v2 = building.vertices[j];
-
-      // Skip edges that contain this corner
-      if ((Math.abs(v1.x - corner.x) < EPSILON && Math.abs(v1.y - corner.y) < EPSILON) ||
-          (Math.abs(v2.x - corner.x) < EPSILON && Math.abs(v2.y - corner.y) < EPSILON)) {
-        continue;
-      }
-
-      const intersection = segmentIntersection(point, corner, v1, v2);
-      if (intersection) {
-        const distToPoint = distance2D(intersection, point);
-        const distToCorner = distance2D(intersection, corner);
-        if (distToPoint > EPSILON && distToCorner > EPSILON) {
-          blocked = true;
-          break;
-        }
-      }
-    }
-
-    if (!blocked) {
-      visibleCorners.push(corner);
-    }
-  }
-
-  return visibleCorners;
-}
-
-/**
- * Compute diffraction paths around/over a building.
- *
- * Returns all valid diffraction paths:
- * 1. Over-roof path (double-edge diffraction)
- * 2. Around-corner paths (single-edge diffraction for each visible corner pair)
- */
-function traceBuildingDiffractionPaths(
-  source: Point3D,
-  receiver: Point3D,
-  building: BuildingFootprint,
-  entryPoint: Point2D,
-  exitPoint: Point2D
-): BuildingDiffractionPath[] {
-  const paths: BuildingDiffractionPath[] = [];
-  const buildingTop = building.groundElevation + building.height;
-  const directDist = distance3D(source, receiver);
-
-  // 1. Over-roof diffraction (double-edge)
-  // Path: Source → entry edge (at roof height) → exit edge (at roof height) → Receiver
-  const roofEntry: Point3D = { x: entryPoint.x, y: entryPoint.y, z: buildingTop };
-  const roofExit: Point3D = { x: exitPoint.x, y: exitPoint.y, z: buildingTop };
-
-  const roofDist = distance3D(source, roofEntry) +
-                   distance3D(roofEntry, roofExit) +
-                   distance3D(roofExit, receiver);
-
-  paths.push({
-    type: 'roof',
-    waypoints: [source, roofEntry, roofExit, receiver],
-    totalDistance: roofDist,
-    pathDifference: roofDist - directDist,
-    valid: true,
-    diffractionPoints: 2,
-  });
-
-  // 2. Around-corner diffraction (horizontal)
-  // Find corners visible from both source and receiver
-  const s2d = { x: source.x, y: source.y };
-  const r2d = { x: receiver.x, y: receiver.y };
-
-  const visibleFromSource = findVisibleCorners(s2d, building);
-  const visibleFromReceiver = findVisibleCorners(r2d, building);
-
-  // Find corners visible from both sides
-  for (const corner of visibleFromSource) {
-    const isVisibleFromReceiver = visibleFromReceiver.some(
-      c => Math.abs(c.x - corner.x) < EPSILON && Math.abs(c.y - corner.y) < EPSILON
-    );
-
-    if (isVisibleFromReceiver) {
-      // Check that the corner path doesn't go through the building
-      const cornerResult1 = segmentIntersectsPolygon(s2d, corner, building.vertices);
-      const cornerResult2 = segmentIntersectsPolygon(corner, r2d, building.vertices);
-
-      // Path is valid if neither leg crosses the building interior
-      // (touching the corner is okay)
-      // Note: entryPoint can be null even when intersects is true in edge cases
-      const leg1Valid = !cornerResult1.intersects ||
-        (cornerResult1.entryPoint !== null && distance2D(cornerResult1.entryPoint, corner) < EPSILON);
-      const leg2Valid = !cornerResult2.intersects ||
-        (cornerResult2.entryPoint !== null && distance2D(cornerResult2.entryPoint, corner) < EPSILON);
-
-      if (leg1Valid && leg2Valid) {
-        // Corner diffraction happens at ground level or source/receiver height
-        const cornerZ = Math.min(source.z, receiver.z, buildingTop);
-        const corner3D: Point3D = { x: corner.x, y: corner.y, z: cornerZ };
-
-        const cornerDist = distance3D(source, corner3D) + distance3D(corner3D, receiver);
-
-        // Determine left or right based on cross product
-        const toCorner = { x: corner.x - s2d.x, y: corner.y - s2d.y };
-        const toReceiver = { x: r2d.x - s2d.x, y: r2d.y - s2d.y };
-        const crossProd = cross2D(toReceiver, toCorner);
-
-        paths.push({
-          type: crossProd > 0 ? 'corner-left' : 'corner-right',
-          waypoints: [source, corner3D, receiver],
-          totalDistance: cornerDist,
-          pathDifference: cornerDist - directDist,
-          valid: true,
-          diffractionPoints: 1,
-        });
-      }
-    }
-  }
-
-  return paths;
-}
-
-/**
- * Double-edge diffraction attenuation (for building roofs).
- *
- * Uses modified Maekawa formula with coefficient 40 instead of 20
- * to account for diffraction at both entry and exit edges.
- *
- * Physics:
- * - N = 2δf/c (Fresnel number, frequency-dependent)
- * - A_bar = 10·log₁₀(3 + 40·N) for double-edge
- * - Low frequencies diffract easily (small N, small loss)
- * - High frequencies are heavily attenuated (large N, large loss)
- */
-function doubleEdgeDiffraction(
-  pathDiff: number,
-  frequency: number,
-  c: number
-): number {
-  const lambda = c / frequency;
-  const N = (2 * pathDiff) / lambda;
-  if (N < -0.1) return 0;
-  const atten = 10 * Math.log10(3 + 40 * N);  // Coefficient 40 for double-edge
-  return Math.min(Math.max(atten, 0), 25);    // Cap at 25 dB
-}
-
-/**
- * Single-edge diffraction attenuation (for building corners).
- *
- * Standard Maekawa formula with coefficient 20.
- */
-function singleEdgeDiffraction(
-  pathDiff: number,
-  frequency: number,
-  c: number
-): number {
-  const lambda = c / frequency;
-  const N = (2 * pathDiff) / lambda;
-  if (N < -0.1) return 0;
-  const atten = 10 * Math.log10(3 + 20 * N);  // Coefficient 20 for single-edge
-  return Math.min(Math.max(atten, 0), 20);    // Cap at 20 dB
-}
-
-// ============================================================================
-// Attenuation Calculations
-// ============================================================================
-
-function spreadingLoss(distance: number): number {
-  const d = Math.max(distance, 0.1);
-  return 20 * Math.log10(d) + 11;
-}
-
-function atmosphericAbsorptionCoeff(
-  frequency: number,
-  temp: number,
-  humidity: number,
-  pressure: number,
-  model: AtmosphericAbsorptionModel
-): number {
-  if (model === 'none') return 0;
-
-  if (model === 'iso9613') {
-    // Full ISO 9613-1 implementation
-    return atmosphericAbsorptionISO9613(frequency, temp, humidity, pressure);
-  }
-
-  // 'simple' model: Lookup table with linear corrections
-  // Simplified atmospheric absorption based on ISO 9613-1
-  // Returns absorption coefficient in dB per meter
-  //
-  // This uses a polynomial approximation that's accurate for typical outdoor conditions
-  // (temperature 10-30°C, humidity 30-90%, frequencies 63-8000 Hz)
-
-  // Temperature correction factor (absorption increases with temperature)
-  const tempFactor = 1 + 0.01 * (temp - 20);
-
-  // Humidity correction (lower humidity = higher absorption at high frequencies)
-  const humidityFactor = 1 + 0.005 * (50 - humidity);
-
-  // Frequency-dependent base absorption coefficients (dB/m at 20°C, 50% RH)
-  // Values derived from ISO 9613-1 tables for standard atmospheric conditions
-  let baseAlpha: number;
-
-  if (frequency <= 63) {
-    baseAlpha = 0.0001;
-  } else if (frequency <= 125) {
-    baseAlpha = 0.0003;
-  } else if (frequency <= 250) {
-    baseAlpha = 0.001;
-  } else if (frequency <= 500) {
-    baseAlpha = 0.002;
-  } else if (frequency <= 1000) {
-    baseAlpha = 0.004;
-  } else if (frequency <= 2000) {
-    baseAlpha = 0.008;
-  } else if (frequency <= 4000) {
-    baseAlpha = 0.02;
-  } else if (frequency <= 8000) {
-    baseAlpha = 0.06;
-  } else {
-    // 16000 Hz and above
-    baseAlpha = 0.2;
-  }
-
-  return Math.max(baseAlpha * tempFactor * humidityFactor, 0);
-}
-
-/**
- * ISO 9613-1 atmospheric absorption coefficient.
- *
- * Calculates the atmospheric absorption coefficient in dB/m based on:
- * - Frequency (Hz)
- * - Temperature (°C)
- * - Relative humidity (%)
- * - Atmospheric pressure (kPa)
- *
- * This is the full physical model accounting for:
- * - Molecular relaxation of oxygen (O₂)
- * - Molecular relaxation of nitrogen (N₂)
- * - Classical absorption
- */
-function atmosphericAbsorptionISO9613(
-  frequencyHz: number,
-  temperatureC: number,
-  relativeHumidity: number,
-  pressureKPa: number
-): number {
-  const T = temperatureC + 273.15; // Kelvin
-  const T0 = 293.15; // Reference temperature (20°C)
-  const T01 = 273.16; // Triple point of water
-  const ps0 = 101.325; // Reference pressure (kPa)
-
-  const ps = pressureKPa;
-  const f = frequencyHz;
-
-  // Molar concentration of water vapor
-  const C = -6.8346 * Math.pow(T01 / T, 1.261) + 4.6151;
-  const psat = ps0 * Math.pow(10, C);
-  const h = relativeHumidity * psat / ps;
-
-  // Oxygen relaxation frequency
-  const frO = (ps / ps0) * (24 + 4.04e4 * h * ((0.02 + h) / (0.391 + h)));
-
-  // Nitrogen relaxation frequency
-  const frN = (ps / ps0) * Math.pow(T / T0, -0.5) * (9 + 280 * h * Math.exp(-4.17 * (Math.pow(T / T0, -1 / 3) - 1)));
-
-  // Absorption coefficient (dB/m)
-  const alpha =
-    8.686 *
-    f *
-    f *
-    ((1.84e-11 * Math.pow(ps / ps0, -1) * Math.pow(T / T0, 0.5)) +
-      Math.pow(T / T0, -2.5) *
-        (0.01275 * Math.exp(-2239.1 / T) * (frO / (frO * frO + f * f)) +
-          0.1068 * Math.exp(-3352 / T) * (frN / (frN * frN + f * f))));
-
-  return alpha;
-}
-
-function maekawaDiffraction(pathDiff: number, frequency: number, c: number): number {
-  const lambda = c / frequency;
-  const N = (2 * pathDiff) / lambda;
-  if (N < -0.1) return 0;
-  const atten = 10 * Math.log10(3 + 20 * N);
-  return Math.min(Math.max(atten, 0), 25);
-}
-
-// ============================================================================
-// Barrier Side Diffraction
-// ============================================================================
-//
-// When barriers have finite length, sound can diffract around the ends
-// (horizontal diffraction) as well as over the top (vertical diffraction).
-//
-// Physics:
-// - ISO 9613-2 assumes barriers are effectively infinite in length
-// - In reality, short barriers provide less attenuation due to side paths
-// - The minimum-loss path (loudest) dominates the result
-//
-// The side diffraction uses the same Maekawa formula but with the
-// path difference computed in the horizontal plane.
-// ============================================================================
-
-/**
- * Result of barrier diffraction calculation with all path options.
- */
-interface BarrierDiffractionResult {
-  /** Over-top diffraction path */
-  topPath: RayPath | null;
-  /** Around-left-edge diffraction path */
-  leftPath: RayPath | null;
-  /** Around-right-edge diffraction path */
-  rightPath: RayPath | null;
-}
-
-/**
- * Compute the total length of a barrier from its vertices.
- */
-function computeBarrierLength(barrier: WallSegment): number {
-  return distance2D(barrier.p1, barrier.p2);
-}
-
-/**
- * Determine if side diffraction should be computed for this barrier.
- *
- * @param barrier - The barrier segment
- * @param mode - 'off' | 'auto' | 'on'
- * @param lengthThreshold - Length threshold for 'auto' mode (default 50m)
- */
-function shouldUseSideDiffraction(
-  barrier: WallSegment,
-  mode: BarrierSideDiffractionMode,
-  lengthThreshold = 50
-): boolean {
-  if (mode === 'off') return false;
-  if (mode === 'on') return true;
-
-  // 'auto' mode: enable for barriers shorter than threshold
-  const barrierLength = computeBarrierLength(barrier);
-  return barrierLength < lengthThreshold;
-}
-
-/**
- * Compute the path difference for diffraction around a barrier edge (horizontal).
- *
- * The path goes: Source → Edge → Receiver
- * Path difference: |S→Edge| + |Edge→R| - |S→R|
- *
- * @param source - Source position (3D, but we use 2D for horizontal diffraction)
- * @param receiver - Receiver position (3D)
- * @param edgePoint - The barrier edge point (2D, at ground level)
- * @param edgeHeight - Height of the barrier edge
- */
-function computeSidePathDifference(
-  source: Point3D,
-  receiver: Point3D,
-  edgePoint: Point2D,
-  edgeHeight: number
-): { pathDiff: number; totalDistance: number; edge3D: Point3D } {
-  // Edge point is at the barrier height
-  const edge3D: Point3D = {
-    x: edgePoint.x,
-    y: edgePoint.y,
-    z: Math.min(edgeHeight, Math.max(source.z, receiver.z)),
-  };
-
-  const pathA = distance3D(source, edge3D);
-  const pathB = distance3D(edge3D, receiver);
-  const totalDistance = pathA + pathB;
-  const directDistance = distance3D(source, receiver);
-
-  return {
-    pathDiff: totalDistance - directDistance,
-    totalDistance,
-    edge3D,
-  };
-}
-
-/**
- * Trace all diffraction paths around/over a barrier.
- *
- * Returns paths for:
- * 1. Over-top diffraction (standard Maekawa)
- * 2. Around-left-edge diffraction (if side diffraction enabled)
- * 3. Around-right-edge diffraction (if side diffraction enabled)
- *
- * The caller should sum these paths coherently and/or take the minimum loss.
- */
-function traceBarrierDiffractionPaths(
-  source: Point3D,
-  receiver: Point3D,
-  barrier: WallSegment,
-  config: ProbeConfig
-): BarrierDiffractionResult {
-  const result: BarrierDiffractionResult = {
-    topPath: null,
-    leftPath: null,
-    rightPath: null,
-  };
-
-  const s2d = { x: source.x, y: source.y };
-  const r2d = { x: receiver.x, y: receiver.y };
-  const directDist = distance3D(source, receiver);
-
-  // 1. Over-top diffraction (always computed)
-  const intersection = segmentIntersection(s2d, r2d, barrier.p1, barrier.p2);
-  if (intersection) {
-    const diffPoint: Point3D = { x: intersection.x, y: intersection.y, z: barrier.height };
-    const pathA = distance3D(source, diffPoint);
-    const pathB = distance3D(diffPoint, receiver);
-    const totalDist = pathA + pathB;
-
-    result.topPath = {
-      type: 'diffracted',
-      totalDistance: totalDist,
-      directDistance: directDist,
-      pathDifference: totalDist - directDist,
-      reflectionPhaseChange: -Math.PI / 4,
-      absorptionFactor: 1,
-      valid: true,
-    };
-  }
-
-  // 2. Side diffraction (if enabled)
-  const useSideDiffraction = shouldUseSideDiffraction(barrier, config.barrierSideDiffraction);
-
-  if (useSideDiffraction) {
-    // Left edge (p1)
-    const leftResult = computeSidePathDifference(source, receiver, barrier.p1, barrier.height);
-    result.leftPath = {
-      type: 'diffracted',
-      totalDistance: leftResult.totalDistance,
-      directDistance: directDist,
-      pathDifference: leftResult.pathDiff,
-      reflectionPhaseChange: -Math.PI / 4,
-      absorptionFactor: 1,
-      valid: leftResult.pathDiff >= 0, // Valid if path is longer than direct
-    };
-
-    // Right edge (p2)
-    const rightResult = computeSidePathDifference(source, receiver, barrier.p2, barrier.height);
-    result.rightPath = {
-      type: 'diffracted',
-      totalDistance: rightResult.totalDistance,
-      directDistance: directDist,
-      pathDifference: rightResult.pathDiff,
-      reflectionPhaseChange: -Math.PI / 4,
-      absorptionFactor: 1,
-      valid: rightResult.pathDiff >= 0,
-    };
-  }
-
-  return result;
-}
-
-// ============================================================================
-// Ground Reflection Coefficients - Delany-Bazley & Miki Impedance Models
-// ============================================================================
-//
-// PHYSICS BACKGROUND:
-// The ground reflection coefficient Γ is calculated from the normalized surface
-// impedance Zn using the plane-wave reflection formula:
-//
-//   Γ = (Zn·cos(θ) - 1) / (Zn·cos(θ) + 1)
-//
-// where θ is the angle of incidence (0° = normal incidence).
-//
-// For locally-reacting surfaces (which porous grounds approximate), the surface
-// impedance is derived from empirical models based on flow resistivity σ.
-//
-// DELANY-BAZLEY MODEL (1970):
-// Based on extensive measurements of fibrous materials. Valid range: 0.01 < f/σ < 1.0
-//
-//   Zn = 1 + 9.08(f/σ)^(-0.75) - j·11.9(f/σ)^(-0.73)
-//
-// where:
-//   f = frequency (Hz)
-//   σ = flow resistivity (Pa·s/m² = rayls/m = kPa·s/m³ × 1000)
-//   j = imaginary unit
-//
-// MIKI EXTENSION (1990):
-// Extended range with better low-frequency behavior. Valid range: 0.01 < f/σ < 10.0
-//
-//   Zn = 1 + 5.50(f/σ)^(-0.632) - j·8.43(f/σ)^(-0.632)
-//
-// FLOW RESISTIVITY VALUES (typical, Pa·s/m²):
-//   - Hard (concrete/asphalt): 200,000 - 2,000,000
-//   - Grass (short, compacted): 150,000 - 300,000
-//   - Grass (lawn): 100,000 - 200,000
-//   - Soil (compacted): 50,000 - 100,000
-//   - Soil (loose): 20,000 - 50,000
-//   - Snow (fresh): 10,000 - 50,000
-//   - Gravel: 500,000 - 1,000,000
-//
-// References:
-//   - Delany & Bazley (1970) "Acoustical properties of fibrous absorbent materials"
-//   - Miki (1990) "Acoustical properties of porous materials - Modifications of DB model"
-//   - ISO 9613-2:1996 "Attenuation of sound during propagation outdoors"
-// ============================================================================
-
-/**
- * Complex number operations for impedance calculations.
- */
-interface Complex {
-  re: number;  // Real part
-  im: number;  // Imaginary part
-}
-
-function complexDivide(a: Complex, b: Complex): Complex {
-  const denom = b.re * b.re + b.im * b.im;
-  if (denom < EPSILON) {
-    return { re: 0, im: 0 };
-  }
-  return {
-    re: (a.re * b.re + a.im * b.im) / denom,
-    im: (a.im * b.re - a.re * b.im) / denom,
-  };
-}
-
-function complexMagnitude(z: Complex): number {
-  return Math.sqrt(z.re * z.re + z.im * z.im);
-}
-
-function complexPhase(z: Complex): number {
-  return Math.atan2(z.im, z.re);
-}
-
-/**
- * Flow resistivity values for different ground types (Pa·s/m²).
- * These are typical values from acoustic literature.
- */
-const FLOW_RESISTIVITY = {
-  hard: 2_000_000,     // Concrete, asphalt (very high impedance, near-perfect reflection)
-  soft: 20_000,        // Loose soil, grass lawn (porous, absorptive)
-  gravel: 500_000,     // Gravel surface
-  compactSoil: 100_000, // Compacted earth
-  snow: 30_000,        // Fresh snow
-} as const;
-
-/**
- * Impedance model selection.
- */
-type ImpedanceModel = 'delany-bazley' | 'miki' | 'auto';
-
-/**
- * Delany-Bazley normalized surface impedance.
- *
- * Zn = 1 + 9.08(f/σ)^(-0.75) - j·11.9(f/σ)^(-0.73)
- *
- * Valid range: 0.01 < f/σ < 1.0
- * Outside this range, results are extrapolated (less accurate).
- *
- * @param frequency - Frequency in Hz
- * @param flowResistivity - Flow resistivity σ in Pa·s/m²
- * @returns Complex normalized surface impedance Zn
- */
-function delanyBazleyImpedance(frequency: number, flowResistivity: number): Complex {
-  const X = frequency / flowResistivity;  // Dimensionless parameter f/σ
-
-  // Clamp to valid range for numerical stability
-  const Xc = Math.max(0.001, Math.min(X, 10.0));
-
-  // Delany-Bazley coefficients
-  const realPart = 1 + 9.08 * Math.pow(Xc, -0.75);
-  const imagPart = -11.9 * Math.pow(Xc, -0.73);
-
-  return { re: realPart, im: imagPart };
-}
-
-/**
- * Miki normalized surface impedance (extended range).
- *
- * Zn = 1 + 5.50(f/σ)^(-0.632) - j·8.43(f/σ)^(-0.632)
- *
- * Valid range: 0.01 < f/σ < 10.0
- * Better low-frequency behavior than Delany-Bazley.
- *
- * @param frequency - Frequency in Hz
- * @param flowResistivity - Flow resistivity σ in Pa·s/m²
- * @returns Complex normalized surface impedance Zn
- */
-function mikiImpedance(frequency: number, flowResistivity: number): Complex {
-  const X = frequency / flowResistivity;  // Dimensionless parameter f/σ
-
-  // Clamp to valid range for numerical stability
-  const Xc = Math.max(0.001, Math.min(X, 100.0));
-
-  // Miki coefficients (extended range)
-  const realPart = 1 + 5.50 * Math.pow(Xc, -0.632);
-  const imagPart = -8.43 * Math.pow(Xc, -0.632);
-
-  return { re: realPart, im: imagPart };
-}
-
-/**
- * Calculate normalized surface impedance using the appropriate model.
- *
- * 'auto' mode selects:
- *   - Delany-Bazley for f/σ < 1.0 (its valid range)
- *   - Miki for f/σ >= 1.0 (extended range)
- *
- * @param frequency - Frequency in Hz
- * @param flowResistivity - Flow resistivity σ in Pa·s/m²
- * @param model - Which impedance model to use
- * @returns Complex normalized surface impedance Zn
- */
-function calculateSurfaceImpedance(
-  frequency: number,
-  flowResistivity: number,
-  model: ImpedanceModel = 'auto'
-): Complex {
-  const X = frequency / flowResistivity;
-
-  if (model === 'delany-bazley') {
-    return delanyBazleyImpedance(frequency, flowResistivity);
-  } else if (model === 'miki') {
-    return mikiImpedance(frequency, flowResistivity);
-  } else {
-    // 'auto': Use DB within its valid range, Miki outside
-    if (X < 1.0) {
-      return delanyBazleyImpedance(frequency, flowResistivity);
-    } else {
-      return mikiImpedance(frequency, flowResistivity);
-    }
-  }
-}
-
-/**
- * Calculate plane-wave reflection coefficient from surface impedance.
- *
- * Γ = (Zn·cos(θ) - 1) / (Zn·cos(θ) + 1)
- *
- * For locally-reacting surfaces, the impedance doesn't depend on angle.
- *
- * @param Zn - Complex normalized surface impedance
- * @param incidenceAngle - Angle of incidence in radians (0 = normal)
- * @returns Complex reflection coefficient
- */
-function calculateReflectionCoefficient(Zn: Complex, incidenceAngle: number): Complex {
-  const cosTheta = Math.cos(incidenceAngle);
-
-  // Zn * cos(θ)
-  const ZnCosTheta: Complex = {
-    re: Zn.re * cosTheta,
-    im: Zn.im * cosTheta,
-  };
-
-  // Numerator: Zn·cos(θ) - 1
-  const numerator: Complex = {
-    re: ZnCosTheta.re - 1,
-    im: ZnCosTheta.im,
-  };
-
-  // Denominator: Zn·cos(θ) + 1
-  const denominator: Complex = {
-    re: ZnCosTheta.re + 1,
-    im: ZnCosTheta.im,
-  };
-
-  return complexDivide(numerator, denominator);
-}
-
-/**
- * Calculate effective flow resistivity for mixed ground.
- *
- * Two approaches from the literature:
- *
- * 1. ISO 9613-2 method (linear interpolation of ground factor G):
- *    σ_eff = σ_hard^(1-G) × σ_soft^G  (logarithmic interpolation)
- *
- * 2. Area-weighted method:
- *    σ_eff = σ_soft / G  (assumes G is fraction of soft ground)
- *
- * We use logarithmic interpolation as it's more physically meaningful
- * for acoustic properties that span orders of magnitude.
- *
- * @param mixedFactor - G factor (0 = fully hard, 1 = fully soft)
- * @returns Effective flow resistivity in Pa·s/m²
- */
-function calculateMixedFlowResistivity(mixedFactor: number): number {
-  // Clamp to valid range
-  const G = Math.max(0, Math.min(1, mixedFactor));
-
-  // Logarithmic interpolation between hard and soft
-  // σ_eff = σ_hard^(1-G) × σ_soft^G
-  const logSigmaHard = Math.log(FLOW_RESISTIVITY.hard);
-  const logSigmaSoft = Math.log(FLOW_RESISTIVITY.soft);
-  const logSigmaEff = logSigmaHard * (1 - G) + logSigmaSoft * G;
-
-  return Math.exp(logSigmaEff);
-}
-
-/**
- * Get ground reflection coefficient using Delany-Bazley/Miki impedance model.
- *
- * This is the physics-based replacement for the simplified empirical model.
- * It calculates:
- * 1. Flow resistivity based on ground type
- * 2. Surface impedance using DB or Miki model
- * 3. Reflection coefficient from impedance
- *
- * @param groundType - Type of ground surface
- * @param mixedFactor - For 'mixed' type: 0 = hard, 1 = soft
- * @param frequency - Frequency in Hz
- * @param incidenceAngle - Angle of incidence in radians (default: grazing, π/2 - 0.1)
- * @param model - Which impedance model to use
- */
-interface GroundReflectionCoeff {
-  magnitude: number;  // |Γ| - amplitude reflection coefficient (0 to 1)
-  phase: number;      // arg(Γ) - phase shift in radians
-}
-
-function getGroundReflectionCoeff(
-  groundType: 'hard' | 'soft' | 'mixed',
-  mixedFactor: number,
-  frequency: number,
-  incidenceAngle?: number,
-  model: ImpedanceModel = 'auto'
-): GroundReflectionCoeff {
-  // Determine flow resistivity based on ground type
-  let flowResistivity: number;
-
-  if (groundType === 'hard') {
-    flowResistivity = FLOW_RESISTIVITY.hard;
-  } else if (groundType === 'soft') {
-    flowResistivity = FLOW_RESISTIVITY.soft;
-  } else {
-    // Mixed: interpolate flow resistivity
-    flowResistivity = calculateMixedFlowResistivity(mixedFactor);
-  }
-
-  // Default incidence angle: near-grazing (typical for outdoor propagation)
-  // Ground reflections usually occur at low grazing angles
-  // We use ~5° from grazing (85° from normal) as typical
-  const theta = incidenceAngle ?? (Math.PI / 2 - 0.087); // ~85° from normal
-
-  // Calculate surface impedance
-  const Zn = calculateSurfaceImpedance(frequency, flowResistivity, model);
-
-  // Calculate reflection coefficient
-  const Gamma = calculateReflectionCoefficient(Zn, theta);
-
-  return {
-    magnitude: complexMagnitude(Gamma),
-    phase: complexPhase(Gamma),
-  };
-}
-
-/**
- * Calculate the ground-reflected path geometry using the image source method.
- *
- * The ground reflection is modeled by placing a virtual "image source" below
- * the ground plane (mirror of the real source across z=0). The reflected path
- * goes from source → ground reflection point → receiver, which equals the
- * straight-line distance from image source to receiver.
- *
- * @param d - Horizontal distance between source and receiver (2D)
- * @param hs - Source height above ground
- * @param hr - Receiver height above ground
- * @returns Object with direct distance r1 and reflected distance r2
- */
-function calculateGroundReflectionGeometry(
-  d: number,
-  hs: number,
-  hr: number
-): { r1: number; r2: number; reflectionPointX: number } {
-  // r1 = direct path distance
-  const r1 = Math.sqrt(d * d + (hs - hr) ** 2);
-
-  // r2 = reflected path distance (via image source at -hs)
-  // This equals: source→ground + ground→receiver = sqrt(d² + (hs+hr)²)
-  const r2 = Math.sqrt(d * d + (hs + hr) ** 2);
-
-  // Reflection point location along the ground (for visualization)
-  // Using similar triangles: x/hs = (d-x)/hr → x = d*hs/(hs+hr)
-  const reflectionPointX = (d * hs) / (hs + hr);
-
-  return { r1, r2, reflectionPointX };
-}
-
-// ============================================================================
-// Wall Segment Extraction
-// ============================================================================
-
-function extractWallSegments(walls: ProbeRequest['walls']): WallSegment[] {
-  const segments: WallSegment[] = [];
-
-  for (const wall of walls) {
-    const verts = wall.vertices;
-    if (wall.type === 'barrier') {
-      for (let i = 0; i < verts.length - 1; i++) {
-        segments.push({
-          p1: verts[i],
-          p2: verts[i + 1],
-          height: wall.height,
-          type: 'barrier',
-          id: wall.id,
-        });
-      }
-    } else {
-      for (let i = 0; i < verts.length; i++) {
-        segments.push({
-          p1: verts[i],
-          p2: verts[(i + 1) % verts.length],
-          height: wall.height,
-          type: 'building',
-          id: wall.id,
-        });
-      }
-    }
-  }
-
-  return segments;
-}
-
-// ============================================================================
-// Path Tracing
-// ============================================================================
-
-function traceDirectPath(
-  source: Point3D,
-  receiver: Point3D,
-  barriers: WallSegment[]
-): RayPath {
-  const s2d = { x: source.x, y: source.y };
-  const r2d = { x: receiver.x, y: receiver.y };
-  const dist = distance3D(source, receiver);
-  const blocked = isPathBlocked(s2d, r2d, barriers);
-
-  return {
-    type: 'direct',
-    totalDistance: dist,
-    directDistance: dist,
-    pathDifference: 0,
-    reflectionPhaseChange: 0,
-    absorptionFactor: 1,
-    valid: !blocked,
-  };
-}
-
-/** Wall reflection path with geometry for visualization */
-interface WallReflectionPath extends RayPath {
-  reflectionPoint2D: Point2D;
-}
-
-function traceWallReflectionPaths(
-  source: Point3D,
-  receiver: Point3D,
-  segments: WallSegment[],
-  barriers: WallSegment[],
-  buildings: BuildingFootprint[]
-): WallReflectionPath[] {
-  const paths: WallReflectionPath[] = [];
-  const buildingSegments = segments.filter(s => s.type === 'building');
-
-  for (const segment of buildingSegments) {
-    const imagePos2D = mirrorPoint2D({ x: source.x, y: source.y }, segment);
-    const r2d = { x: receiver.x, y: receiver.y };
-
-    const reflPoint = segmentIntersection(r2d, imagePos2D, segment.p1, segment.p2);
-    if (!reflPoint) continue;
-
-    const segLen = distance2D(segment.p1, segment.p2);
-    const d1 = distance2D(reflPoint, segment.p1);
-    const d2 = distance2D(reflPoint, segment.p2);
-    if (d1 > segLen + EPSILON || d2 > segLen + EPSILON) continue;
-
-    const reflPoint3D: Point3D = {
-      x: reflPoint.x,
-      y: reflPoint.y,
-      z: Math.min(segment.height, Math.max(source.z, receiver.z)),
-    };
-
-    const s2d = { x: source.x, y: source.y };
-
-    // Check barrier blocking (existing)
-    const blockedByBarrierA = isPathBlocked(s2d, reflPoint, barriers, segment.id);
-    const blockedByBarrierB = isPathBlocked(reflPoint, r2d, barriers, segment.id);
-
-    if (blockedByBarrierA || blockedByBarrierB) continue;
-
-    // Check building blocking for BOTH legs of the reflection path
-    // Exclude the building that owns this wall segment from the check
-    const otherBuildings = buildings.filter(b => b.id !== segment.id);
-
-    // Leg 1: Source → Reflection point
-    const leg1Block = findBlockingBuilding(source, reflPoint3D, otherBuildings);
-
-    // Leg 2: Reflection point → Receiver
-    const leg2Block = findBlockingBuilding(reflPoint3D, receiver, otherBuildings);
-
-    // Check if the reflection path goes through the SAME building's interior.
-    // This is important for non-convex buildings or when reflecting off one wall
-    // but the path to source/receiver would pass through another part of the building.
-    //
-    // We use a slightly inset check point (moved away from the wall) to avoid
-    // floating-point precision issues at the exact reflection point.
-    const sameBuilding = buildings.find(b => b.id === segment.id);
-    let blockedBySameBuilding = false;
-    if (sameBuilding) {
-      // Check if source or receiver is inside the building (invalid)
-      const srcInside = pointInPolygon({ x: source.x, y: source.y }, sameBuilding.vertices);
-      const recvInside = pointInPolygon({ x: receiver.x, y: receiver.y }, sameBuilding.vertices);
-
-      if (srcInside || recvInside) {
-        blockedBySameBuilding = true;
-      } else {
-        // Check if the path legs go through the building interior
-        // Use a point slightly offset from the reflection point (away from wall) for checking
-        const wallDx = segment.p2.x - segment.p1.x;
-        const wallDy = segment.p2.y - segment.p1.y;
-        const wallLen = Math.sqrt(wallDx * wallDx + wallDy * wallDy);
-        if (wallLen > EPSILON) {
-          // Normal pointing outward (perpendicular to wall)
-          const nx = -wallDy / wallLen;
-          const ny = wallDx / wallLen;
-          // Determine which side source is on
-          const toSrcX = source.x - reflPoint.x;
-          const toSrcY = source.y - reflPoint.y;
-          const dot = toSrcX * nx + toSrcY * ny;
-          const sign = dot >= 0 ? 1 : -1;
-          // Offset point slightly away from wall on the source side
-          const offsetDist = 0.01; // 1cm offset
-          const checkPoint: Point3D = {
-            x: reflPoint.x + sign * nx * offsetDist,
-            y: reflPoint.y + sign * ny * offsetDist,
-            z: reflPoint3D.z,
-          };
-
-          // Now check if paths from offset point go through building
-          const srcToCheck = findBlockingBuilding(source, checkPoint, [sameBuilding]);
-          const checkToRecv = findBlockingBuilding(checkPoint, receiver, [sameBuilding]);
-          blockedBySameBuilding = srcToCheck.blocked || checkToRecv.blocked;
-        }
-      }
-    }
-
-    if (leg1Block.blocked || leg2Block.blocked || blockedBySameBuilding) continue;
-
-    const pathA = distance3D(source, reflPoint3D);
-    const pathB = distance3D(reflPoint3D, receiver);
-    const totalDist = pathA + pathB;
-    const directDist = distance3D(source, receiver);
-
-    paths.push({
-      type: 'wall',
-      totalDistance: totalDist,
-      directDistance: directDist,
-      pathDifference: totalDist - directDist,
-      reflectionPhaseChange: 0,
-      absorptionFactor: 0.9,
-      valid: reflPoint3D.z <= segment.height,
-      reflectionPoint2D: reflPoint,
-    });
-  }
-
-  return paths;
-}
-
-// ============================================================================
-// Coherent Spectral Computation
-// ============================================================================
-
-function applyGainToSpectrum(spectrum: number[], gain: number): number[] {
-  return spectrum.map(level => level <= MIN_LEVEL ? MIN_LEVEL : level + gain);
-}
 
 interface SourcePhasorResult {
   spectrum: Spectrum9;
   pathTypes: Set<string>;
-  /** Collected paths for ray visualization */
   collectedPaths?: CollectedPath[];
 }
 
-/** Internal path collection during computation */
 interface CollectedPath {
   type: 'direct' | 'ground' | 'wall' | 'diffraction';
   points: Point2D[];
@@ -1518,6 +173,10 @@ interface CollectedPath {
   reflectionPoint?: Point2D;
   diffractionEdge?: Point2D;
 }
+
+// ============================================================================
+// Core Computation: Single Source Coherent Summation
+// ============================================================================
 
 function computeSourceCoherent(
   source: ProbeRequest['sources'][0],
@@ -1550,20 +209,16 @@ function computeSourceCoherent(
   pathTypes.add('direct');
 
   // Trace barrier diffraction paths if direct is blocked by barrier
-  // Now uses the new multi-path approach (top + sides if enabled)
-  const barrierDiffractionPaths: RayPath[] = [];
+  const barrierDiffractionPaths: { totalDistance: number; pathDifference: number; reflectionPhaseChange: number; valid: boolean }[] = [];
   if (!directPath.valid && config.barrierDiffraction) {
     for (const barrier of barriers) {
-      // Check if this barrier blocks the direct path
       const s2d = { x: srcPos.x, y: srcPos.y };
       const r2d = { x: probePos.x, y: probePos.y };
       const intersection = segmentIntersection(s2d, r2d, barrier.p1, barrier.p2);
 
       if (intersection) {
-        // Use the new multi-path diffraction function
         const diffResult = traceBarrierDiffractionPaths(srcPos, probePos, barrier, config);
 
-        // Add all valid paths
         if (diffResult.topPath && diffResult.topPath.valid) {
           barrierDiffractionPaths.push(diffResult.topPath);
           pathTypes.add('diffracted');
@@ -1580,33 +235,11 @@ function computeSourceCoherent(
     }
   }
 
-  // ============================================================================
   // Building Diffraction Path Tracing
-  // ============================================================================
-  //
-  // When the direct path is blocked by buildings, we trace diffraction paths
-  // for EACH blocking building. This is more accurate than the receiver engine
-  // which only computes a single path per building.
-  //
-  // The probe traces:
-  //   1. Over-roof paths (double-edge diffraction, coefficient 40)
-  //   2. Around-corner paths (single-edge diffraction, coefficient 20)
-  //
-  // All valid paths are summed coherently with phase, which can result in
-  // higher levels than the receiver engine's simplified approach (typically
-  // 5-10 dB higher due to multiple contributing paths).
-  //
-  // This matches physical reality better - a sound level meter at this
-  // location would measure contributions from all diffraction paths.
-  //
-  // See: docs/PHYSICS_REFERENCE.md Section 12 "Probe vs Receiver Engine Accuracy"
-  // ============================================================================
-
   const buildingDiffPaths: BuildingDiffractionPath[] = [];
   const allBlockingBuildings = findAllBlockingBuildings(srcPos, probePos, buildings);
 
   if (allBlockingBuildings.length > 0) {
-    // For each blocking building, trace all diffraction paths (roof + corners)
     for (const occlusion of allBlockingBuildings) {
       if (!occlusion.building || !occlusion.entryPoint || !occlusion.exitPoint) continue;
 
@@ -1618,9 +251,6 @@ function computeSourceCoherent(
         occlusion.exitPoint
       );
 
-      // Add all valid diffraction paths
-      // Note: We don't validate each leg against other buildings to match
-      // the receiver engine's simplified approach for consistency.
       for (const diffPath of diffPaths) {
         if (diffPath.valid) {
           buildingDiffPaths.push(diffPath);
@@ -1632,7 +262,6 @@ function computeSourceCoherent(
       pathTypes.add('building-diffraction');
     }
   } else if (directBlockedByBuilding) {
-    // Direct is blocked but no buildings found by findAllBlockingBuildings - shouldn't happen
     console.warn(`[ProbeWorker] Direct blocked by building but findAllBlockingBuildings returned empty!`);
   }
 
@@ -1644,7 +273,6 @@ function computeSourceCoherent(
     const hr = probePos.z;
     const { reflectionPointX } = calculateGroundReflectionGeometry(d, hs, hr);
 
-    // Calculate ground reflection point in 2D
     const dx = probePos.x - srcPos.x;
     const dy = probePos.y - srcPos.y;
     const dHoriz = Math.sqrt(dx * dx + dy * dy);
@@ -1654,13 +282,12 @@ function computeSourceCoherent(
       z: 0,
     } : { x: srcPos.x, y: srcPos.y, z: 0 };
 
-    // Check if either leg of ground path is blocked by building
     const leg1Block = findBlockingBuilding(srcPos, groundPoint, buildings);
     const leg2Block = findBlockingBuilding(groundPoint, probePos, buildings);
     groundBlockedByBuilding = leg1Block.blocked || leg2Block.blocked;
   }
 
-  // Trace wall reflection paths (check for blocking by OTHER buildings)
+  // Trace wall reflection paths
   const wallPaths: WallReflectionPath[] = [];
   if (config.wallReflections) {
     const reflPaths = traceWallReflectionPaths(srcPos, probePos, segments, barriers, buildings);
@@ -1680,7 +307,7 @@ function computeSourceCoherent(
     const phasors: Phasor[] = [];
     const k = (2 * Math.PI * freq) / c;
 
-    // Direct path contribution (only if not blocked by barriers AND buildings)
+    // Direct path contribution
     if (directPath.valid && !directBlockedByBuilding) {
       const atten = spreadingLoss(directPath.totalDistance);
       const atm = config.atmosphericAbsorption !== 'none'
@@ -1690,7 +317,6 @@ function computeSourceCoherent(
       const phase = -k * directPath.totalDistance;
       phasors.push({ pressure: dBToPressure(level), phase });
 
-      // Collect direct path for visualization (only on first band to avoid duplicates)
       if (collectPaths && bandIdx === 0) {
         collectedPaths.push({
           type: 'direct',
@@ -1703,20 +329,16 @@ function computeSourceCoherent(
     }
 
     // Building diffraction contributions (per-band frequency dependence)
-    // This is where the frequency dependency is applied!
     for (const diffPath of buildingDiffPaths) {
       const atten = spreadingLoss(diffPath.totalDistance);
       const atm = config.atmosphericAbsorption !== 'none'
         ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity, config.pressure, config.atmosphericAbsorption) * diffPath.totalDistance
         : 0;
 
-      // Per-band diffraction loss based on path type
       let diffLoss: number;
       if (diffPath.diffractionPoints === 2) {
-        // Roof diffraction: double-edge Maekawa (coefficient 40)
         diffLoss = doubleEdgeDiffraction(diffPath.pathDifference, freq, c);
       } else {
-        // Corner diffraction: single-edge Maekawa (coefficient 20)
         diffLoss = singleEdgeDiffraction(diffPath.pathDifference, freq, c);
       }
 
@@ -1726,52 +348,35 @@ function computeSourceCoherent(
       phasors.push({ pressure: dBToPressure(level), phase });
     }
 
-    // Ground reflection using proper two-ray model with SEPARATE phasors
-    // Only if not blocked by buildings
+    // Ground reflection using proper two-ray model
     if (config.groundReflection && srcPos.z > 0 && probePos.z > 0 && !groundBlockedByBuilding) {
       const d = distance2D({ x: srcPos.x, y: srcPos.y }, { x: probePos.x, y: probePos.y });
       const hs = srcPos.z;
       const hr = probePos.z;
 
-      // Calculate path geometry - get BOTH r1 and r2 for proper two-ray model
       const { r1: directDistance, r2: groundPathDistance, reflectionPointX } = calculateGroundReflectionGeometry(d, hs, hr);
 
-      // Get frequency-dependent ground reflection coefficient
       const groundCoeff = getGroundReflectionCoeff(
         config.groundType,
         config.groundMixedFactor,
         freq
       );
 
-      // Calculate attenuation for ground-reflected path
       const groundAtten = spreadingLoss(groundPathDistance);
       const groundAtm = config.atmosphericAbsorption !== 'none'
         ? atmosphericAbsorptionCoeff(freq, config.temperature, config.humidity, config.pressure, config.atmosphericAbsorption) * groundPathDistance
         : 0;
 
-      // Ground reflection reduces amplitude by:
-      // 1. Reflection coefficient magnitude |Γ|
-      // 2. Geometric ratio r1/r2 (reflected path is longer, so amplitude is lower)
-      // This matches the textbook two-ray model: p_reflected = p_direct * |Γ| * (r1/r2)
       const geometricRatio = directDistance / groundPathDistance;
       const reflectionLoss = -20 * Math.log10(groundCoeff.magnitude * geometricRatio);
 
-      // Level at receiver via ground-reflected path
       const groundLevel = sourceLevel - groundAtten - groundAtm - reflectionLoss;
-
-      // Phase for proper two-ray interference:
-      // The key insight is that the PHASE DIFFERENCE between direct and reflected
-      // paths determines interference. Since direct path has phase = -k * r1,
-      // the ground path should have phase = -k * r2 + reflection_phase_shift.
-      // When summed coherently, the effective phase difference is k * (r2 - r1).
       const groundPhase = -k * groundPathDistance + groundCoeff.phase;
 
       phasors.push({ pressure: dBToPressure(groundLevel), phase: groundPhase });
       pathTypes.add('ground');
 
-      // Collect ground reflection path for visualization (only on first band)
       if (collectPaths && bandIdx === 0) {
-        // Calculate reflection point in world coordinates
         const dx = probePos.x - srcPos.x;
         const dy = probePos.y - srcPos.y;
         const dHoriz = Math.sqrt(dx * dx + dy * dy);
@@ -1803,9 +408,7 @@ function computeSourceCoherent(
       const phase = -k * path.totalDistance + path.reflectionPhaseChange;
       phasors.push({ pressure: dBToPressure(level), phase });
 
-      // Collect barrier diffraction path for visualization (only on first band)
       if (collectPaths && bandIdx === 0) {
-        // Calculate approximate diffraction point (midpoint for simplicity)
         const diffPoint: Point2D = {
           x: (srcPos.x + probePos.x) / 2,
           y: (srcPos.y + probePos.y) / 2,
@@ -1832,7 +435,6 @@ function computeSourceCoherent(
       const phase = -k * path.totalDistance + path.reflectionPhaseChange;
       phasors.push({ pressure: dBToPressure(level), phase });
 
-      // Collect wall reflection path for visualization (only on first band)
       if (collectPaths && bandIdx === 0) {
         collectedPaths.push({
           type: 'wall',
@@ -1875,27 +477,6 @@ function computeSourceCoherent(
 }
 
 // ============================================================================
-// Energy Summation for Multiple Sources
-// ============================================================================
-
-function sumMultipleSpectra(spectra: number[][]): number[] {
-  if (spectra.length === 0) return new Array(OCTAVE_BAND_COUNT).fill(MIN_LEVEL);
-  if (spectra.length === 1) return [...spectra[0]];
-
-  const result: number[] = [];
-  for (let i = 0; i < OCTAVE_BAND_COUNT; i++) {
-    const levels = spectra.map(s => s[i]).filter(l => l > MIN_LEVEL);
-    if (levels.length === 0) {
-      result.push(MIN_LEVEL);
-    } else {
-      const energy = levels.reduce((sum, l) => sum + Math.pow(10, l / 10), 0);
-      result.push(10 * Math.log10(energy));
-    }
-  }
-  return result;
-}
-
-// ============================================================================
 // Main Probe Calculation
 // ============================================================================
 
@@ -1910,7 +491,6 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
   const barriers = segments.filter(s => s.type === 'barrier');
   const buildings = extractBuildingFootprints(req.walls);
 
-  // Merge request config with defaults
   const config: ProbeConfig = {
     ...DEFAULT_CONFIG,
     barrierSideDiffraction: req.config?.barrierSideDiffraction ?? DEFAULT_CONFIG.barrierSideDiffraction,
@@ -1932,7 +512,6 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
 
     sourceSpectra.push(result.spectrum);
 
-    // Collect paths for visualization
     if (result.collectedPaths) {
       allCollectedPaths.push(...result.collectedPaths);
     }
@@ -1944,15 +523,12 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
     }
   }
 
-  // Sum all source spectra energetically
   const totalSpectrum = sumMultipleSpectra(sourceSpectra);
 
-  // Build traced paths and phase relationships for response
   let tracedPaths: import('@geonoise/engine').TracedPath[] | undefined;
   let phaseRelationships: import('@geonoise/engine').PhaseRelationship[] | undefined;
 
   if (collectPaths && allCollectedPaths.length > 0) {
-    // Convert CollectedPath to TracedPath
     tracedPaths = allCollectedPaths.map(p => ({
       type: p.type,
       points: p.points,
@@ -1963,7 +539,6 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
       diffractionEdge: p.diffractionEdge,
     }));
 
-    // Compute phase relationships between pairs of paths from same source
     phaseRelationships = [];
     const pathsBySource = new Map<string, CollectedPath[]>();
     for (const p of allCollectedPaths) {
@@ -1973,13 +548,11 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
     }
 
     for (const [, paths] of pathsBySource) {
-      // Compare each pair of paths
       for (let i = 0; i < paths.length; i++) {
         for (let j = i + 1; j < paths.length; j++) {
           const p1 = paths[i];
           const p2 = paths[j];
           const phaseDelta_rad = Math.abs(p1.phase_rad - p2.phase_rad);
-          // Normalize to [0, π]
           const normalized = phaseDelta_rad % (2 * Math.PI);
           const phaseDelta_deg = (normalized > Math.PI ? 2 * Math.PI - normalized : normalized) * (180 / Math.PI);
           phaseRelationships.push({
@@ -1992,10 +565,6 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
       }
     }
   }
-
-  // Return actual calculated spectrum - display floor is applied in the UI
-  // after frequency weighting to avoid A-curve artifacts on silence.
-  // The engine uses MIN_LEVEL (-100 dB) for bands with no energy.
 
   return {
     type: 'PROBE_UPDATE',
@@ -2031,11 +600,8 @@ workerContext.addEventListener('message', (event) => {
     const result = calculateProbe(req);
     workerContext.postMessage(result);
   } catch (err) {
-    // Log error for debugging (will appear in browser console)
     console.error('[ProbeWorker] Calculation error:', err);
 
-    // Return empty spectrum (MIN_LEVEL) so silent areas show correctly
-    // instead of misleading fallback values
     workerContext.postMessage({
       type: 'PROBE_UPDATE',
       probeId: req.probeId,
