@@ -149,6 +149,17 @@ import {
   updateAllEquations as updateAllEquationsModule,
   wireEquationCollapsibles as wireEquationCollapsiblesModule,
 } from './ui/equations.js';
+
+// === Modals Module ===
+import {
+  openAbout as openAboutModule,
+  closeAbout as closeAboutModule,
+  setAboutTab as setAboutTabModule,
+  wireAboutModal as wireAboutModalModule,
+  wireAuthorModal as wireAuthorModalModule,
+  wireCollapsibleSections as wireCollapsibleSectionsModule,
+} from './ui/modals/about.js';
+
 import {
   type Point,
   type DisplayBand,
@@ -6055,168 +6066,36 @@ function wireActionOverflow() {
   });
 }
 
+// === About/Author Modals (delegating to ui/modals module) ===
+
 function setAboutTab(tabId: string) {
-  if (!aboutTabs.length || !aboutPanels.length) return;
-  aboutTabs.forEach((tab) => {
-    const isActive = tab.dataset.aboutTab === tabId;
-    tab.classList.toggle('is-active', isActive);
-    tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
-    tab.tabIndex = isActive ? 0 : -1;
-  });
-  aboutPanels.forEach((panel) => {
-    const isActive = panel.dataset.aboutPanel === tabId;
-    panel.classList.toggle('is-active', isActive);
-    panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
-  });
+  setAboutTabModule(tabId, aboutTabs, aboutPanels);
 }
 
 function openAbout() {
-  if (!aboutModal) return;
   aboutOpen = true;
-  setAboutTab('current');
-  aboutModal.classList.add('is-open');
-  aboutModal.setAttribute('aria-hidden', 'false');
-  aboutClose?.focus();
-  // Re-render KaTeX equations now that modal is visible
-  if (typeof renderMathInElement === 'function') {
-    renderMathInElement(aboutModal, {
-      delimiters: [
-        { left: '$$', right: '$$', display: true },
-        { left: '$', right: '$', display: false },
-      ],
-      throwOnError: false,
-    });
-  }
+  openAboutModule(aboutModal, aboutClose, setAboutTab);
 }
 
 function closeAbout() {
-  if (!aboutModal) return;
   aboutOpen = false;
-  aboutModal.classList.remove('is-open');
-  aboutModal.setAttribute('aria-hidden', 'true');
+  closeAboutModule(aboutModal);
 }
 
 function wireAbout() {
-  if (!aboutModal) return;
-  aboutButton?.addEventListener('click', () => openAbout());
-  aboutClose?.addEventListener('click', () => closeAbout());
-  if (aboutTabs.length && aboutPanels.length) {
-    aboutTabs.forEach((tab) => {
-      tab.addEventListener('click', () => {
-        const tabId = tab.dataset.aboutTab ?? 'current';
-        setAboutTab(tabId);
-      });
-    });
-  }
-  aboutModal.addEventListener('click', (event) => {
-    const target = event.target as HTMLElement | null;
-    if (target?.closest('[data-modal-close]')) {
-      closeAbout();
-    }
-  });
-
-  // Wire collapsible physics sections
-  wireCollapsibleSections();
-
-  // Wire author modal
-  wireAuthorModal();
-}
-
-function openAuthor() {
-  if (!authorModal) return;
-  authorModal.classList.add('is-open');
-  authorModal.setAttribute('aria-hidden', 'false');
-}
-
-function closeAuthor() {
-  if (!authorModal) return;
-  authorModal.classList.remove('is-open');
-  authorModal.setAttribute('aria-hidden', 'true');
+  wireAboutModalModule(
+    aboutModal,
+    aboutButton,
+    aboutClose,
+    aboutTabs,
+    aboutPanels,
+    () => wireCollapsibleSectionsModule(),
+    () => wireAuthorModal()
+  );
 }
 
 function wireAuthorModal() {
-  if (!authorModal) return;
-  authorButton?.addEventListener('click', () => openAuthor());
-  authorClose?.addEventListener('click', () => closeAuthor());
-  authorModal.addEventListener('click', (event) => {
-    const target = event.target as HTMLElement | null;
-    if (target?.closest('[data-modal-close]')) {
-      closeAuthor();
-    }
-  });
-}
-
-/**
- * Sets up collapsible accordion sections in the About modal.
- * Each section can be expanded/collapsed by clicking its header.
- */
-function wireCollapsibleSections() {
-  const collapsibleSections = document.querySelectorAll<HTMLElement>('[data-collapsible]');
-  const expandAllBtn = document.getElementById('expandAllBtn') as HTMLButtonElement | null;
-
-  if (!collapsibleSections.length) return;
-
-  // Toggle individual section
-  collapsibleSections.forEach((section) => {
-    const header = section.querySelector('.collapsible-header');
-    if (!header) return;
-
-    header.addEventListener('click', () => {
-      toggleCollapsibleSection(section);
-    });
-
-    // Keyboard support
-    header.addEventListener('keydown', (e) => {
-      if ((e as KeyboardEvent).key === 'Enter' || (e as KeyboardEvent).key === ' ') {
-        e.preventDefault();
-        toggleCollapsibleSection(section);
-      }
-    });
-  });
-
-  // Expand all / collapse all button
-  if (expandAllBtn) {
-    expandAllBtn.addEventListener('click', () => {
-      const allOpen = Array.from(collapsibleSections).every((s) => s.classList.contains('is-open'));
-
-      if (allOpen) {
-        // Collapse all
-        collapsibleSections.forEach((section) => {
-          section.classList.remove('is-open');
-          updateCollapsibleAria(section, false);
-        });
-        expandAllBtn.textContent = 'expand all';
-      } else {
-        // Expand all
-        collapsibleSections.forEach((section) => {
-          section.classList.add('is-open');
-          updateCollapsibleAria(section, true);
-        });
-        expandAllBtn.textContent = 'collapse all';
-      }
-    });
-  }
-}
-
-function toggleCollapsibleSection(section: HTMLElement) {
-  const isOpen = section.classList.contains('is-open');
-  section.classList.toggle('is-open', !isOpen);
-  updateCollapsibleAria(section, !isOpen);
-
-  // Update expand all button text if needed
-  const expandAllBtn = document.getElementById('expandAllBtn') as HTMLButtonElement | null;
-  if (expandAllBtn) {
-    const collapsibleSections = document.querySelectorAll<HTMLElement>('[data-collapsible]');
-    const allOpen = Array.from(collapsibleSections).every((s) => s.classList.contains('is-open'));
-    expandAllBtn.textContent = allOpen ? 'collapse all' : 'expand all';
-  }
-}
-
-function updateCollapsibleAria(section: HTMLElement, isOpen: boolean) {
-  const header = section.querySelector('.collapsible-header');
-  if (header) {
-    header.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-  }
+  wireAuthorModalModule(authorModal, authorButton, authorClose);
 }
 
 // === Propagation Controls (delegating to ui/panels/propagation module) ===
