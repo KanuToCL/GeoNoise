@@ -3,7 +3,7 @@
 This document tracks architectural issues, inconsistencies, and refactoring opportunities in the GeoNoise codebase.
 
 **Last Updated:** 2026-02-06
-**Overall Health Score:** 6.5/10 (improved: state/, interactions/, ui/ modules extracted)
+**Overall Health Score:** 7.0/10 (improved: state/, interactions/, ui/, rendering/ modules extracted)
 
 ---
 
@@ -25,7 +25,7 @@ The main entry point contains too many responsibilities:
 **Proposed Split:**
 ```
 apps/web/src/
-├── main.ts                    # Entry point ONLY (~200-400 lines max) 🔲 Currently 8,566 lines
+├── main.ts                    # Entry point ONLY (~200-400 lines max) 🔲 Currently 8,092 lines
 │
 ├── entities/                  # Entity definitions and helpers
 │   ├── building.ts            # Building class ✅ Done
@@ -57,19 +57,17 @@ apps/web/src/
 │   ├── probes.ts              # drawProbes ✅ Done
 │   ├── panels.ts              # drawPanels, samples ✅ Done
 │   ├── measure.ts             # Measurement, select box ✅ Done
-│   ├── rays.ts                # Ray visualization 🔲 Todo
+│   ├── rays.ts                # Ray visualization ✅ Done
 │   └── index.ts               # Barrel exports ✅ Done
 │
 ├── interactions/              # User interaction handlers ⚠️ PARTIAL
 │   ├── hitTest.ts             # Hit testing, box selection ✅ Done
 │   ├── keyboard.ts            # Keyboard shortcuts ✅ Done
 │   ├── pointer.ts             # Mouse/touch events 🔲 Todo (~400 lines in main.ts)
-│   ├── drag/                  # Drag handling subsystem 🔲 Todo
-│   │   ├── handlers.ts        # Unified drag system 🔲 Todo
-│   │   ├── building.ts        # Building-specific drag 🔲 Todo
-│   │   ├── barrier.ts         # Barrier drag 🔲 Todo
-│   │   ├── vertex.ts          # Vertex editing drag 🔲 Todo
-│   │   └── index.ts           # 🔲 Todo
+│   ├── drag/                  # Drag handling subsystem ✅ Done
+│   │   ├── types.ts           # SceneData, DragApplyConfig ✅ Done
+│   │   ├── handlers.ts        # Unified drag apply system ✅ Done
+│   │   └── index.ts           # Barrel exports ✅ Done
 │   ├── tools/                 # Tool-specific interaction 🔲 Todo
 │   │   ├── select.ts          # Selection tool logic 🔲 Todo
 │   │   ├── building.ts        # Building drawing tool 🔲 Todo
