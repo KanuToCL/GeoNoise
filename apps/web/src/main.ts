@@ -80,6 +80,7 @@ import {
   niceDistance,
   dbToEnergy,
   energyToDb,
+  createId,
 } from './utils/index.js';
 import {
   type Point,
@@ -3744,10 +3745,6 @@ function renderSources() {
       ? `Summation: Energetic (dB) - Solo ${soloSourceId.toUpperCase()}`
       : 'Summation: Energetic (dB)';
   }
-}
-
-function createId(prefix: string, seq: number) {
-  return `${prefix}${seq}`;
 }
 
 function duplicateSource(source: Source): Source {
