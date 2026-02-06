@@ -167,6 +167,16 @@ import {
   handlePointerLeave as handlePointerLeaveModule,
 } from './interaction/pointer.js';
 
+// === Keyboard/Wheel Handlers Module ===
+import {
+  type WheelContext,
+  type WheelCallbacks,
+  type KeyboardContext,
+  type KeyboardCallbacks,
+  handleWheel as handleWheelModule,
+  handleKeyDown as handleKeyDownModule,
+} from './interaction/keyboard.js';
+
 import {
   type Point,
   type DisplayBand,
@@ -1860,7 +1870,7 @@ function getReceiverDisplayLevel(receiver: SceneResults['receivers'][number]): {
   if (displayBand !== 'overall' && receiver.Leq_spectrum) {
     return {
       level: receiver.Leq_spectrum[displayBand],
-      unit: `dB @ ${OCTAVE_BAND_LABELS[displayBand]}`,
+      unit: `dB @ ${OCTAVE_BAND_LABELS[displayBand]} Hz`,
     };
   }
 
@@ -5052,7 +5062,75 @@ function buildPointerCallbacks(): PointerCallbacks {
       if (debugY) debugY.textContent = formatMeters(worldPoint.y);
     },
 
+      deleteSelection,
+    };
+  }
+
+// =============================================================================
+// WHEEL/KEYBOARD CONTEXT AND CALLBACKS BUILDERS
+// =============================================================================
+
+function buildWheelContext(): WheelContext {
+  return {
+    canvas,
+    canvasToWorld,
+    getZoom: () => zoom,
+    setZoom: (z) => { zoom = z; },
+    getPanOffset: () => panOffset,
+    setPanOffset: (offset) => { panOffset = offset; },
+    getPixelsPerMeter: () => pixelsPerMeter,
+  };
+}
+
+function buildWheelCallbacks(): WheelCallbacks {
+  return {
+    updatePixelsPerMeter,
+    updateScaleBar,
+    requestRender,
+    isMapVisible,
+    isMapInteractive,
+    syncMapToCanvasZoom,
+    syncMapToCanvasPan,
+  };
+}
+
+function buildKeyboardContext(): KeyboardContext {
+  return {
+    getAboutOpen: () => aboutOpen,
+    getSelection: () => selection,
+    clearMeasure: () => {
+      measureStart = null;
+      measureEnd = null;
+      measureLocked = false;
+    },
+    clearBarrierDraft: () => {
+      barrierDraft = null;
+      barrierDraftAnchored = false;
+      barrierDragActive = false;
+      barrierCenterDraft = null;
+    },
+    clearBuildingDraft: () => {
+      buildingDraft = null;
+      buildingDraftAnchored = false;
+      buildingDragActive = false;
+      buildingCenterDraft = null;
+      buildingPolygonDraft = [];
+      buildingPolygonPreviewPoint = null;
+    },
+  };
+}
+
+function buildKeyboardCallbacks(): KeyboardCallbacks {
+  return {
+    closeAbout,
+    undo,
+    redo,
+    selectAll,
+    duplicateMultiSelection,
+    setSelection,
     deleteSelection,
+    setActiveTool,
+    requestRender,
   };
 }
 
@@ -5174,31 +5252,12 @@ function wirePointer() {
   window.addEventListener('mouseup', handlePointerUp);
 }
 
+// =============================================================================
+// WHEEL/KEYBOARD HANDLERS (thin wrappers delegating to module)
+// =============================================================================
+
 function handleWheel(event: WheelEvent) {
-  event.preventDefault();
-  const rect = canvas.getBoundingClientRect();
-  const canvasPoint = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-  const before = canvasToWorld(canvasPoint);
-  const direction = event.deltaY < 0 ? 1.1 : 0.9;
-  zoom = Math.min(4, Math.max(0.5, zoom * direction));
-  updatePixelsPerMeter();
-  const after = canvasToWorld(canvasPoint);
-  const panDeltaX = before.x - after.x;
-  const panDeltaY = before.y - after.y;
-  panOffset = {
-    x: panOffset.x + panDeltaX,
-    y: panOffset.y + panDeltaY,
-  };
-  updateScaleBar();
-
-  // Sync map zoom AND pan when map is visible and NOT in interactive mode
-  if (isMapVisible() && !isMapInteractive()) {
-    syncMapToCanvasZoom(pixelsPerMeter, panOffset.x, panOffset.y);
-    // Also sync the pan offset change caused by zooming around cursor
-    syncMapToCanvasPan(panDeltaX, panDeltaY, pixelsPerMeter);
-  }
-
-  requestRender();
+  handleWheelModule(event, buildWheelContext(), buildWheelCallbacks());
 }
 
 function wireWheel() {
@@ -5207,93 +5266,7 @@ function wireWheel() {
 
 function wireKeyboard() {
   window.addEventListener('keydown', (event) => {
-    if (aboutOpen && event.key === 'Escape') {
-      closeAbout();
-      return;
-    }
-
-    const activeEl = document.activeElement as HTMLElement | null;
-    const target = event.target as HTMLElement | null;
-    const isEditableTarget = (el: HTMLElement | null) => {
-      if (!el) return false;
-      const tag = el.tagName;
-      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
-    };
-    if (isEditableTarget(target) || isEditableTarget(activeEl)) {
-      return;
-    }
-
-    if ((event.metaKey || event.ctrlKey) && (event.key === 'z' || event.key === 'Z')) {
-      event.preventDefault();
-      if (event.shiftKey) {
-        redo();
-      } else {
-        undo();
-      }
-      return;
-    }
-
-    if ((event.metaKey || event.ctrlKey) && (event.key === 'a' || event.key === 'A')) {
-      event.preventDefault();
-      selectAll();
-      return;
-    }
-
-    if ((event.metaKey || event.ctrlKey) && (event.key === 'd' || event.key === 'D')) {
-      event.preventDefault();
-      if (selection.type !== 'none') {
-        duplicateMultiSelection();
-      }
-      return;
-    }
-
-    if (event.key === 'Escape') {
-      setSelection({ type: 'none' });
-      measureStart = null;
-      measureEnd = null;
-      measureLocked = false;
-      barrierDraft = null;
-      barrierDraftAnchored = false;
-      barrierDragActive = false;
-      buildingDraft = null;
-      buildingDraftAnchored = false;
-      buildingDragActive = false;
-      buildingCenterDraft = null;
-      barrierCenterDraft = null;
-      buildingPolygonDraft = [];
-      buildingPolygonPreviewPoint = null;
-      requestRender();
-    }
-    if (event.key === 'Delete' || event.key === 'Backspace') {
-      if (selection.type !== 'none') {
-        deleteSelection(selection);
-      }
-    }
-
-    if (event.key === 'v' || event.key === 'V') {
-      setActiveTool('select');
-    }
-    if (event.key === 's' || event.key === 'S') {
-      setActiveTool('add-source');
-    }
-    if (event.key === 'r' || event.key === 'R') {
-      setActiveTool('add-receiver');
-    }
-    if (event.key === 'p' || event.key === 'P') {
-      setActiveTool('add-probe');
-    }
-    if (event.key === 'b' || event.key === 'B') {
-      setActiveTool('add-barrier');
-    }
-    if (event.key === 'h' || event.key === 'H') {
-      setActiveTool('add-building');
-    }
-    if (event.key === 'g' || event.key === 'G') {
-      setActiveTool('add-panel');
-    }
-    if (event.key === 'm' || event.key === 'M') {
-      setActiveTool('measure');
-    }
+    handleKeyDownModule(event, buildKeyboardContext(), buildKeyboardCallbacks());
   });
 }
 
