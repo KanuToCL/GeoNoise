@@ -160,6 +160,15 @@ import {
   wireCollapsibleSections as wireCollapsibleSectionsModule,
 } from './ui/modals/about.js';
 
+// === Pointer Handlers Module ===
+import {
+  type PointerContext,
+  type PointerCallbacks,
+  handlePointerMove as handlePointerMoveModule,
+  handlePointerDown as handlePointerDownModule,
+  handlePointerLeave as handlePointerLeaveModule,
+} from './interaction/pointer.js';
+
 import {
   type Point,
   type DisplayBand,
@@ -4921,451 +4930,171 @@ const throttledDragMove = throttle((worldPoint: Point) => {
   applyDrag(worldPoint);
 }, DRAG_FRAME_MS);
 
-function handlePointerMove(event: MouseEvent) {
-  const rect = canvas.getBoundingClientRect();
-  const canvasPoint = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-  const worldPoint = canvasToWorld(canvasPoint);
+// =============================================================================
+// POINTER CONTEXT AND CALLBACKS BUILDERS
+// =============================================================================
 
-  if (panState) {
-    const dx = canvasPoint.x - panState.start.x;
-    const dy = canvasPoint.y - panState.start.y;
-    const newPanOffset = {
-      x: panState.origin.x + dx / pixelsPerMeter,
-      y: panState.origin.y - dy / pixelsPerMeter,
-    };
+function buildPointerContext(): PointerContext {
+  return {
+    canvas,
+    canvasToWorld,
+    worldToCanvas,
+    snapPoint,
 
-    // Calculate delta for map sync (change from previous position)
-    const deltaX = newPanOffset.x - panOffset.x;
-    const deltaY = newPanOffset.y - panOffset.y;
+    getPixelsPerMeter: () => pixelsPerMeter,
+    getPanOffset: () => panOffset,
+    getActiveTool: () => activeTool,
+    getDragState: () => dragState,
+    getPanState: () => panState,
+    getSelection: () => selection,
+    getHoverSelection: () => hoverSelection,
 
-    panOffset = newPanOffset;
+    getBarrierDrawingMode: () => barrierDrawingMode,
+    getBarrierDraft: () => barrierDraft,
+    getBarrierCenterDraft: () => barrierCenterDraft,
+    getBarrierDraftAnchored: () => barrierDraftAnchored,
+    getBarrierDragActive: () => barrierDragActive,
 
-    // Sync map pan when visible and NOT in interactive mode
-    if (isMapVisible() && !isMapInteractive()) {
-      syncMapToCanvasPan(deltaX, deltaY, pixelsPerMeter);
-    }
+    getBuildingDrawingMode: () => buildingDrawingMode,
+    getBuildingDraft: () => buildingDraft,
+    getBuildingCenterDraft: () => buildingCenterDraft,
+    getBuildingDraftAnchored: () => buildingDraftAnchored,
+    getBuildingDragActive: () => buildingDragActive,
+    getBuildingPolygonDraft: () => buildingPolygonDraft,
 
-    requestRender();
-  }
+    getMeasureStart: () => measureStart,
+    getMeasureEnd: () => measureEnd,
+    getMeasureLocked: () => measureLocked,
 
-  const { point: snappedPoint, snapped } = snapPoint(worldPoint);
-  if (snapIndicator) {
-    if (snapped) {
-      const screen = worldToCanvas(snappedPoint);
-      snapIndicator.style.display = 'block';
-      snapIndicator.style.transform = `translate(${screen.x}px, ${screen.y}px)`;
-    } else {
-      snapIndicator.style.display = 'none';
-    }
-  }
+    setPanOffset: (offset) => { panOffset = offset; },
+    setDragState: (state) => { dragState = state; },
+    setPanState: (state) => { panState = state; },
+    setSelection,
+    setHoverSelection: (sel) => { hoverSelection = sel; },
 
-  if (debugX) debugX.textContent = formatMeters(worldPoint.x);
-  if (debugY) debugY.textContent = formatMeters(worldPoint.y);
+    setBarrierDraft: (draft) => { barrierDraft = draft; },
+    setBarrierCenterDraft: (draft) => { barrierCenterDraft = draft; },
+    setBarrierDraftAnchored: (anchored) => { barrierDraftAnchored = anchored; },
+    setBarrierDragActive: (active) => { barrierDragActive = active; },
 
-  if (panState) {
-    return;
-  }
+    setBuildingDraft: (draft) => { buildingDraft = draft; },
+    setBuildingCenterDraft: (draft) => { buildingCenterDraft = draft; },
+    setBuildingDraftAnchored: (anchored) => { buildingDraftAnchored = anchored; },
+    setBuildingDragActive: (active) => { buildingDragActive = active; },
+    setBuildingPolygonPreviewPoint: (point) => { buildingPolygonPreviewPoint = point; },
+    pushBuildingPolygonDraft: (point) => { buildingPolygonDraft.push(point); },
+    popBuildingPolygonDraft: () => { buildingPolygonDraft.pop(); },
 
-  if (activeTool === 'add-barrier' && barrierDragActive) {
-    if (barrierDrawingMode === 'center' && barrierCenterDraft) {
-      barrierCenterDraft.end = snappedPoint;
-      requestRender();
-      return;
-    } else if (barrierDraft) {
-      barrierDraft.p2 = snappedPoint;
-      requestRender();
-      return;
-    }
-  }
+    setMeasureStart: (point) => { measureStart = point; },
+    setMeasureEnd: (point) => { measureEnd = point; },
+    setMeasureLocked: (locked) => { measureLocked = locked; },
 
-  // Update building draft while dragging or tracking polygon preview
-  if (activeTool === 'add-building') {
-    if (buildingDrawingMode === 'polygon' && buildingPolygonDraft.length > 0 && buildingPolygonDraft.length < 4) {
-      // Track mouse for polygon preview line
-      buildingPolygonPreviewPoint = snappedPoint;
-      requestRender();
-      return;
-    } else if (buildingDragActive) {
-      if (buildingDrawingMode === 'center' && buildingCenterDraft) {
-        buildingCenterDraft.corner = snappedPoint;
-        requestRender();
-        return;
-      } else if (buildingDraft) {
-        buildingDraft.corner2 = snappedPoint;
-        requestRender();
-        return;
+    setDragDirty: (dirty) => { dragDirty = dirty; },
+  };
+}
+
+function buildPointerCallbacks(): PointerCallbacks {
+  return {
+    requestRender,
+    applyDrag,
+    throttledDragMove,
+    hitTest,
+    hitTestPanelHandle,
+    hitTestBarrierHandle,
+    hitTestBuildingHandle,
+    sameSelection,
+
+    selectionToItems,
+    itemsToSelection,
+    isElementSelected,
+    getElementsInSelectBox,
+
+    addSourceAt,
+    addReceiverAt,
+    addProbeAt,
+    addPanelAt,
+
+    commitBarrierDraft,
+    commitBarrierCenterDraft,
+    commitBuildingDraft,
+    commitBuildingCenterDraft,
+    commitBuildingPolygonDraft,
+    isValidQuadrilateral,
+
+    getBarrierById: (id) => scene.barriers.find((b) => b.id === id) ?? null,
+    getBuildingById: (id) => scene.buildings.find((b) => b.id === id) ?? null,
+    getBarrierMidpoint,
+    getBarrierRotation,
+    getBarrierLength,
+
+    getSourceById: (id) => scene.sources.find((s) => s.id === id) ?? null,
+    getReceiverById: (id) => scene.receivers.find((r) => r.id === id) ?? null,
+    getProbeById: (id) => scene.probes.find((p) => p.id === id) ?? null,
+    getPanelById: (id) => scene.panels.find((p) => p.id === id) ?? null,
+
+    startInteractionForDrag,
+    setInteractionActive,
+    primeDragContribution,
+
+    isMapVisible,
+    isMapInteractive,
+    syncMapToCanvasPan,
+
+    updateSnapIndicator: (snapped, screenPoint) => {
+      if (snapIndicator) {
+        if (snapped) {
+          snapIndicator.style.display = 'block';
+          snapIndicator.style.transform = `translate(${screenPoint.x}px, ${screenPoint.y}px)`;
+        } else {
+          snapIndicator.style.display = 'none';
+        }
       }
-    }
-  }
+    },
+    updateDebugCoords: (worldPoint) => {
+      if (debugX) debugX.textContent = formatMeters(worldPoint.x);
+      if (debugY) debugY.textContent = formatMeters(worldPoint.y);
+    },
 
-  if (!dragState && (activeTool === 'select' || activeTool === 'delete')) {
-    const nextHover = hitTest(canvasPoint);
-    if (!sameSelection(hoverSelection, nextHover)) {
-      hoverSelection = nextHover;
-      requestRender();
-    }
-  } else if (!dragState && hoverSelection) {
-    hoverSelection = null;
-    requestRender();
-  }
+    deleteSelection,
+  };
+}
 
-  if (dragState) {
-    if (dragState.type === 'select-box') {
-      dragState.currentCanvasPoint = canvasPoint;
-      requestRender();
-    } else {
-      throttledDragMove(worldPoint);
-    }
-  }
+// =============================================================================
+// POINTER HANDLERS (thin wrappers delegating to module)
+// =============================================================================
 
-  if (activeTool === 'measure' && measureStart && !measureLocked) {
-    measureEnd = worldPoint;
-    requestRender();
-  }
+function handlePointerMove(event: MouseEvent) {
+  handlePointerMoveModule(event, buildPointerContext(), buildPointerCallbacks());
 }
 
 function handlePointerDown(event: MouseEvent) {
-  const rect = canvas.getBoundingClientRect();
-  const canvasPoint = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-  const worldPoint = canvasToWorld(canvasPoint);
-  const { point: snappedPoint } = snapPoint(worldPoint);
-  hoverSelection = null;
-
-  if (activeTool === 'add-source') {
-    addSourceAt(snappedPoint);
-    return;
-  }
-
-  if (activeTool === 'add-receiver') {
-    addReceiverAt(snappedPoint);
-    return;
-  }
-
-  if (activeTool === 'add-probe') {
-    addProbeAt(snappedPoint);
-    return;
-  }
-
-  if (activeTool === 'add-barrier') {
-    if (barrierDrawingMode === 'center') {
-      // Center-outward mode: first click sets center
-      if (!barrierCenterDraft) {
-        barrierCenterDraft = { center: snappedPoint, end: snappedPoint };
-      } else {
-        barrierCenterDraft.end = snappedPoint;
-      }
-      barrierDragActive = true;
-    } else {
-      // End-to-end mode (default): first click sets p1
-      if (!barrierDraft) {
-        barrierDraft = { p1: snappedPoint, p2: snappedPoint };
-        barrierDraftAnchored = false;
-      } else {
-        barrierDraft.p2 = snappedPoint;
-      }
-      barrierDragActive = true;
-    }
-    requestRender();
-    return;
-  }
-
-  if (activeTool === 'add-panel') {
-    addPanelAt(snappedPoint);
-    return;
-  }
-
-  if (activeTool === 'add-building') {
-    // Start or continue building draft based on drawing mode
-    if (buildingDrawingMode === 'polygon') {
-      // Polygon mode: collect 4 corners with clicks
-      buildingPolygonDraft.push(snappedPoint);
-      buildingPolygonPreviewPoint = null;
-
-      if (buildingPolygonDraft.length === 4) {
-        // All 4 corners collected, validate and commit
-        const [p0, p1, p2, p3] = buildingPolygonDraft;
-        if (isValidQuadrilateral(p0, p1, p2, p3)) {
-          commitBuildingPolygonDraft();
-        } else {
-          // Invalid shape - reset to 3 points so user can try different 4th point
-          console.warn('Invalid quadrilateral: edges cross each other');
-          buildingPolygonDraft.pop();
-        }
-      }
-      requestRender();
-      return;
-    } else if (buildingDrawingMode === 'center') {
-      // Center-outward mode: first click sets center
-      if (!buildingCenterDraft) {
-        buildingCenterDraft = { center: snappedPoint, corner: snappedPoint };
-      } else {
-        buildingCenterDraft.corner = snappedPoint;
-      }
-      buildingDragActive = true;
-    } else {
-      // Diagonal mode (default): first click sets corner
-      if (!buildingDraft) {
-        buildingDraft = { corner1: snappedPoint, corner2: snappedPoint };
-        buildingDraftAnchored = false;
-      } else {
-        buildingDraft.corner2 = snappedPoint;
-      }
-      buildingDragActive = true;
-    }
-    requestRender();
-    return;
-  }
-
-  if (activeTool === 'measure') {
-    if (!measureStart || measureLocked) {
-      measureStart = worldPoint;
-      measureEnd = worldPoint;
-      measureLocked = false;
-    } else {
-      measureEnd = worldPoint;
-      measureLocked = true;
-    }
-    requestRender();
-    return;
-  }
-
-  if (activeTool === 'select') {
-    // Check for barrier handle hits (endpoints and rotation)
-    const barrierHandle = hitTestBarrierHandle(canvasPoint);
-    if (barrierHandle) {
-      const current = selection;
-      if (current.type === 'barrier') {
-        const barrier = scene.barriers.find((item) => item.id === current.id);
-        if (barrier) {
-          dragDirty = false;
-          if (barrierHandle.type === 'rotate') {
-            const midpoint = getBarrierMidpoint(barrier);
-            const startAngle = Math.atan2(worldPoint.y - midpoint.y, worldPoint.x - midpoint.x);
-            dragState = {
-              type: 'barrier-rotate',
-              id: barrier.id,
-              startAngle,
-              startRotation: getBarrierRotation(barrier),
-              startLength: getBarrierLength(barrier),
-              startMidpoint: midpoint,
-            };
-          } else {
-            // p1 or p2 endpoint
-            dragState = {
-              type: 'barrier-endpoint',
-              id: barrier.id,
-              endpoint: barrierHandle.type,
-            };
-          }
-          startInteractionForDrag(dragState);
-          return;
-        }
-      }
-    }
-    const buildingHandle = hitTestBuildingHandle(canvasPoint);
-    if (buildingHandle) {
-      const current = selection;
-      if (current.type === 'building') {
-        const building = scene.buildings.find((item) => item.id === current.id);
-        if (building) {
-          dragDirty = false;
-          if (buildingHandle.type === 'rotate') {
-            const startAngle = Math.atan2(worldPoint.y - building.y, worldPoint.x - building.x);
-            dragState = {
-              type: 'building-rotate',
-              id: building.id,
-              startAngle,
-              startRotation: building.rotation,
-            };
-          } else {
-            dragState = { type: 'building-resize', id: building.id };
-          }
-          startInteractionForDrag(dragState);
-          return;
-        }
-      }
-    }
-    const handleHit = hitTestPanelHandle(canvasPoint);
-    if (handleHit) {
-      setSelection({ type: 'panel', id: handleHit.panelId });
-      const panel = scene.panels.find((item) => item.id === handleHit.panelId);
-      if (panel) {
-        const vertex = panel.points[handleHit.index];
-        dragState = {
-          type: 'panel-vertex',
-          id: panel.id,
-          index: handleHit.index,
-          offset: { x: worldPoint.x - vertex.x, y: worldPoint.y - vertex.y },
-        };
-        startInteractionForDrag(dragState);
-      }
-      return;
-    }
-  }
-
-  const hit = hitTest(canvasPoint);
-  if (activeTool === 'delete') {
-    if (hit) deleteSelection(hit);
-    return;
-  }
-
-  if (hit) {
-    const worldHit = canvasToWorld(canvasPoint);
-
-    // Shift+click adds/removes elements from selection
-    if (event.shiftKey && activeTool === 'select') {
-      const currentItems = selectionToItems(selection);
-      const hitType = hit.type as SelectableElementType;
-      const existingIndex = currentItems.findIndex(
-        (item) => item.elementType === hitType && item.id === hit.id
-      );
-
-      if (existingIndex >= 0) {
-        // Remove from selection if already selected
-        currentItems.splice(existingIndex, 1);
-      } else {
-        // Add to selection
-        currentItems.push({ elementType: hitType, id: hit.id });
-      }
-
-      setSelection(itemsToSelection(currentItems));
-      requestRender();
-      return;
-    }
-
-    // Check if clicking on an element that's part of multi-selection
-    // If so, start multi-move instead of resetting to single selection
-    // TODO: Fix multi-move - currently resets to single selection when clicking to drag
-    const isInMultiSelection = selection.type === 'multi' && isElementSelected(selection, hit.type, hit.id);
-    if (selection.type === 'multi' && isInMultiSelection) {
-      // Start move-multi drag - calculate offsets for all selected items
-      const offsets = new Map<string, Point>();
-      for (const item of selection.items) {
-        if (item.elementType === 'source') {
-          const source = scene.sources.find((s) => s.id === item.id);
-          if (source) offsets.set(item.id, { x: worldHit.x - source.x, y: worldHit.y - source.y });
-        } else if (item.elementType === 'receiver') {
-          const receiver = scene.receivers.find((r) => r.id === item.id);
-          if (receiver) offsets.set(item.id, { x: worldHit.x - receiver.x, y: worldHit.y - receiver.y });
-        } else if (item.elementType === 'probe') {
-          const probe = scene.probes.find((p) => p.id === item.id);
-          if (probe) offsets.set(item.id, { x: worldHit.x - probe.x, y: worldHit.y - probe.y });
-        } else if (item.elementType === 'panel') {
-          const panel = scene.panels.find((p) => p.id === item.id);
-          if (panel && panel.points[0]) offsets.set(item.id, { x: worldHit.x - panel.points[0].x, y: worldHit.y - panel.points[0].y });
-        } else if (item.elementType === 'barrier') {
-          const barrier = scene.barriers.find((b) => b.id === item.id);
-          if (barrier) offsets.set(item.id, { x: worldHit.x - barrier.p1.x, y: worldHit.y - barrier.p1.y });
-        } else if (item.elementType === 'building') {
-          const building = scene.buildings.find((b) => b.id === item.id);
-          if (building) offsets.set(item.id, { x: worldHit.x - building.x, y: worldHit.y - building.y });
-        }
-      }
-      dragState = { type: 'move-multi', offsets };
-      dragDirty = false;
-      startInteractionForDrag(dragState);
-      return;
-    }
-
-    setSelection(hit);
-    dragDirty = false;
-
-    if (hit.type === 'source') {
-      const source = scene.sources.find((item) => item.id === hit.id);
-      if (source) {
-        dragState = { type: 'source', id: source.id, offset: { x: worldHit.x - source.x, y: worldHit.y - source.y } };
-        primeDragContribution(source.id);
-      }
-    }
-    if (hit.type === 'probe') {
-      const probe = scene.probes.find((item) => item.id === hit.id);
-      if (probe) {
-        dragState = { type: 'probe', id: probe.id, offset: { x: worldHit.x - probe.x, y: worldHit.y - probe.y } };
-      }
-    }
-    if (hit.type === 'receiver') {
-      const receiver = scene.receivers.find((item) => item.id === hit.id);
-      if (receiver) {
-        dragState = { type: 'receiver', id: receiver.id, offset: { x: worldHit.x - receiver.x, y: worldHit.y - receiver.y } };
-      }
-    }
-    if (hit.type === 'panel') {
-      const panel = scene.panels.find((item) => item.id === hit.id);
-      if (panel) {
-        const first = panel.points[0];
-        dragState = { type: 'panel', id: panel.id, offset: { x: worldHit.x - first.x, y: worldHit.y - first.y } };
-      }
-    }
-    if (hit.type === 'barrier') {
-      const barrier = scene.barriers.find((item) => item.id === hit.id);
-      if (barrier) {
-        dragState = { type: 'barrier', id: barrier.id, offset: { x: worldHit.x - barrier.p1.x, y: worldHit.y - barrier.p1.y } };
-      }
-    }
-    if (hit.type === 'building') {
-      const building = scene.buildings.find((item) => item.id === hit.id);
-      if (building) {
-        dragState = { type: 'building', id: building.id, offset: { x: worldHit.x - building.x, y: worldHit.y - building.y } };
-      }
-    }
-  } else {
-    if (activeTool === 'select') {
-      if (event.ctrlKey || event.metaKey) {
-        // Ctrl/Cmd + click drag starts select box
-        dragState = {
-          type: 'select-box',
-          startCanvasPoint: canvasPoint,
-          currentCanvasPoint: canvasPoint,
-        };
-        requestRender();
-      } else {
-        setSelection({ type: 'none' });
-        panState = { start: canvasPoint, origin: { ...panOffset } };
-      }
-    } else {
-      setSelection({ type: 'none' });
-    }
-  }
-
-  if (dragState) {
-    startInteractionForDrag(dragState);
-  }
+  handlePointerDownModule(event, buildPointerContext(), buildPointerCallbacks());
 }
 
 function handlePointerLeave() {
-  if (hoverSelection) {
-    hoverSelection = null;
-    requestRender();
-  }
-  if (snapIndicator) {
-    snapIndicator.style.display = 'none';
-  }
+  handlePointerLeaveModule(buildPointerContext(), buildPointerCallbacks());
 }
 
 function handlePointerUp() {
+  // Barrier draft commit
   if (barrierDragActive) {
     if (barrierDrawingMode === 'center' && barrierCenterDraft) {
-      // Center-outward mode
       const dx = barrierCenterDraft.end.x - barrierCenterDraft.center.x;
       const dy = barrierCenterDraft.end.y - barrierCenterDraft.center.y;
       const length = Math.sqrt(dx * dx + dy * dy);
       if (length > 0.5) {
         commitBarrierCenterDraft();
       } else {
-        // Too small, cancel
         barrierCenterDraft = null;
         barrierDragActive = false;
         requestRender();
       }
       return;
     } else if (barrierDraft) {
-      // If user dragged a visible length, commit immediately; otherwise wait for a second click.
       const draftDistance = distance(barrierDraft.p1, barrierDraft.p2);
       if (barrierDraftAnchored || draftDistance > 0.5) {
         commitBarrierDraft();
       } else {
-        // First click without a meaningful drag:
-        // keep the draft around so the next click can set p2 (classic click-then-click placement).
         barrierDraftAnchored = true;
         barrierDragActive = false;
         requestRender();
@@ -5374,30 +5103,25 @@ function handlePointerUp() {
     }
   }
 
-  // Commit building draft on mouse up
+  // Building draft commit
   if (buildingDragActive) {
     if (buildingDrawingMode === 'center' && buildingCenterDraft) {
-      // Center-outward mode
       const dx = Math.abs(buildingCenterDraft.corner.x - buildingCenterDraft.center.x);
       const dy = Math.abs(buildingCenterDraft.corner.y - buildingCenterDraft.center.y);
       if (dx > 0.5 || dy > 0.5) {
         commitBuildingCenterDraft();
       } else {
-        // Too small, cancel
         buildingCenterDraft = null;
         buildingDragActive = false;
         requestRender();
       }
       return;
     } else if (buildingDraft) {
-      // Diagonal mode
       const draftWidth = Math.abs(buildingDraft.corner2.x - buildingDraft.corner1.x);
       const draftHeight = Math.abs(buildingDraft.corner2.y - buildingDraft.corner1.y);
-      // Commit if user dragged a meaningful size (at least 1m in any direction)
       if (buildingDraftAnchored || draftWidth > 1 || draftHeight > 1) {
         commitBuildingDraft();
       } else {
-        // First click without meaningful drag: wait for second click
         buildingDraftAnchored = true;
         buildingDragActive = false;
         requestRender();
@@ -5406,10 +5130,13 @@ function handlePointerUp() {
     }
   }
 
+  // End pan
   if (panState) {
     panState = null;
     return;
   }
+
+  // End select-box
   if (dragState?.type === 'select-box') {
     const selected = getElementsInSelectBox(dragState.startCanvasPoint, dragState.currentCanvasPoint);
     setSelection(itemsToSelection(selected));
@@ -5417,6 +5144,8 @@ function handlePointerUp() {
     requestRender();
     return;
   }
+
+  // End element drag with post-drag cleanup
   if (dragState) {
     const finishedDrag = dragState;
     throttledDragMove.flush();
@@ -5424,7 +5153,6 @@ function handlePointerUp() {
     const shouldRecalculateMap = shouldLiveUpdateMap(finishedDrag);
     dragState = null;
     setInteractionActive(false);
-    // Ensure a crisp final map after drag updates and clear queued low-res work.
     ctx.imageSmoothingEnabled = false;
     queuedMapResolutionPx = null;
     if (dragDirty) {
