@@ -92,7 +92,6 @@ export {
   type SampleColor,
   colorToCss,
   panelSampleRatio,
-  getSampleColor,
   drawPanel,
   drawPanels,
   drawPanelSamples,

@@ -7,6 +7,7 @@
 import type { Point, Panel } from '../entities/index.js';
 import type { CanvasTheme } from '../types/theme.js';
 import { drawPolygon, drawHandle, drawCircle } from './primitives.js';
+import { getSampleColor as getColorFromRamp, colorToCss as colorToCssUtil } from '../utils/colors.js';
 
 /** Panel vertex handle radius */
 const PANEL_HANDLE_RADIUS = 6;
@@ -114,17 +115,6 @@ export function panelSampleRatio(sample: PanelSamplePoint, min: number, max: num
 }
 
 /**
- * Get sample color from ratio (0 = low/blue, 1 = high/red)
- */
-export function getSampleColor(ratio: number): SampleColor {
-  // Simple blue-to-red gradient
-  const r = Math.round(ratio * 255);
-  const g = Math.round((1 - Math.abs(ratio - 0.5) * 2) * 128);
-  const b = Math.round((1 - ratio) * 255);
-  return { r, g, b };
-}
-
-/**
  * Draw panel sample points
  */
 export function drawPanelSamples(
@@ -140,9 +130,9 @@ export function drawPanelSamples(
 
   for (const sample of samples) {
     const ratio = panelSampleRatio(sample, minValue, maxValue);
-    const color = getSampleColor(ratio);
+    const color = getColorFromRamp(ratio);
     const pos = worldToCanvas(sample);
 
-    drawCircle(ctx, pos, 4, colorToCss(color), theme.sampleStroke, 1);
+    drawCircle(ctx, pos, 4, colorToCssUtil(color), theme.sampleStroke, 1);
   }
 }
