@@ -72,3 +72,17 @@ export {
   createSelectRow,
   createCheckboxRow,
 } from './contextPanel/index.js';
+
+// Equations
+export {
+  type EquationElements,
+  rerenderKatex,
+  updateGroundModelEquation,
+  updateSpreadingEquation,
+  updateImpedanceEquation,
+  updateMixedInterpEquation,
+  updateSideDiffractionEquation,
+  updateAtmAbsorptionEquation,
+  wireEquationCollapsibles,
+  updateAllEquations,
+} from './equations.js';
