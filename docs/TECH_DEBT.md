@@ -2,8 +2,8 @@
 
 This document tracks architectural issues, inconsistencies, and refactoring opportunities in the GeoNoise codebase.
 
-**Last Updated:** 2026-02-04
-**Overall Health Score:** 6.5/10
+**Last Updated:** 2026-02-05
+**Overall Health Score:** 5.5/10 (downgraded due to lost refactoring work)
 
 ---
 
@@ -25,29 +25,166 @@ The main entry point contains too many responsibilities:
 **Proposed Split:**
 ```
 apps/web/src/
-├── main.ts              # Entry point, initialization only
-├── entities/
-│   ├── building.ts      # Building class
-│   ├── barrier.ts       # Barrier type + helpers
-│   ├── source.ts        # Source type + helpers
-│   └── receiver.ts      # Receiver type + helpers
-├── state/
-│   ├── scene.ts         # Scene state store
-│   ├── selection.ts     # Selection state
-│   └── history.ts       # Undo/redo
-├── rendering/
-│   ├── canvas.ts        # Core canvas operations
-│   ├── buildings.ts     # Building rendering
-│   ├── noiseMap.ts      # Heatmap rendering
-│   └── controls.ts      # Handles, grips, etc.
-├── interactions/
-│   ├── dragHandlers.ts  # Unified drag system
-│   ├── keyboard.ts      # Keyboard shortcuts
-│   └── pointer.ts       # Mouse/touch events
-└── ui/
-    ├── panels.ts        # Side panel logic
-    └── modals.ts        # Modal dialogs
+├── main.ts                    # Entry point ONLY (~200-400 lines max)
+│
+├── entities/                  # Entity definitions and helpers
+│   ├── building.ts            # Building class ✅ Done
+│   ├── barrier.ts             # Barrier type + helpers ✅ Done
+│   ├── source.ts              # Source type + helpers
+│   ├── receiver.ts            # Receiver type + helpers
+│   ├── panel.ts               # Solar panel type + helpers
+│   ├── types.ts               # Shared entity types ✅ Done
+│   └── index.ts               # Barrel exports ✅ Done
+│
+├── state/                     # Application state management
+│   ├── scene.ts               # Scene data (sources, receivers, buildings, barriers)
+│   ├── selection.ts           # What's selected, multi-select state
+│   ├── history.ts             # Undo/redo stack
+│   ├── tools.ts               # Active tool, tool modes, drawing state
+│   ├── viewport.ts            # Pan, zoom, camera state
+│   └── index.ts
+│
+├── rendering/                 # Canvas rendering functions
+│   ├── canvas.ts              # Core canvas setup, context, transforms
+│   ├── buildings.ts           # drawBuildings, building shadows
+│   ├── barriers.ts            # drawBarriers
+│   ├── sources.ts             # drawSources
+│   ├── receivers.ts           # drawReceivers
+│   ├── noiseMap.ts            # Heatmap/noise grid rendering
+│   ├── grid.ts                # Background grid
+│   ├── controls.ts            # Handles, grips, rotation controls
+│   ├── rays.ts                # Ray visualization paths
+│   ├── measure.ts             # Measurement tool rendering
+│   └── index.ts
+│
+├── interactions/              # User interaction handlers
+│   ├── pointer.ts             # Mouse/touch events, hit testing
+│   ├── keyboard.ts            # Keyboard shortcuts
+│   ├── drag/                  # Drag handling subsystem
+│   │   ├── handlers.ts        # Unified drag system, DragHandler interface
+│   │   ├── building.ts        # Building-specific drag logic
+│   │   ├── barrier.ts         # Barrier drag (endpoints, translate)
+│   │   ├── vertex.ts          # Vertex editing drag
+│   │   └── index.ts
+│   ├── tools/                 # Tool-specific interaction logic
+│   │   ├── select.ts          # Selection tool logic
+│   │   ├── building.ts        # Building drawing tool
+│   │   ├── barrier.ts         # Barrier drawing tool
+│   │   ├── measure.ts         # Measure tool
+│   │   └── index.ts
+│   └── index.ts
+│
+├── ui/                        # UI wiring and components
+│   ├── panels/                # Side panels
+│   │   ├── properties.ts      # Properties panel for selected entities
+│   │   ├── layers.ts          # Layer visibility toggles
+│   │   ├── settings.ts        # Settings panel
+│   │   └── index.ts
+│   ├── modals/                # Modal dialogs
+│   │   ├── export.ts          # Export dialog
+│   │   ├── import.ts          # Import dialog
+│   │   ├── help.ts            # Help/about modal
+│   │   └── index.ts
+│   ├── toolbar.ts             # Top toolbar wiring
+│   ├── statusbar.ts           # Status bar updates
+│   └── index.ts
+│
+├── io/                        # File I/O and serialization
+│   ├── serialize.ts           # Scene to JSON
+│   ├── deserialize.ts         # JSON to scene
+│   ├── formats/               # Export format handlers
+│   │   ├── png.ts             # PNG export
+│   │   ├── pdf.ts             # PDF export
+│   │   ├── csv.ts             # CSV data export
+│   │   └── index.ts
+│   ├── import.ts              # Import handling
+│   └── index.ts
+│
+├── compute/                   # Computation orchestration
+│   ├── noiseGrid.ts           # Grid computation orchestration
+│   ├── workerPool.ts          # Web worker management and lifecycle
+│   ├── progress.ts            # Progress tracking for long computations
+│   └── index.ts
+│
+├── probeWorker/               # Acoustic probe worker modules ✅ Done
+│   ├── types.ts               # ✅ Recreated
+│   ├── geometry.ts            # ✅ Recreated
+│   ├── physics.ts             # ✅ Recreated
+│   ├── groundReflection.ts    # ✅ Recreated
+│   ├── pathTracing.ts         # ✅ Recreated
+│   └── index.ts               # ✅ Recreated
+│
+├── types/                     # Shared type definitions ✅ Done
+│   ├── ui.ts
+│   ├── theme.ts
+│   └── index.ts
+│
+├── utils/                     # Utility functions ✅ Done
+│   ├── audio.ts
+│   ├── colors.ts
+│   ├── geometry.ts
+│   ├── throttle.ts
+│   └── index.ts
+│
+├── constants.ts               # App-wide constants ✅ Done
+├── mapbox.ts                  # Mapbox core integration
+├── mapboxUI.ts                # Mapbox UI controls (~1100 lines - consider splitting)
+└── probeWorker.ts             # Worker entry point (needs refactor to use probeWorker/)
 ```
+
+**Target:** Reduce `main.ts` from ~9200 lines to ~200-400 lines (entry point only)
+
+### What main.ts Should Contain After Refactoring
+
+```typescript
+// main.ts - Entry point only (~200-400 lines)
+
+// === Imports ===
+import { initScene, getScene } from './state/scene';
+import { initHistory } from './state/history';
+import { initSelection } from './state/selection';
+import { initViewport } from './state/viewport';
+import { initCanvas, render } from './rendering';
+import { wirePointer } from './interactions/pointer';
+import { wireKeyboard } from './interactions/keyboard';
+import { wireToolbar } from './ui/toolbar';
+import { wirePanels } from './ui/panels';
+import { initMapbox } from './mapbox';
+
+// === DOM Ready ===
+document.addEventListener('DOMContentLoaded', () => {
+  // Initialize state
+  initScene();
+  initHistory();
+  initSelection();
+  initViewport();
+
+  // Initialize canvas
+  const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+  initCanvas(canvas);
+
+  // Initialize Mapbox (if enabled)
+  initMapbox();
+
+  // Wire up interactions
+  wirePointer(canvas);
+  wireKeyboard();
+
+  // Wire up UI
+  wireToolbar();
+  wirePanels();
+
+  // Initial render
+  render();
+});
+```
+
+**Key principles:**
+- main.ts only orchestrates initialization
+- All logic lives in imported modules
+- No function definitions longer than ~20 lines
+- No direct DOM manipulation beyond getting root elements
+- State accessed through module APIs, not global variables
 
 ---
 
@@ -187,20 +324,125 @@ interface Draggable {
 
 ## Refactoring Backlog
 
+### Completed ✅
+
 | Task | Priority | Effort | Status |
 |------|----------|--------|--------|
 | Extract `Building` class to own file | High | Small | ✅ Done |
+| Extract `Barrier` type to own file | High | Small | ✅ Done |
 | Extract utility functions to utils/ | High | Small | ✅ Done |
 | Extract UI types to types/ | High | Small | ✅ Done |
 | Create constants file | Low | Small | ✅ Done |
-| Extract rendering functions | High | Medium | 🔲 Todo |
-| Consolidate global state | Medium | Medium | 🔲 Todo |
-| Unify entity abstractions | Medium | Large | 🔲 Todo |
-| Extract drag handlers | Medium | Medium | 🔲 Todo |
-| Split probeWorker.ts (path collection vs level computation) | Low | Medium | 🔲 Todo |
-| Collect building diffraction paths for ray viz | Medium | Small | 🔲 Todo |
-| Fix barrier diffraction viz geometry | Low | Small | 🔲 Todo |
-| Move inline styles to CSS | Low | Small | 🔲 Todo |
+| Create probeWorker/ modules | High | Medium | ✅ Recreated |
+
+### Phase 1: State Management (Priority: High)
+
+| Task | Effort | Status | Notes |
+|------|--------|--------|-------|
+| Create `state/scene.ts` | Medium | 🔲 Todo | Sources, receivers, buildings, barriers arrays |
+| Create `state/selection.ts` | Small | 🔲 Todo | Selected entity tracking, multi-select |
+| Create `state/history.ts` | Medium | 🔲 Todo | Undo/redo stack implementation |
+| Create `state/tools.ts` | Small | 🔲 Todo | Active tool, tool modes, drawing state |
+| Create `state/viewport.ts` | Small | 🔲 Todo | Pan, zoom, camera state |
+| Create `state/index.ts` | Small | 🔲 Todo | Barrel exports |
+
+### Phase 2: Rendering (Priority: High - Largest chunk of main.ts)
+
+| Task | Effort | Status | Notes |
+|------|--------|--------|-------|
+| Create `rendering/canvas.ts` | Medium | 🔲 Todo | Canvas setup, context, transforms |
+| Create `rendering/buildings.ts` | Medium | 🔲 Todo | drawBuildings, shadows |
+| Create `rendering/barriers.ts` | Small | 🔲 Todo | drawBarriers |
+| Create `rendering/sources.ts` | Small | 🔲 Todo | drawSources |
+| Create `rendering/receivers.ts` | Small | 🔲 Todo | drawReceivers |
+| Create `rendering/noiseMap.ts` | Large | 🔲 Todo | Heatmap/noise grid rendering |
+| Create `rendering/grid.ts` | Small | 🔲 Todo | Background grid |
+| Create `rendering/controls.ts` | Medium | 🔲 Todo | Handles, grips, rotation controls |
+| Create `rendering/rays.ts` | Medium | 🔲 Todo | Ray visualization paths |
+| Create `rendering/measure.ts` | Small | 🔲 Todo | Measurement tool rendering |
+| Create `rendering/index.ts` | Small | 🔲 Todo | Barrel exports |
+
+### Phase 3: Interactions (Priority: High)
+
+| Task | Effort | Status | Notes |
+|------|--------|--------|-------|
+| Create `interactions/pointer.ts` | Large | 🔲 Todo | Mouse/touch events, hit testing |
+| Create `interactions/keyboard.ts` | Medium | 🔲 Todo | Keyboard shortcuts |
+| Create `interactions/drag/handlers.ts` | Medium | 🔲 Todo | Unified Draggable interface |
+| Create `interactions/drag/building.ts` | Medium | 🔲 Todo | Building-specific drag |
+| Create `interactions/drag/barrier.ts` | Small | 🔲 Todo | Barrier drag (endpoints, translate) |
+| Create `interactions/drag/vertex.ts` | Small | 🔲 Todo | Vertex editing drag |
+| Create `interactions/tools/select.ts` | Medium | 🔲 Todo | Selection tool logic |
+| Create `interactions/tools/building.ts` | Medium | 🔲 Todo | Building drawing tool |
+| Create `interactions/tools/barrier.ts` | Small | 🔲 Todo | Barrier drawing tool |
+| Create `interactions/tools/measure.ts` | Small | 🔲 Todo | Measure tool |
+
+### Phase 4: UI (Priority: Medium)
+
+| Task | Effort | Status | Notes |
+|------|--------|--------|-------|
+| Create `ui/panels/properties.ts` | Medium | 🔲 Todo | Properties panel |
+| Create `ui/panels/layers.ts` | Small | 🔲 Todo | Layer toggles |
+| Create `ui/panels/settings.ts` | Medium | 🔲 Todo | Settings panel |
+| Create `ui/modals/export.ts` | Medium | 🔲 Todo | Export dialog |
+| Create `ui/modals/import.ts` | Medium | 🔲 Todo | Import dialog |
+| Create `ui/modals/help.ts` | Small | 🔲 Todo | Help/about modal |
+| Create `ui/toolbar.ts` | Medium | 🔲 Todo | Top toolbar wiring |
+| Create `ui/statusbar.ts` | Small | 🔲 Todo | Status bar updates |
+
+### Phase 5: I/O (Priority: Medium)
+
+| Task | Effort | Status | Notes |
+|------|--------|--------|-------|
+| Create `io/serialize.ts` | Medium | 🔲 Todo | Scene to JSON |
+| Create `io/deserialize.ts` | Medium | 🔲 Todo | JSON to scene |
+| Create `io/formats/png.ts` | Small | 🔲 Todo | PNG export |
+| Create `io/formats/pdf.ts` | Medium | 🔲 Todo | PDF export |
+| Create `io/formats/csv.ts` | Small | 🔲 Todo | CSV data export |
+| Create `io/import.ts` | Medium | 🔲 Todo | Import handling |
+| Migrate existing `export.ts` | Small | 🔲 Todo | Move to io/formats/ |
+
+### Phase 6: Compute (Priority: Medium)
+
+| Task | Effort | Status | Notes |
+|------|--------|--------|-------|
+| Create `compute/noiseGrid.ts` | Medium | 🔲 Todo | Grid computation orchestration |
+| Create `compute/workerPool.ts` | Medium | 🔲 Todo | Web worker management |
+| Create `compute/progress.ts` | Small | 🔲 Todo | Progress tracking |
+
+### Phase 7: Entity Completion (Priority: Medium)
+
+| Task | Effort | Status | Notes |
+|------|--------|--------|-------|
+| Create `entities/source.ts` | Small | 🔲 Todo | Source type + helpers |
+| Create `entities/receiver.ts` | Small | 🔲 Todo | Receiver type + helpers |
+| Create `entities/panel.ts` | Small | 🔲 Todo | Solar panel type + helpers |
+
+### Phase 8: Cleanup (Priority: Low)
+
+| Task | Effort | Status | Notes |
+|------|--------|--------|-------|
+| Refactor `probeWorker.ts` to use probeWorker/ modules | Medium | 🔲 Todo | Import from modular files |
+| Split `mapboxUI.ts` (~1100 lines) | Medium | 🔲 Todo | Consider splitting if grows more |
+| Move inline styles to CSS | Small | 🔲 Todo | Extract from index.html |
+| Collect building diffraction paths for ray viz | Small | 🔲 Todo | See issue #8 |
+| Fix barrier diffraction viz geometry | Small | 🔲 Todo | See issue #9 |
+
+---
+
+### Extraction Order Recommendation
+
+**Recommended order to minimize merge conflicts and enable incremental testing:**
+
+1. **state/** - Foundation for everything else. Extract state first so other modules can import from it.
+2. **entities/** completion - Finish source.ts, receiver.ts, panel.ts
+3. **rendering/** - Largest single chunk, high impact on main.ts line count
+4. **interactions/** - Depends on state and entities
+5. **ui/** - Depends on state and interactions
+6. **io/** - Can be done independently
+7. **compute/** - Can be done independently
+
+**Commit strategy:** Commit after EACH file extraction, not after completing a phase.
 
 ---
 
@@ -381,22 +623,31 @@ The `rm -rf apps/web/src/probeWorker/` deleted all UNTRACKED new directories.
 4. **When debugging, isolate changes - don't nuke everything**
 5. **If you break something, STOP and ask - don't make it worse**
 
-### Recovery Status
+### Recovery Status (Updated 2026-02-05)
 
-| Item | Status |
-|------|--------|
-| `probeWorker/types.ts` | ✅ Recreated from conversation history |
-| `probeWorker/geometry.ts` | ✅ Recreated from conversation history |
-| `probeWorker/physics.ts` | ✅ Recreated from conversation history |
-| `probeWorker/groundReflection.ts` | ✅ Recreated from conversation history |
-| `probeWorker/pathTracing.ts` | ✅ Recreated from conversation history |
-| `probeWorker/index.ts` | ✅ Recreated from conversation history |
-| `probeWorker.ts` refactor to use modules | 🔲 Not yet done |
-| `main.ts` entity extractions | ❌ Lost - must be redone |
-| `entities/index.ts` exports | ❌ Lost - must be redone |
-| `modals.ts` DOM timing fix | ❌ Lost - must be redone |
-| Unknown `index.html` changes | ❌ Lost - unknown scope |
-| Unknown `style.css` changes | ❌ Lost - unknown scope |
+| Item | Status | Notes |
+|------|--------|-------|
+| `probeWorker/types.ts` | ✅ Recreated | From conversation history |
+| `probeWorker/geometry.ts` | ✅ Recreated | From conversation history |
+| `probeWorker/physics.ts` | ✅ Recreated | From conversation history |
+| `probeWorker/groundReflection.ts` | ✅ Recreated | From conversation history |
+| `probeWorker/pathTracing.ts` | ✅ Recreated | From conversation history |
+| `probeWorker/index.ts` | ✅ Recreated | From conversation history |
+| `entities/building.ts` | ✅ Exists | Was not lost |
+| `entities/barrier.ts` | ✅ Exists | Was not lost |
+| `entities/types.ts` | ✅ Exists | Was not lost |
+| `types/` directory | ✅ Exists | Was not lost |
+| `utils/` directory | ✅ Exists | Was not lost |
+| `constants.ts` | ✅ Exists | Was not lost |
+| `probeWorker.ts` refactor to use modules | 🔲 Todo | Still monolithic |
+| `state/` directory | ❌ Lost | Must be redone |
+| `rendering/` directory | ❌ Lost | Must be redone |
+| `interactions/` directory | ❌ Lost | Must be redone |
+| `ui/` directory | ❌ Lost | Must be redone |
+| `io/` directory | ❌ Lost | Must be redone |
+| `main.ts` refactoring | ❌ Lost | Still at ~9200 lines |
+
+**Estimated work to recover:** ~50+ file extractions across 8 phases
 
 ---
 
