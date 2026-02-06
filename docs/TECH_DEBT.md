@@ -348,21 +348,24 @@ interface Draggable {
 
 **Commit:** `df42938` (1,331 lines)
 
-### Phase 2: Rendering (Priority: High - Largest chunk of main.ts)
+### Phase 2: Rendering (Priority: High) ✅ COMPLETE
 
 | Task | Effort | Status | Notes |
 |------|--------|--------|-------|
-| Create `rendering/canvas.ts` | Medium | 🔲 Todo | Canvas setup, context, transforms |
-| Create `rendering/buildings.ts` | Medium | 🔲 Todo | drawBuildings, shadows |
-| Create `rendering/barriers.ts` | Small | 🔲 Todo | drawBarriers |
-| Create `rendering/sources.ts` | Small | 🔲 Todo | drawSources |
-| Create `rendering/receivers.ts` | Small | 🔲 Todo | drawReceivers |
-| Create `rendering/noiseMap.ts` | Large | 🔲 Todo | Heatmap/noise grid rendering |
-| Create `rendering/grid.ts` | Small | 🔲 Todo | Background grid |
-| Create `rendering/controls.ts` | Medium | 🔲 Todo | Handles, grips, rotation controls |
-| Create `rendering/rays.ts` | Medium | 🔲 Todo | Ray visualization paths |
-| Create `rendering/measure.ts` | Small | 🔲 Todo | Measurement tool rendering |
-| Create `rendering/index.ts` | Small | 🔲 Todo | Barrel exports |
+| Create `rendering/types.ts` | Small | ✅ Done | Render context, options types |
+| Create `rendering/primitives.ts` | Medium | ✅ Done | Lines, circles, handles, labels |
+| Create `rendering/grid.ts` | Small | ✅ Done | Background grid |
+| Create `rendering/noiseMap.ts` | Medium | ✅ Done | Heatmap rendering |
+| Create `rendering/sources.ts` | Small | ✅ Done | drawSources |
+| Create `rendering/receivers.ts` | Small | ✅ Done | drawReceivers, badges |
+| Create `rendering/barriers.ts` | Medium | ✅ Done | drawBarriers, drafts |
+| Create `rendering/buildings.ts` | Medium | ✅ Done | drawBuildings, drafts |
+| Create `rendering/probes.ts` | Small | ✅ Done | drawProbes |
+| Create `rendering/panels.ts` | Medium | ✅ Done | drawPanels, samples |
+| Create `rendering/measure.ts` | Small | ✅ Done | Measurement, select box |
+| Create `rendering/index.ts` | Small | ✅ Done | Barrel exports |
+
+**Commit:** `7d11d43` (1,582 lines)
 
 ### Phase 3: Interactions (Priority: High) ✅ PARTIAL
 
@@ -436,6 +439,30 @@ interface Draggable {
 | Move inline styles to CSS | Small | 🔲 Todo | Extract from index.html |
 | Collect building diffraction paths for ray viz | Small | 🔲 Todo | See issue #8 |
 | Fix barrier diffraction viz geometry | Small | 🔲 Todo | See issue #9 |
+
+### Phase 9: Integration (Priority: High)
+
+**Goal:** Wire new modules into main.ts and remove duplicate code
+
+| Task | Effort | Status | Notes |
+|------|--------|--------|-------|
+| Import and use `state/` in main.ts | Large | 🔲 Todo | Replace ~500 lines of state variables |
+| Import and use `interactions/` in main.ts | Medium | 🔲 Todo | Replace hit testing, keyboard |
+| Import and use `ui/` in main.ts | Medium | 🔲 Todo | Replace toolbar, modals, layers |
+| Import and use `rendering/` in main.ts | Large | 🔲 Todo | Replace ~1500 lines of draw functions |
+| Remove dead code from main.ts | Medium | 🔲 Todo | Delete replaced implementations |
+| Verify all functionality works | Large | 🔲 Todo | Full regression testing |
+
+**Current main.ts:** ~8,566 lines
+**Target main.ts:** ~400 lines (entry point only)
+**Lines extracted to modules:** ~4,200+ lines (ready to integrate)
+
+**Integration strategy:**
+1. Add imports from new modules at top of main.ts
+2. Replace function bodies with calls to module functions
+3. Remove old implementations one section at a time
+4. Test after each section is integrated
+5. Commit after each successful integration
 
 ---
 
