@@ -34,3 +34,15 @@ export {
   getToolForKey,
   createKeyboardHandler,
 } from './keyboard.js';
+
+// Drag handling
+export {
+  type SceneData,
+  type DragApplyConfig,
+  type DragApplyResult,
+  GEOMETRY_DRAG_TYPES,
+  BUILDING_MIN_SIZE,
+  applyDrag,
+  shouldLiveUpdateMap,
+  setBarrierFromMidpointAndRotation,
+} from './drag/index.js';
