@@ -13,6 +13,7 @@ export {
   isValidQuadrilateral,
   ensureCCW,
   pointInPolygon,
+  getPolygonCentroid,
 } from './geometry.js';
 
 export {

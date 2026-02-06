@@ -87,6 +87,7 @@ import {
   dbToEnergy,
   energyToDb,
   createId,
+  getPolygonCentroid,
 } from './utils/index.js';
 import {
   type Point,
@@ -5207,17 +5208,6 @@ function hitTestBuildingHandle(point: Point) {
   return null;
 }
 
-function getPolygonCentroid(points: Point[]): Point {
-  if (points.length === 0) return { x: 0, y: 0 };
-  let cx = 0,
-    cy = 0;
-  for (const p of points) {
-    cx += p.x;
-    cy += p.y;
-  }
-  return { x: cx / points.length, y: cy / points.length };
-}
-
 function getPanelCentroid(panel: Panel): Point {
   return getPolygonCentroid(panel.points);
 }
@@ -7172,9 +7162,6 @@ function buildScenePayload() {
     })),
     probes: scene.probes.map((probe) => ({ ...probe })),
     buildings: scene.buildings.map((building) => building.toData()),
-    // UI save format extension (v1 payload still; this is not the core Scene schema yet):
-    // - barriers are persisted so users can save/load screen geometry.
-    // - older files without `barriers` remain loadable (see applyLoadedScene()).
     barriers: scene.barriers.map((barrier) => ({
       ...barrier,
       p1: { ...barrier.p1 },

@@ -106,3 +106,17 @@ export function pointInPolygon(point: Point, polygon: Point[]): boolean {
   }
   return inside;
 }
+
+/**
+ * Calculate the centroid (center of mass) of a polygon
+ */
+export function getPolygonCentroid(points: Point[]): Point {
+  if (points.length === 0) return { x: 0, y: 0 };
+  let cx = 0;
+  let cy = 0;
+  for (const p of points) {
+    cx += p.x;
+    cy += p.y;
+  }
+  return { x: cx / points.length, y: cy / points.length };
+}
