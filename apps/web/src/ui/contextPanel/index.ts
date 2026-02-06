@@ -29,3 +29,11 @@ export {
   createSelectRow,
   createCheckboxRow,
 } from './fields.js';
+
+// === Properties Renderer ===
+export {
+  type PropertiesSceneData,
+  type PropertiesCallbacks,
+  createInputRow as createPropertyInputRow,
+  renderPropertiesFor,
+} from './properties.js';

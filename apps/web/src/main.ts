@@ -31,7 +31,6 @@ import {
   type Barrier,
   BARRIER_HANDLE_HIT_RADIUS,
   BARRIER_ROTATION_HANDLE_OFFSET_PX,
-  BARRIER_MIN_LENGTH,
   getBarrierMidpoint,
   getBarrierLength,
   getBarrierRotation,
@@ -142,6 +141,12 @@ import {
   wirePropagationControls as wirePropagationControlsModule,
 } from './ui/panels/propagation.js';
 
+// === Context Panel Properties Module ===
+import {
+  type PropertiesCallbacks,
+  renderPropertiesFor as renderPropertiesForModule,
+} from './ui/contextPanel/properties.js';
+
 // === Equations Module ===
 import {
   type EquationElements,
@@ -157,6 +162,11 @@ import {
   wireAuthorModal as wireAuthorModalModule,
   wireCollapsibleSections as wireCollapsibleSectionsModule,
 } from './ui/modals/about.js';
+
+// === Toolbar Module ===
+import {
+  showDrawingModeSubmenu as showDrawingModeSubmenuModule,
+} from './ui/toolbar.js';
 
 // === Pointer Handlers Module ===
 import {
@@ -2745,280 +2755,23 @@ function renderProperties() {
   renderPropertiesFor(selection, propertiesBody);
 }
 
-/** Render interactive property controls for a selection into a container */
-function renderPropertiesFor(current: Selection, container: HTMLElement) {
-  container.innerHTML = '';
-
-  if (current.type === 'none') {
-    const empty = document.createElement('div');
-    empty.className = 'properties-empty';
-    const title = document.createElement('div');
-    title.textContent = 'Select an item to edit.';
-    empty.appendChild(title);
-
-    if (scene.sources.length) {
-      const tip = document.createElement('button');
-      tip.type = 'button';
-      tip.className = 'text-button';
-      tip.textContent = `Click ${scene.sources[0].id.toUpperCase()} to edit level/height.`;
-      tip.addEventListener('click', () => setSelection({ type: 'source', id: scene.sources[0].id }));
-      empty.appendChild(tip);
-    }
-    if (scene.receivers.length) {
-      const tip = document.createElement('button');
-      tip.type = 'button';
-      tip.className = 'text-button';
-      tip.textContent = `Click ${scene.receivers[0].id.toUpperCase()} to edit height.`;
-      tip.addEventListener('click', () => setSelection({ type: 'receiver', id: scene.receivers[0].id }));
-      empty.appendChild(tip);
-    }
-    if (scene.panels.length) {
-      const tip = document.createElement('button');
-      tip.type = 'button';
-      tip.className = 'text-button';
-      tip.textContent = `Click ${scene.panels[0].id.toUpperCase()} to edit spacing.`;
-      tip.addEventListener('click', () => setSelection({ type: 'panel', id: scene.panels[0].id }));
-      empty.appendChild(tip);
-    }
-    if (scene.barriers.length) {
-      const tip = document.createElement('button');
-      tip.type = 'button';
-      tip.className = 'text-button';
-      tip.textContent = `Click ${scene.barriers[0].id.toUpperCase()} to edit height.`;
-      tip.addEventListener('click', () => setSelection({ type: 'barrier', id: scene.barriers[0].id }));
-      empty.appendChild(tip);
-    }
-    if (scene.buildings.length) {
-      const tip = document.createElement('button');
-      tip.type = 'button';
-      tip.className = 'text-button';
-      tip.textContent = `Click ${scene.buildings[0].id.toUpperCase()} to edit size.`;
-      tip.addEventListener('click', () => setSelection({ type: 'building', id: scene.buildings[0].id }));
-      empty.appendChild(tip);
-    }
-
-    container.appendChild(empty);
-    return;
-  }
-
-  if (current.type === 'multi') {
-    const counts = getSelectedCount(current);
-    const summary = document.createElement('div');
-    summary.className = 'multi-selection-summary';
-
-    const countsDiv = document.createElement('div');
-    countsDiv.className = 'multi-selection-counts';
-    const totalCount = current.items.length;
-    countsDiv.innerHTML = `<strong>${totalCount} items selected</strong>`;
-
-    const details: string[] = [];
-    if (counts.source > 0) details.push(`${counts.source} source${counts.source > 1 ? 's' : ''}`);
-    if (counts.receiver > 0) details.push(`${counts.receiver} receiver${counts.receiver > 1 ? 's' : ''}`);
-    if (counts.probe > 0) details.push(`${counts.probe} probe${counts.probe > 1 ? 's' : ''}`);
-    if (counts.panel > 0) details.push(`${counts.panel} panel${counts.panel > 1 ? 's' : ''}`);
-    if (counts.barrier > 0) details.push(`${counts.barrier} barrier${counts.barrier > 1 ? 's' : ''}`);
-    if (counts.building > 0) details.push(`${counts.building} building${counts.building > 1 ? 's' : ''}`);
-
-    if (details.length > 0) {
-      const detailsSpan = document.createElement('span');
-      detailsSpan.className = 'multi-selection-count-item';
-      detailsSpan.textContent = details.join(', ');
-      countsDiv.appendChild(detailsSpan);
-    }
-
-    summary.appendChild(countsDiv);
-
-    const actions = document.createElement('div');
-    actions.className = 'multi-selection-actions';
-
-    const duplicateBtn = document.createElement('button');
-    duplicateBtn.type = 'button';
-    duplicateBtn.className = 'ui-button multi-action-btn';
-    duplicateBtn.textContent = 'Duplicate';
-    duplicateBtn.addEventListener('click', () => {
-      duplicateMultiSelection();
-    });
-    actions.appendChild(duplicateBtn);
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className = 'ui-button multi-action-btn danger';
-    deleteBtn.textContent = 'Delete All';
-    deleteBtn.addEventListener('click', () => {
-      deleteSelection(current);
-    });
-    actions.appendChild(deleteBtn);
-
-    const deselectBtn = document.createElement('button');
-    deselectBtn.type = 'button';
-    deselectBtn.className = 'ui-button multi-action-btn secondary';
-    deselectBtn.textContent = 'Deselect';
-    deselectBtn.addEventListener('click', () => {
-      setSelection({ type: 'none' });
-    });
-    actions.appendChild(deselectBtn);
-
-    summary.appendChild(actions);
-    container.appendChild(summary);
-    return;
-  }
-
-  if (current.type === 'source') {
-    const source = scene.sources.find((item) => item.id === current.id);
-    if (!source) return;
-    container.appendChild(createInputRow('Height (m)', source.z, (value) => {
-      source.z = value;
-      pushHistory();
-      computeScene();
-      refreshPinnedContextPanels();
-    }));
-
-    // Spectrum editor section
-    const spectrumSection = document.createElement('div');
-    spectrumSection.className = 'property-section';
-    const spectrumTitle = document.createElement('div');
-    spectrumTitle.className = 'property-section-title';
-    spectrumTitle.textContent = 'Frequency Spectrum (dB Lw)';
-    spectrumSection.appendChild(spectrumTitle);
-
-    const spectrumEditor = createSpectrumEditor(
-      source,
-      () => {
-        pushHistory();
-        computeScene();
-      },
-      () => {
-        pushHistory();
-        computeScene();
-      }
-    );
-    spectrumSection.appendChild(spectrumEditor);
-    container.appendChild(spectrumSection);
-  }
-
-  if (current.type === 'receiver') {
-    const receiver = scene.receivers.find((item) => item.id === current.id);
-    if (!receiver) return;
-    container.appendChild(createInputRow('Height (m)', receiver.z, (value) => {
-      receiver.z = value;
-      pushHistory();
-      computeScene();
-      refreshPinnedContextPanels();
-    }));
-  }
-
-  if (current.type === 'panel') {
-    const panel = scene.panels.find((item) => item.id === current.id);
-    if (!panel) return;
-    container.appendChild(createInputRow('Elevation (m)', panel.elevation, (value) => {
-      panel.elevation = value;
-      pushHistory();
-      computeScene();
-      refreshPinnedContextPanels();
-    }));
-    container.appendChild(createInputRow('Spacing (m)', panel.sampling.resolution, (value) => {
-      panel.sampling.resolution = Math.max(1, value);
-      pushHistory();
-      computeScene();
-      refreshPinnedContextPanels();
-    }));
-    const hint = document.createElement('div');
-    hint.className = 'property-hint';
-    hint.textContent = 'Drag corner handles on the measure grid to reshape.';
-    container.appendChild(hint);
-  }
-
-  if (current.type === 'barrier') {
-    const barrier = scene.barriers.find((item) => item.id === current.id);
-    if (!barrier) return;
-
-    // Length control
-    const currentLength = getBarrierLength(barrier);
-    container.appendChild(createInputRow('Length (m)', currentLength, (value) => {
-      const newLength = Math.max(BARRIER_MIN_LENGTH, value);
-      const midpoint = getBarrierMidpoint(barrier);
-      const rotation = getBarrierRotation(barrier);
-      setBarrierFromMidpointAndRotation(barrier, midpoint, rotation, newLength);
-      pushHistory();
-      computeScene();
-      refreshPinnedContextPanels();
-    }));
-
-    // Wall height control
-    container.appendChild(createInputRow('Wall height (m)', barrier.height, (value) => {
-      barrier.height = Math.max(0.1, value);
-      pushHistory();
-      computeScene();
-      refreshPinnedContextPanels();
-    }));
-
-    // Rotation control (in degrees)
-    const currentRotation = (getBarrierRotation(barrier) * 180) / Math.PI;
-    container.appendChild(createInputRow('Rotation (deg)', currentRotation, (value) => {
-      const midpoint = getBarrierMidpoint(barrier);
-      const length = getBarrierLength(barrier);
-      const newRotation = (value * Math.PI) / 180;
-      setBarrierFromMidpointAndRotation(barrier, midpoint, newRotation, length);
-      pushHistory();
-      computeScene();
-      refreshPinnedContextPanels();
-    }));
-
-    const hint = document.createElement('div');
-    hint.className = 'property-hint';
-    hint.textContent = 'Drag endpoint handles to resize. Drag the lollipop to rotate.';
-    container.appendChild(hint);
-  }
-
-  if (current.type === 'building') {
-    const building = scene.buildings.find((item) => item.id === current.id);
-    if (!building) return;
-    container.appendChild(createInputRow('Width (m)', building.width, (value) => {
-      building.width = Math.max(BUILDING_MIN_SIZE, value);
-      pushHistory();
-      computeScene();
-      refreshPinnedContextPanels();
-    }));
-    container.appendChild(createInputRow('Depth (m)', building.height, (value) => {
-      building.height = Math.max(BUILDING_MIN_SIZE, value);
-      pushHistory();
-      computeScene();
-      refreshPinnedContextPanels();
-    }));
-    container.appendChild(createInputRow('Height (m)', building.z_height, (value) => {
-      building.z_height = Math.max(0.1, value);
-      pushHistory();
-      computeScene();
-      refreshPinnedContextPanels();
-    }));
-    container.appendChild(createInputRow('Rotation (deg)', (building.rotation * 180) / Math.PI, (value) => {
-      building.rotation = (value * Math.PI) / 180;
-      pushHistory();
-      computeScene();
-      refreshPinnedContextPanels();
-    }));
-    const hint = document.createElement('div');
-    hint.className = 'property-hint';
-    hint.textContent = 'Drag corner handles to resize. Drag the lollipop to rotate.';
-    container.appendChild(hint);
-  }
+/** Build properties callbacks for delegation to module */
+function buildPropertiesCallbacks(): PropertiesCallbacks {
+  return {
+    pushHistory,
+    computeScene,
+    refreshPinnedContextPanels,
+    setSelection,
+    duplicateMultiSelection,
+    deleteSelection,
+    getSelectedCount,
+    createSpectrumEditor,
+  };
 }
 
-function createInputRow(label: string, value: number, onChange: (value: number) => void, tooltipText?: string) {
-  const row = document.createElement('div');
-  row.className = 'property-row';
-  const name = createFieldLabel(label, tooltipText);
-  const input = document.createElement('input');
-  input.type = 'number';
-  input.classList.add('ui-inset');
-  input.value = value.toString();
-  input.addEventListener('change', () => {
-    const next = Number(input.value);
-    if (Number.isFinite(next)) onChange(next);
-  });
-  row.appendChild(name);
-  row.appendChild(input);
-  return row;
+/** Render interactive property controls for a selection into a container */
+function renderPropertiesFor(current: Selection, container: HTMLElement) {
+  renderPropertiesForModule(current, container, scene, buildPropertiesCallbacks());
 }
 
 function setComputeChip(label: string, state: 'ready' | 'busy' | 'warning' | 'error') {
@@ -3534,106 +3287,17 @@ function downloadCsv() {
   URL.revokeObjectURL(url);
 }
 
-// Drawing mode submenu state
-let drawingModeSubmenu: HTMLElement | null = null;
-
+// Drawing mode submenu - thin wrapper around ui/toolbar module
 function showDrawingModeSubmenu(tool: 'add-building' | 'add-barrier', button: HTMLElement) {
-  // Hide any existing submenu first
-  hideDrawingModeSubmenu();
-
-  // Create submenu element
-  const submenu = document.createElement('div');
-  submenu.className = 'drawing-mode-submenu';
-  submenu.setAttribute('role', 'menu');
-
   const isBuilding = tool === 'add-building';
   const currentMode = isBuilding ? buildingDrawingMode : barrierDrawingMode;
-
-  const modes = isBuilding
-    ? [
-        { id: 'diagonal', label: 'Diagonal Drag', desc: 'Click corner, drag to opposite' },
-        { id: 'center', label: 'Center Outward', desc: 'Click center, drag to corner' },
-        { id: 'polygon', label: '4-Corner Polygon', desc: 'Click 4 corners to create shape' },
-      ]
-    : [
-        { id: 'end-to-end', label: 'End-to-End', desc: 'Click start, click/drag to end' },
-        { id: 'center', label: 'Center Outward', desc: 'Click center, drag to expand both ends' },
-      ];
-
-  const title = document.createElement('div');
-  title.className = 'drawing-mode-submenu-title';
-  title.textContent = isBuilding ? 'Building Drawing Mode' : 'Barrier Drawing Mode';
-  submenu.appendChild(title);
-
-  for (const mode of modes) {
-    const option = document.createElement('button');
-    option.className = 'drawing-mode-option';
-    option.setAttribute('role', 'menuitemradio');
-    option.setAttribute('aria-checked', mode.id === currentMode ? 'true' : 'false');
-    if (mode.id === currentMode) {
-      option.classList.add('is-selected');
+  showDrawingModeSubmenuModule(tool, button, currentMode, (mode) => {
+    if (isBuilding) {
+      buildingDrawingMode = mode as BuildingDrawingMode;
+    } else {
+      barrierDrawingMode = mode as BarrierDrawingMode;
     }
-
-    const radio = document.createElement('span');
-    radio.className = 'drawing-mode-radio';
-    radio.textContent = mode.id === currentMode ? '●' : '○';
-
-    const labelWrap = document.createElement('span');
-    labelWrap.className = 'drawing-mode-label-wrap';
-
-    const label = document.createElement('span');
-    label.className = 'drawing-mode-label';
-    label.textContent = mode.label;
-
-    const desc = document.createElement('span');
-    desc.className = 'drawing-mode-desc';
-    desc.textContent = mode.desc;
-
-    labelWrap.appendChild(label);
-    labelWrap.appendChild(desc);
-    option.appendChild(radio);
-    option.appendChild(labelWrap);
-
-    option.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (isBuilding) {
-        buildingDrawingMode = mode.id as BuildingDrawingMode;
-      } else {
-        barrierDrawingMode = mode.id as BarrierDrawingMode;
-      }
-      hideDrawingModeSubmenu();
-    });
-
-    submenu.appendChild(option);
-  }
-
-  // Position submenu above the button
-  const buttonRect = button.getBoundingClientRect();
-  submenu.style.position = 'fixed';
-  submenu.style.left = `${buttonRect.left + buttonRect.width / 2}px`;
-  submenu.style.bottom = `${window.innerHeight - buttonRect.top + 8}px`;
-
-  document.body.appendChild(submenu);
-  drawingModeSubmenu = submenu;
-
-  // Close on click outside
-  const closeHandler = (e: MouseEvent) => {
-    if (!submenu.contains(e.target as Node)) {
-      hideDrawingModeSubmenu();
-      document.removeEventListener('click', closeHandler);
-    }
-  };
-  // Delay adding the listener so the current click doesn't trigger it
-  requestAnimationFrame(() => {
-    document.addEventListener('click', closeHandler);
   });
-}
-
-function hideDrawingModeSubmenu() {
-  if (drawingModeSubmenu) {
-    drawingModeSubmenu.remove();
-    drawingModeSubmenu = null;
-  }
 }
 
 function wireTools() {
