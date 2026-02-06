@@ -153,6 +153,7 @@ import {
   itemsToSelection,
   getSelectedCount,
   selectionTypeLabel,
+  toolLabel,
 } from './state/index.js';
 
 const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
@@ -1047,29 +1048,6 @@ function renderPanelStatsFor(panelId: string, container: HTMLElement) {
     row.className = 'stat-row';
     row.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
     container.appendChild(row);
-  }
-}
-
-function toolLabel(tool: Tool) {
-  switch (tool) {
-    case 'add-panel':
-      return 'Add Measure Grid';
-    case 'add-barrier':
-      return 'Add Barrier';
-    case 'add-building':
-      return 'Add Building';
-    case 'add-source':
-      return 'Add Source';
-    case 'add-receiver':
-      return 'Add Receiver';
-    case 'add-probe':
-      return 'Add Probe';
-    case 'measure':
-      return 'Measure';
-    case 'delete':
-      return 'Delete';
-    default:
-      return 'Select';
   }
 }
 

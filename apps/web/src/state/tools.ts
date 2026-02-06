@@ -332,3 +332,29 @@ export function isDrawing(): boolean {
     (measureStart !== null && !measureLocked)
   );
 }
+
+/**
+ * Get a display label for a tool
+ */
+export function toolLabel(tool: Tool): string {
+  switch (tool) {
+    case 'add-panel':
+      return 'Add Measure Grid';
+    case 'add-barrier':
+      return 'Add Barrier';
+    case 'add-building':
+      return 'Add Building';
+    case 'add-source':
+      return 'Add Source';
+    case 'add-receiver':
+      return 'Add Receiver';
+    case 'add-probe':
+      return 'Add Probe';
+    case 'measure':
+      return 'Measure';
+    case 'delete':
+      return 'Delete';
+    default:
+      return 'Select';
+  }
+}

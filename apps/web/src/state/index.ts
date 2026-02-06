@@ -154,6 +154,7 @@ export {
   clearBuildingDraft,
   clearAllDrafts,
   isDrawing,
+  toolLabel,
 } from './tools.js';
 
 // Viewport state
