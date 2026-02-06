@@ -72,6 +72,12 @@ export {
   isSelected,
   hasSelection,
   getSingleSelectedId,
+  // Pure selection utilities
+  isElementSelected,
+  selectionToItems,
+  itemsToSelection,
+  getSelectedCount,
+  selectionTypeLabel,
 } from './selection.js';
 
 // History state

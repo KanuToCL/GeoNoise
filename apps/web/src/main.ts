@@ -146,6 +146,13 @@ import {
   buildBandedLegendLabels,
 } from './compute/index.js';
 import { shouldLiveUpdateMap } from './interactions/index.js';
+import {
+  isElementSelected,
+  selectionToItems,
+  itemsToSelection,
+  getSelectedCount,
+  selectionTypeLabel,
+} from './state/index.js';
 
 const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
 const debugX = document.querySelector('#debug-x') as HTMLSpanElement | null;
@@ -1040,16 +1047,6 @@ function renderPanelStatsFor(panelId: string, container: HTMLElement) {
     row.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
     container.appendChild(row);
   }
-}
-
-function selectionTypeLabel(type: Selection['type']) {
-  if (type === 'panel') return 'Measure grid';
-  if (type === 'source') return 'Source';
-  if (type === 'probe') return 'Probe';
-  if (type === 'receiver') return 'Receiver';
-  if (type === 'barrier') return 'Barrier';
-  if (type === 'building') return 'Building';
-  return 'None';
 }
 
 function toolLabel(tool: Tool) {
@@ -5208,45 +5205,6 @@ function hitTestBuildingHandle(point: Point) {
     return { type: 'rotate' as const };
   }
   return null;
-}
-
-// Multi-selection helper functions
-function isElementSelected(sel: Selection, elementType: string, id: string): boolean {
-  if (sel.type === 'multi') {
-    return sel.items.some((item) => item.elementType === elementType && item.id === id);
-  }
-  return sel.type === elementType && 'id' in sel && sel.id === id;
-}
-
-function selectionToItems(sel: Selection): SelectionItem[] {
-  if (sel.type === 'none') return [];
-  if (sel.type === 'multi') return [...sel.items];
-  return [{ elementType: sel.type as SelectableElementType, id: sel.id }];
-}
-
-function itemsToSelection(items: SelectionItem[]): Selection {
-  if (items.length === 0) return { type: 'none' };
-  if (items.length === 1) {
-    const item = items[0];
-    return { type: item.elementType, id: item.id } as Selection;
-  }
-  return { type: 'multi', items };
-}
-
-function getSelectedCount(sel: Selection): Record<SelectableElementType, number> {
-  const counts: Record<SelectableElementType, number> = {
-    source: 0,
-    receiver: 0,
-    probe: 0,
-    panel: 0,
-    barrier: 0,
-    building: 0,
-  };
-  const items = selectionToItems(sel);
-  for (const item of items) {
-    counts[item.elementType]++;
-  }
-  return counts;
 }
 
 function getPolygonCentroid(points: Point[]): Point {

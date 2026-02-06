@@ -5,7 +5,7 @@
  * and pinned inspector panels.
  */
 
-import type { Selection } from '../types/index.js';
+import type { Selection, SelectionItem, SelectableElementType } from '../types/index.js';
 import { INSPECTOR_MAX_ZINDEX } from '../constants.js';
 
 // =============================================================================
@@ -204,4 +204,79 @@ export function getSingleSelectedId(): string | null {
     return null;
   }
   return selection.id;
+}
+
+// =============================================================================
+// PURE SELECTION UTILITIES
+// =============================================================================
+// These functions operate on Selection objects without accessing module state.
+// They are useful for both main.ts operations and external consumers.
+
+/**
+ * Check if an element is selected (pure function version)
+ * Unlike isSelected(), this takes the selection as a parameter
+ */
+export function isElementSelected(
+  sel: Selection,
+  elementType: string,
+  id: string
+): boolean {
+  if (sel.type === 'none') return false;
+  if (sel.type === 'multi') {
+    return sel.items.some((item) => item.elementType === elementType && item.id === id);
+  }
+  return sel.type === elementType && 'id' in sel && sel.id === id;
+}
+
+/**
+ * Convert a Selection to an array of SelectionItems
+ */
+export function selectionToItems(sel: Selection): SelectionItem[] {
+  if (sel.type === 'none') return [];
+  if (sel.type === 'multi') return [...sel.items];
+  return [{ elementType: sel.type as SelectableElementType, id: sel.id }];
+}
+
+/**
+ * Convert an array of SelectionItems back to a Selection
+ */
+export function itemsToSelection(items: SelectionItem[]): Selection {
+  if (items.length === 0) return { type: 'none' };
+  if (items.length === 1) {
+    const item = items[0];
+    return { type: item.elementType, id: item.id } as Selection;
+  }
+  return { type: 'multi', items };
+}
+
+/**
+ * Get counts of each element type in the selection
+ */
+export function getSelectedCount(sel: Selection): Record<SelectableElementType, number> {
+  const counts: Record<SelectableElementType, number> = {
+    source: 0,
+    receiver: 0,
+    probe: 0,
+    panel: 0,
+    barrier: 0,
+    building: 0,
+  };
+  const items = selectionToItems(sel);
+  for (const item of items) {
+    counts[item.elementType]++;
+  }
+  return counts;
+}
+
+/**
+ * Get a display label for selection type
+ */
+export function selectionTypeLabel(type: Selection['type']): string {
+  if (type === 'panel') return 'Measure grid';
+  if (type === 'source') return 'Source';
+  if (type === 'probe') return 'Probe';
+  if (type === 'receiver') return 'Receiver';
+  if (type === 'barrier') return 'Barrier';
+  if (type === 'building') return 'Building';
+  return 'None';
 }
