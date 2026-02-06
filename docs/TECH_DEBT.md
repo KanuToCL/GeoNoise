@@ -25,7 +25,7 @@ The main entry point contains too many responsibilities:
 **Proposed Split:**
 ```
 apps/web/src/
-├── main.ts                    # Entry point ONLY (~200-400 lines max) 🔲 Currently 8,092 lines
+├── main.ts                    # Entry point ONLY (~200-400 lines max) 🔲 Currently 8,072 lines
 │
 ├── entities/                  # Entity definitions and helpers
 │   ├── building.ts            # Building class ✅ Done
@@ -68,12 +68,12 @@ apps/web/src/
 │   │   ├── types.ts           # SceneData, DragApplyConfig ✅ Done
 │   │   ├── handlers.ts        # Unified drag apply system ✅ Done
 │   │   └── index.ts           # Barrel exports ✅ Done
-│   ├── tools/                 # Tool-specific interaction 🔲 Todo
+│   ├── tools/                 # Tool-specific interaction ⚠️ PARTIAL
 │   │   ├── select.ts          # Selection tool logic 🔲 Todo
 │   │   ├── building.ts        # Building drawing tool 🔲 Todo
 │   │   ├── barrier.ts         # Barrier drawing tool 🔲 Todo
-│   │   ├── measure.ts         # Measure tool 🔲 Todo
-│   │   └── index.ts           # 🔲 Todo
+│   │   ├── measure.ts         # Measure tool state ✅ Done
+│   │   └── index.ts           # Barrel exports ✅ Done
 │   └── index.ts               # Barrel exports ✅ Done
 │
 ├── ui/                        # UI wiring and components ⚠️ PARTIAL
@@ -81,12 +81,12 @@ apps/web/src/
 │   │   ├── properties.ts      # Properties panel 🔲 Todo (~300 lines in main.ts)
 │   │   ├── layers.ts          # Layer toggles ✅ Done
 │   │   ├── settings.ts        # Settings panel 🔲 Todo (~200 lines in main.ts)
-│   │   └── index.ts           # 🔲 Todo
+│   │   └── index.ts           # Barrel exports ✅ Done
 │   ├── modals/                # Modal dialogs
 │   │   ├── about.ts           # About/help modal ✅ Done
 │   │   ├── export.ts          # Export dialog 🔲 Todo
 │   │   ├── import.ts          # Import dialog 🔲 Todo
-│   │   └── index.ts           # 🔲 Todo
+│   │   └── index.ts           # Barrel exports ✅ Done
 │   ├── toolbar.ts             # Tool grid, dock ✅ Done
 │   ├── statusbar.ts           # Status bar updates 🔲 Todo
 │   └── index.ts               # Barrel exports ✅ Done
