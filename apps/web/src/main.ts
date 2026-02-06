@@ -48,6 +48,7 @@ import {
   duplicateProbe as duplicateProbeEntity,
   duplicateBarrier as duplicateBarrierEntity,
   duplicateBuilding as duplicateBuildingEntity,
+  getPanelCenter,
 } from './entities/index.js';
 
 // KaTeX auto-render function (loaded from CDN)
@@ -87,7 +88,6 @@ import {
   dbToEnergy,
   energyToDb,
   createId,
-  getPolygonCentroid,
 } from './utils/index.js';
 import {
   type Point,
@@ -5181,10 +5181,6 @@ function hitTestBuildingHandle(point: Point) {
   return null;
 }
 
-function getPanelCentroid(panel: Panel): Point {
-  return getPolygonCentroid(panel.points);
-}
-
 function getElementsInSelectBox(startCanvas: Point, endCanvas: Point): SelectionItem[] {
   const items: SelectionItem[] = [];
 
@@ -5218,7 +5214,7 @@ function getElementsInSelectBox(startCanvas: Point, endCanvas: Point): Selection
   }
 
   for (const panel of scene.panels) {
-    const centroid = getPanelCentroid(panel);
+    const centroid = getPanelCenter(panel);
     const canvasPoint = worldToCanvas(centroid);
     if (isInBox(canvasPoint)) {
       items.push({ elementType: 'panel', id: panel.id });
