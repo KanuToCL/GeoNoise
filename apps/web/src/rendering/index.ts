@@ -104,3 +104,15 @@ export {
   drawMeasurement,
   drawSelectBox,
 } from './measure.js';
+
+// Rays (acoustic path visualization)
+export {
+  type Point2D,
+  type PathType,
+  type TracedPath,
+  PATH_COLORS,
+  PATH_DASH_PATTERNS,
+  drawTracedRays,
+  getPathTypeLabel,
+  getPathTypeColor,
+} from './rays.js';

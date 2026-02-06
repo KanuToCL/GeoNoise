@@ -27,15 +27,11 @@ import {
   Building,
   type BuildingData,
   BUILDING_MIN_SIZE,
-  BUILDING_HANDLE_RADIUS,
   BUILDING_HANDLE_HIT_RADIUS,
   BUILDING_ROTATION_HANDLE_OFFSET_PX,
-  BUILDING_ROTATION_HANDLE_RADIUS,
   type Barrier,
-  BARRIER_HANDLE_RADIUS,
   BARRIER_HANDLE_HIT_RADIUS,
   BARRIER_ROTATION_HANDLE_OFFSET_PX,
-  BARRIER_ROTATION_HANDLE_RADIUS,
   BARRIER_MIN_LENGTH,
   getBarrierMidpoint,
   getBarrierLength,
@@ -118,6 +114,24 @@ import {
   INSPECTOR_MAX_ZINDEX,
   CANVAS_HELP_KEY,
 } from './constants.js';
+import {
+  drawGrid as drawGridModule,
+  drawNoiseMap as drawNoiseMapModule,
+  drawSources as drawSourcesModule,
+  drawReceivers as drawReceiversModule,
+  drawReceiverBadges as drawReceiverBadgesModule,
+  drawProbes as drawProbesModule,
+  drawPanels as drawPanelsModule,
+  drawPanelSamples as drawPanelSamplesModule,
+  drawBarriers as drawBarriersModule,
+  drawBarrierDraft,
+  drawBarrierCenterDraft,
+  drawBuildings as drawBuildingsModule,
+  drawBuildingDraft,
+  drawBuildingCenterDraft,
+  drawMeasurement as drawMeasurementModule,
+  drawSelectBox as drawSelectBoxModule,
+} from './rendering/index.js';
 
 const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
 const debugX = document.querySelector('#debug-x') as HTMLSpanElement | null;
@@ -914,12 +928,6 @@ function buildNoiseMapTexture(grid: ComputeGridResponse['result'], range: MapRan
 
   mapCtx.putImageData(image, 0, 0);
   return canvas;
-}
-
-function panelSampleRatio(sample: { LAeq: number }, min: number, max: number) {
-  const span = max - min;
-  if (span <= 0) return 0;
-  return (sample.LAeq - min) / span;
 }
 
 function panelSamplesToEnergy(samples: PanelResult['samples']) {
@@ -5874,262 +5882,56 @@ function addProbeAt(point: Point) {
 
 function drawGrid() {
   const rect = canvas.getBoundingClientRect();
-  const stepMeters = 20;
-  const stepPixels = stepMeters * pixelsPerMeter;
-
-  ctx.strokeStyle = canvasTheme.gridLine;
-  ctx.lineWidth = 1;
-
-  for (let x = rect.width / 2 % stepPixels; x <= rect.width; x += stepPixels) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, rect.height);
-    ctx.stroke();
-  }
-
-  for (let y = rect.height / 2 % stepPixels; y <= rect.height; y += stepPixels) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(rect.width, y);
-    ctx.stroke();
-  }
+  drawGridModule(ctx, rect.width, rect.height, pixelsPerMeter, canvasTheme);
 }
 
 function drawNoiseMap() {
-  // Draw the precomputed heatmap texture scaled to its world-space bounds.
-  // This is the critical step: the map is not drawn at native pixel size; it is stretched
-  // to cover (minX,minY)-(maxX,maxY) in world coordinates.
   if (!noiseMap) return;
-  const topLeft = worldToCanvas({ x: noiseMap.bounds.minX, y: noiseMap.bounds.maxY });
-  const bottomRight = worldToCanvas({ x: noiseMap.bounds.maxX, y: noiseMap.bounds.minY });
-  const width = bottomRight.x - topLeft.x;
-  const height = bottomRight.y - topLeft.y;
-  if (width <= 0 || height <= 0) return;
-
-  ctx.save();
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(noiseMap.texture, topLeft.x, topLeft.y, width, height);
-  ctx.restore();
+  drawNoiseMapModule(ctx, noiseMap, worldToCanvas);
 }
 
 function drawSelectBox() {
   if (!dragState || dragState.type !== 'select-box') return;
-  const { startCanvasPoint, currentCanvasPoint } = dragState;
-
-  const x = Math.min(startCanvasPoint.x, currentCanvasPoint.x);
-  const y = Math.min(startCanvasPoint.y, currentCanvasPoint.y);
-  const w = Math.abs(currentCanvasPoint.x - startCanvasPoint.x);
-  const h = Math.abs(currentCanvasPoint.y - startCanvasPoint.y);
-
-  ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
-  ctx.fillRect(x, y, w, h);
-
-  ctx.strokeStyle = 'rgba(59, 130, 246, 0.6)';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([4, 4]);
-  ctx.strokeRect(x, y, w, h);
-  ctx.setLineDash([]);
+  drawSelectBoxModule(ctx, dragState.startCanvasPoint, dragState.currentCanvasPoint);
 }
 
 function drawMeasurement() {
   if (!measureStart || !measureEnd) return;
-  const start = worldToCanvas(measureStart);
-  const end = worldToCanvas(measureEnd);
-  const dist = distance(measureStart, measureEnd);
-
-  ctx.strokeStyle = canvasTheme.measureLine;
-  ctx.lineWidth = 2;
-  ctx.setLineDash([6, 6]);
-  ctx.beginPath();
-  ctx.moveTo(start.x, start.y);
-  ctx.lineTo(end.x, end.y);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  const label = `${formatMeters(dist)} m`;
-  const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
-  ctx.fillStyle = canvasTheme.measureText;
-  ctx.font = '12px "Work Sans", sans-serif';
-  ctx.fillText(label, mid.x + 6, mid.y - 6);
+  drawMeasurementModule(ctx, measureStart, measureEnd, worldToCanvas, canvasTheme, formatMeters);
 }
 
 function drawPanelSamples(panelResult: PanelResult) {
   if (!layers.panels) return;
-  const min = panelResult.LAeq_min;
-  const max = panelResult.LAeq_max;
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = canvasTheme.sampleStroke;
-  for (const sample of panelResult.samples) {
-    const ratio = panelSampleRatio(sample, min, max);
-    const color = getSampleColor(ratio);
-    ctx.fillStyle = colorToCss(color);
-    const pos = worldToCanvas(sample);
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  }
+  drawPanelSamplesModule(
+    ctx,
+    panelResult.samples,
+    panelResult.LAeq_min,
+    panelResult.LAeq_max,
+    worldToCanvas,
+    canvasTheme
+  );
 }
 
 function drawPanels() {
-  ctx.strokeStyle = canvasTheme.panelStroke;
-  ctx.fillStyle = canvasTheme.panelFill;
-  ctx.lineWidth = 2;
-
-  for (const panel of scene.panels) {
-    if (panel.points.length < 3) continue;
-    const first = worldToCanvas(panel.points[0]);
-    ctx.beginPath();
-    ctx.moveTo(first.x, first.y);
-    for (const pt of panel.points.slice(1)) {
-      const p = worldToCanvas(pt);
-      ctx.lineTo(p.x, p.y);
-    }
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    if (isElementSelected(selection, 'panel', panel.id)) {
-      ctx.strokeStyle = canvasTheme.selectionHalo;
-      ctx.lineWidth = 10;
-      ctx.stroke();
-      ctx.strokeStyle = canvasTheme.panelSelected;
-      ctx.lineWidth = 3;
-      ctx.stroke();
-      ctx.strokeStyle = canvasTheme.panelStroke;
-      ctx.lineWidth = 2;
-
-      ctx.fillStyle = canvasTheme.panelHandleFill;
-      ctx.strokeStyle = canvasTheme.panelHandleStroke;
-      ctx.lineWidth = 2;
-      for (const point of panel.points) {
-        const handle = worldToCanvas(point);
-        ctx.beginPath();
-        ctx.arc(handle.x, handle.y, 6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      }
-    }
-  }
+  drawPanelsModule(
+    ctx,
+    scene.panels,
+    worldToCanvas,
+    canvasTheme,
+    (id) => isElementSelected(selection, 'panel', id)
+  );
 }
 
 function drawBuildings() {
-  ctx.lineWidth = 2;
-  for (const building of scene.buildings) {
-    const vertices = building.getVertices();
-    if (vertices.length < 3) continue;
-    const first = worldToCanvas(vertices[0]);
-    ctx.beginPath();
-    ctx.moveTo(first.x, first.y);
-    for (const vertex of vertices.slice(1)) {
-      const point = worldToCanvas(vertex);
-      ctx.lineTo(point.x, point.y);
-    }
-    ctx.closePath();
-    ctx.fillStyle = building.color;
-    ctx.strokeStyle = canvasTheme.panelStroke;
-    ctx.fill();
-    ctx.stroke();
+  // Draw all buildings using the module
+  drawBuildingsModule(ctx, scene.buildings, worldToCanvas, canvasTheme, pixelsPerMeter);
 
-    const handleOffset = BUILDING_ROTATION_HANDLE_OFFSET_PX / pixelsPerMeter;
-    building.renderControls(ctx, worldToCanvas, {
-      stroke: canvasTheme.panelSelected,
-      lineWidth: 2,
-      dash: [6, 6],
-      handleFill: '#ffffff',
-      handleStroke: canvasTheme.panelStroke,
-      handleRadius: BUILDING_HANDLE_RADIUS,
-      rotationHandleOffset: handleOffset,
-      rotationHandleRadius: BUILDING_ROTATION_HANDLE_RADIUS,
-      rotationHandleStroke: canvasTheme.panelStroke,
-    });
-  }
-
-  // Draw building center draft preview with dimensions
+  // Draw building center draft preview
   if (buildingCenterDraft) {
-    // Calculate rectangle from center + corner (mirrored)
-    const dx = Math.abs(buildingCenterDraft.corner.x - buildingCenterDraft.center.x);
-    const dy = Math.abs(buildingCenterDraft.corner.y - buildingCenterDraft.center.y);
-
-    const left = buildingCenterDraft.center.x - dx;
-    const right = buildingCenterDraft.center.x + dx;
-    const top = buildingCenterDraft.center.y - dy;
-    const bottom = buildingCenterDraft.center.y + dy;
-
-    const c1 = worldToCanvas({ x: left, y: top });
-    const c2 = worldToCanvas({ x: right, y: bottom });
-
-    // Calculate rectangle bounds on canvas
-    const canvasLeft = Math.min(c1.x, c2.x);
-    const canvasRight = Math.max(c1.x, c2.x);
-    const canvasTop = Math.min(c1.y, c2.y);
-    const canvasBottom = Math.max(c1.y, c2.y);
-    const rectWidth = canvasRight - canvasLeft;
-    const rectHeight = canvasBottom - canvasTop;
-
-    // Draw dashed rectangle outline
-    ctx.strokeStyle = canvasTheme.barrierStroke;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 6]);
-    ctx.strokeRect(canvasLeft, canvasTop, rectWidth, rectHeight);
-    ctx.setLineDash([]);
-
-    // Draw center point indicator
-    const center = worldToCanvas(buildingCenterDraft.center);
-    ctx.beginPath();
-    ctx.arc(center.x, center.y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 136, 0, 0.8)';
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Calculate world dimensions
-    const worldWidth = dx * 2;
-    const worldHeight = dy * 2;
-    const worldArea = worldWidth * worldHeight;
-
-    // Draw dimension labels if size is meaningful
-    if (worldWidth > 0.5 || worldHeight > 0.5) {
-      const centerX = (canvasLeft + canvasRight) / 2;
-      const centerY = (canvasTop + canvasBottom) / 2;
-
-      // Background for dimension text
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.font = '12px "Work Sans", monospace';
-
-      const widthText = `W: ${worldWidth.toFixed(1)}m`;
-      const heightText = `H: ${worldHeight.toFixed(1)}m`;
-      const areaText = `A: ${worldArea.toFixed(0)} m²`;
-
-      const textLines = [widthText, heightText, areaText];
-      const lineHeight = 16;
-      const padding = 6;
-      const maxWidth = Math.max(...textLines.map(t => ctx.measureText(t).width));
-      const boxWidth = maxWidth + padding * 2;
-      const boxHeight = textLines.length * lineHeight + padding * 2;
-
-      const boxX = centerX - boxWidth / 2;
-      const boxY = centerY - boxHeight / 2;
-
-      // Draw background box
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-      ctx.beginPath();
-      ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 4);
-      ctx.fill();
-
-      // Draw text
-      ctx.fillStyle = '#00ff88';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      textLines.forEach((text, i) => {
-        const y = boxY + padding + lineHeight / 2 + i * lineHeight;
-        ctx.fillText(text, centerX, y);
-      });
-    }
+    drawBuildingCenterDraft(ctx, buildingCenterDraft, worldToCanvas, canvasTheme);
   }
 
-  // Draw polygon building draft preview
+  // Draw polygon building draft preview (with validation)
   if (buildingPolygonDraft.length > 0) {
     const points = buildingPolygonDraft.map(p => worldToCanvas(p));
 
@@ -6221,351 +6023,75 @@ function drawBuildings() {
 }
 
 function drawBarriers() {
-  // Render barriers as thick screen lines; selection adds a halo for visibility.
-  // - Solid stroke: committed barriers in the scene.
-  // - Dashed stroke: in-progress barrierDraft while the user is placing endpoints.
-  const drawLine = (start: Point, end: Point, stroke: string, width: number, dash?: number[]) => {
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = width;
-    ctx.setLineDash(dash ?? []);
-    ctx.beginPath();
-    ctx.moveTo(start.x, start.y);
-    ctx.lineTo(end.x, end.y);
-    ctx.stroke();
-    if (dash) {
-      ctx.setLineDash([]);
-    }
-  };
+  // Draw all barriers using the module
+  drawBarriersModule(
+    ctx,
+    scene.barriers,
+    worldToCanvas,
+    canvasTheme,
+    (id) => isElementSelected(selection, 'barrier', id),
+    pixelsPerMeter,
+    BARRIER_ROTATION_HANDLE_OFFSET_PX
+  );
 
-  const drawHandle = (point: Point, radius: number, fill: string, stroke: string) => {
-    ctx.fillStyle = fill;
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  };
-
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-
-  for (const barrier of scene.barriers) {
-    const start = worldToCanvas(barrier.p1);
-    const end = worldToCanvas(barrier.p2);
-    const isSelected = isElementSelected(selection, 'barrier', barrier.id);
-
-    if (isSelected) {
-      drawLine(start, end, canvasTheme.selectionHalo, 12);
-      drawLine(start, end, canvasTheme.barrierSelected, 6);
-
-      // Draw endpoint handles (p1 and p2)
-      drawHandle(start, BARRIER_HANDLE_RADIUS, '#ffffff', canvasTheme.barrierSelected);
-      drawHandle(end, BARRIER_HANDLE_RADIUS, '#ffffff', canvasTheme.barrierSelected);
-
-      // Draw rotation handle (perpendicular from midpoint)
-      const handleOffset = BARRIER_ROTATION_HANDLE_OFFSET_PX / pixelsPerMeter;
-      const midWorld = getBarrierMidpoint(barrier);
-      const midCanvas = worldToCanvas(midWorld);
-      const handleWorld = getBarrierRotationHandlePosition(barrier, handleOffset);
-      const handleCanvas = worldToCanvas(handleWorld);
-
-      // Draw line from midpoint to rotation handle
-      ctx.strokeStyle = canvasTheme.barrierSelected;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(midCanvas.x, midCanvas.y);
-      ctx.lineTo(handleCanvas.x, handleCanvas.y);
-      ctx.stroke();
-
-      // Draw rotation handle circle
-      drawHandle(handleCanvas, BARRIER_ROTATION_HANDLE_RADIUS, '#ffffff', canvasTheme.barrierSelected);
-    } else {
-      drawLine(start, end, canvasTheme.barrierStroke, 6);
-    }
-  }
-
+  // Draw barrier draft preview
   if (barrierDraft) {
-    const start = worldToCanvas(barrierDraft.p1);
-    const end = worldToCanvas(barrierDraft.p2);
-    drawLine(start, end, canvasTheme.barrierStroke, 4, [6, 6]);
+    drawBarrierDraft(ctx, barrierDraft, worldToCanvas, canvasTheme);
   }
 
   // Draw barrier center draft preview
   if (barrierCenterDraft) {
-    // Calculate endpoints from center + end (mirrored)
-    const dx = barrierCenterDraft.end.x - barrierCenterDraft.center.x;
-    const dy = barrierCenterDraft.end.y - barrierCenterDraft.center.y;
-
-    const p1: Point = {
-      x: barrierCenterDraft.center.x - dx,
-      y: barrierCenterDraft.center.y - dy,
-    };
-    const p2: Point = {
-      x: barrierCenterDraft.center.x + dx,
-      y: barrierCenterDraft.center.y + dy,
-    };
-
-    const start = worldToCanvas(p1);
-    const end = worldToCanvas(p2);
-    drawLine(start, end, canvasTheme.barrierStroke, 4, [6, 6]);
-
-    // Draw center point indicator
-    const center = worldToCanvas(barrierCenterDraft.center);
-    ctx.beginPath();
-    ctx.arc(center.x, center.y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 136, 0, 0.8)';
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    drawBarrierCenterDraft(ctx, barrierCenterDraft, worldToCanvas, canvasTheme);
   }
 
   // Draw building draft preview with dimensions
   if (buildingDraft) {
-    const c1 = worldToCanvas(buildingDraft.corner1);
-    const c2 = worldToCanvas(buildingDraft.corner2);
-
-    // Calculate rectangle bounds
-    const left = Math.min(c1.x, c2.x);
-    const right = Math.max(c1.x, c2.x);
-    const top = Math.min(c1.y, c2.y);
-    const bottom = Math.max(c1.y, c2.y);
-    const rectWidth = right - left;
-    const rectHeight = bottom - top;
-
-    // Draw dashed rectangle outline
-    ctx.strokeStyle = canvasTheme.barrierStroke;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 6]);
-    ctx.strokeRect(left, top, rectWidth, rectHeight);
-    ctx.setLineDash([]);
-
-    // Calculate world dimensions
-    const worldWidth = Math.abs(buildingDraft.corner2.x - buildingDraft.corner1.x);
-    const worldHeight = Math.abs(buildingDraft.corner2.y - buildingDraft.corner1.y);
-    const worldArea = worldWidth * worldHeight;
-
-    // Draw dimension labels if size is meaningful
-    if (worldWidth > 0.5 || worldHeight > 0.5) {
-      const centerX = (left + right) / 2;
-      const centerY = (top + bottom) / 2;
-
-      // Background for dimension text
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.font = '12px "Work Sans", monospace';
-
-      const widthText = `W: ${worldWidth.toFixed(1)}m`;
-      const heightText = `H: ${worldHeight.toFixed(1)}m`;
-      const areaText = `A: ${worldArea.toFixed(0)} m²`;
-
-      const textLines = [widthText, heightText, areaText];
-      const lineHeight = 16;
-      const padding = 6;
-      const maxWidth = Math.max(...textLines.map(t => ctx.measureText(t).width));
-      const boxWidth = maxWidth + padding * 2;
-      const boxHeight = textLines.length * lineHeight + padding * 2;
-
-      const boxX = centerX - boxWidth / 2;
-      const boxY = centerY - boxHeight / 2;
-
-      // Draw background box
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-      ctx.beginPath();
-      ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 4);
-      ctx.fill();
-
-      // Draw text
-      ctx.fillStyle = '#00ff88';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      textLines.forEach((text, i) => {
-        const y = boxY + padding + lineHeight / 2 + i * lineHeight;
-        ctx.fillText(text, centerX, y);
-      });
-    }
+    drawBuildingDraft(ctx, buildingDraft, worldToCanvas, canvasTheme);
   }
 }
 
 function drawSources() {
-  const activeFill = canvasTheme.sourceFill;
-  const activeStroke = canvasTheme.sourceStroke;
-  const mutedFill = canvasTheme.sourceMutedFill;
-  const mutedStroke = canvasTheme.sourceMutedStroke;
-  const mutedText = canvasTheme.sourceMutedText;
-  const labelText = canvasTheme.sourceLabel;
-
-  for (const source of scene.sources) {
-    const isMuted = !source.enabled;
-    const isSuppressed = !!soloSourceId && soloSourceId !== source.id;
-    const isDimmed = isMuted || isSuppressed;
-    const fill = isDimmed ? mutedFill : activeFill;
-    const stroke = isDimmed ? mutedStroke : activeStroke;
-    const p = worldToCanvas(source);
-    ctx.fillStyle = fill;
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    if (isElementSelected(selection, 'source', source.id)) {
-      ctx.fillStyle = canvasTheme.selectionHalo;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 18, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = canvasTheme.sourceRing;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = 2;
-    }
-
-    ctx.fillStyle = isDimmed ? mutedText : labelText;
-    ctx.font = '12px "Work Sans", sans-serif';
-    const displayName = source.name || source.id.toUpperCase();
-    ctx.fillText(displayName, p.x + 14, p.y - 6);
-
-    const isHovered = hoverSelection?.type === 'source' && hoverSelection.id === source.id;
-    if (isHovered && isMuted) {
-      const label = 'Muted';
-      ctx.font = '11px "Work Sans", sans-serif';
-      const paddingX = 6;
-      const boxWidth = ctx.measureText(label).width + paddingX * 2;
-      const boxHeight = 18;
-      const boxX = p.x + 14;
-      const boxY = p.y + 8;
-      ctx.fillStyle = canvasTheme.sourceTooltipBg;
-      ctx.strokeStyle = canvasTheme.sourceTooltipBorder;
-      ctx.lineWidth = 1;
-      ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
-      ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
-      ctx.fillStyle = canvasTheme.sourceTooltipText;
-      ctx.fillText(label, boxX + paddingX, boxY + 12);
-    }
-  }
+  const hoveredSourceId = hoverSelection?.type === 'source' ? hoverSelection.id : null;
+  drawSourcesModule(
+    ctx,
+    scene.sources,
+    worldToCanvas,
+    canvasTheme,
+    (id) => isElementSelected(selection, 'source', id),
+    soloSourceId,
+    hoveredSourceId
+  );
 }
 
 function drawReceivers() {
-  ctx.fillStyle = canvasTheme.receiverFill;
-  ctx.strokeStyle = canvasTheme.receiverStroke;
-  ctx.lineWidth = 2;
-
-  for (const receiver of scene.receivers) {
-    const p = worldToCanvas(receiver);
-    ctx.beginPath();
-    ctx.moveTo(p.x, p.y - 10);
-    ctx.lineTo(p.x + 10, p.y + 10);
-    ctx.lineTo(p.x - 10, p.y + 10);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    if (isElementSelected(selection, 'receiver', receiver.id)) {
-      ctx.fillStyle = canvasTheme.selectionHalo;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 18, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = canvasTheme.receiverRing;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.strokeStyle = canvasTheme.receiverStroke;
-      ctx.lineWidth = 2;
-    }
-
-    ctx.fillStyle = canvasTheme.receiverLabel;
-    ctx.font = '12px "Work Sans", sans-serif';
-    const displayName = receiver.name || receiver.id.toUpperCase();
-    ctx.fillText(displayName, p.x + 14, p.y + 4);
-    ctx.fillStyle = canvasTheme.receiverFill;
-  }
+  drawReceiversModule(
+    ctx,
+    scene.receivers,
+    worldToCanvas,
+    canvasTheme,
+    (id) => isElementSelected(selection, 'receiver', id)
+  );
 }
 
 function drawReceiverBadges() {
-  const map = new Map(results.receivers.map((item) => [item.id, item]));
-  for (const receiver of scene.receivers) {
-    const result = map.get(receiver.id);
-    if (!result) continue;
-    const p = worldToCanvas(receiver);
+  // Build result map with display levels
+  const resultMap = new Map<string, { id: string; level: number; unit: string }>();
+  for (const result of results.receivers) {
     const { level, unit } = getReceiverDisplayLevel(result);
-    const label = `${formatLevel(level)} ${unit}`;
-    ctx.font = '12px "Work Sans", sans-serif';
-    ctx.fillStyle = canvasTheme.badgeBg;
-    ctx.strokeStyle = canvasTheme.badgeBorder;
-    ctx.lineWidth = 1;
-    const width = ctx.measureText(label).width + 14;
-    ctx.fillRect(p.x + 12, p.y + 14, width, 20);
-    ctx.strokeRect(p.x + 12, p.y + 14, width, 20);
-    ctx.fillStyle = canvasTheme.badgeText;
-    ctx.fillText(label, p.x + 18, p.y + 28);
+    resultMap.set(result.id, { id: result.id, level, unit });
   }
+  drawReceiverBadgesModule(ctx, scene.receivers, resultMap, worldToCanvas, canvasTheme, formatLevel);
 }
 
 function drawProbes() {
-  for (const probe of scene.probes) {
-    const p = worldToCanvas(probe);
-    const isActive = probe.id === activeProbeId;
-    const isSelected = isElementSelected(selection, 'probe', probe.id);
-
-    ctx.save();
-    if (isActive || isSelected) {
-      ctx.fillStyle = canvasTheme.selectionHalo;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 18, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = canvasTheme.probeRing;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    ctx.translate(p.x, p.y);
-    ctx.strokeStyle = canvasTheme.probeStroke;
-    ctx.fillStyle = canvasTheme.probeFill;
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-
-    // Mic head
-    ctx.beginPath();
-    ctx.arc(0, -6, 6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    // Mic body
-    ctx.beginPath();
-    ctx.moveTo(-4, -6);
-    ctx.lineTo(-4, 2);
-    ctx.lineTo(4, 2);
-    ctx.lineTo(4, -6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // Stem
-    ctx.beginPath();
-    ctx.moveTo(0, 2);
-    ctx.lineTo(0, 8);
-    ctx.stroke();
-
-    // Base
-    ctx.beginPath();
-    ctx.moveTo(-6, 8);
-    ctx.lineTo(6, 8);
-    ctx.stroke();
-
-    ctx.restore();
-
-    ctx.fillStyle = canvasTheme.probeLabel;
-    ctx.font = '12px "Work Sans", sans-serif';
-    const probeLabel = probe.name || probe.id.toUpperCase();
-    ctx.fillText(probeLabel, p.x + 14, p.y + 6);
-  }
+  drawProbesModule(
+    ctx,
+    scene.probes,
+    worldToCanvas,
+    canvasTheme,
+    activeProbeId,
+    (id) => isElementSelected(selection, 'probe', id)
+  );
 }
 
 function requestRender() {
