@@ -86,3 +86,17 @@ export {
   wireEquationCollapsibles,
   updateAllEquations,
 } from './equations.js';
+
+// Compute UI
+export {
+  type ComputeChipState,
+  type ComputeUIElements,
+  type ComputeUICallbacks,
+  type ComputeStatusMeta,
+  setComputeChip,
+  updateComputeChip,
+  updateComputeButtonState,
+  updateComputeStatus,
+  showComputeError,
+  updateComputeUI,
+} from './compute.js';
