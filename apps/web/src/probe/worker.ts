@@ -114,7 +114,7 @@ export function buildProbeRequest(
 // === Fallback Stub Calculation ===
 
 export function calculateProbeStub(req: ProbeRequest): ProbeResult {
-  const freqs = [63, 125, 250, 500, 1000, 2000, 4000, 8000];
+  const freqs = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
   let minDist = Number.POSITIVE_INFINITY;
   for (const source of req.sources) {
     const dx = req.position.x - source.position.x;

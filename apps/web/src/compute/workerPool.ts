@@ -231,7 +231,7 @@ export function createPendingTracker<T extends string>() {
  * Returns approximate values based on distance attenuation
  */
 export function calculateProbeStub(request: ProbeRequest): ProbeResult {
-  const freqs = [63, 125, 250, 500, 1000, 2000, 4000, 8000];
+  const freqs = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
   let minDist = Number.POSITIVE_INFINITY;
 
   for (const source of request.sources) {

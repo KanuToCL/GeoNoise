@@ -63,7 +63,7 @@ export const REFINE_POINTS = 75000;
 export const STATIC_POINTS = 50000;
 
 /** Coarse preview during drag (smooth interaction) */
-export const DRAG_POINTS = 35000;
+export const DRAG_POINTS = 25000;
 
 // =============================================================================
 // TIMING & PERFORMANCE

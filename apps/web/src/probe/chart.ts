@@ -66,6 +66,14 @@ export function renderProbeChartOn(
     return;
   }
 
+  // Validate magnitudes array has expected 9 bands
+  if (!data.magnitudes || data.magnitudes.length !== 9) {
+    ctxChart.fillStyle = readCssVar('--probe-text');
+    ctxChart.font = '11px "Work Sans", sans-serif';
+    ctxChart.fillText('Waiting for probe data...', padding.left, padding.top + 12);
+    return;
+  }
+
   // Apply frequency weighting based on displayWeighting setting
   const weightedMagnitudes = applyWeightingToSpectrum(data.magnitudes as Spectrum9, displayWeighting);
   const overallLevel = calculateOverallLevel(data.magnitudes as Spectrum9, displayWeighting);
