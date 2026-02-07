@@ -390,7 +390,7 @@ const settingsProfileIndicator = document.querySelector('#settingsProfileIndicat
 const probeGroundReflection = document.querySelector('#probeGroundReflection') as HTMLInputElement | null;
 const probeWallReflections = document.querySelector('#probeWallReflections') as HTMLInputElement | null;
 const probeBarrierDiffraction = document.querySelector('#probeBarrierDiffraction') as HTMLInputElement | null;
-const probeSommerfeldCorrection = document.querySelector('#probeSommerfeldCorrection') as HTMLInputElement | null;
+const sommerfeldCorrection = document.querySelector('#sommerfeldCorrection') as HTMLInputElement | null;
 const probeImpedanceModel = document.querySelector('#probeImpedanceModel') as HTMLSelectElement | null;
 const probeGroundModel = document.querySelector('#probeGroundModel') as HTMLSelectElement | null;
 
@@ -2866,8 +2866,8 @@ function wireProbeEngineControls() {
     console.log('[Probe] Barrier Diffraction:', probeBarrierDiffraction.checked);
   });
 
-  probeSommerfeldCorrection?.addEventListener('change', () => {
-    console.log('[Probe] Sommerfeld Correction:', probeSommerfeldCorrection.checked);
+  sommerfeldCorrection?.addEventListener('change', () => {
+    console.log('[Shared] Sommerfeld Correction:', sommerfeldCorrection.checked);
   });
 
   probeImpedanceModel?.addEventListener('change', () => {

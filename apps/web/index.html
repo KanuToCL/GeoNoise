@@ -578,6 +578,19 @@
                         <option value="soft">Soft (Grass, Soil)</option>
                       </select>
                     </label>
+                    <label class="toggle" for="sommerfeldCorrection">
+                      <input type="checkbox" id="sommerfeldCorrection" />
+                      <span>Sommerfeld Correction</span>
+                    </label>
+                    <div class="equation-collapsible" data-equation="sommerfeld">
+                      <div class="equation-header" role="button" tabindex="0">
+                        <span class="equation-toggle">▶</span>
+                        <span>equation</span>
+                      </div>
+                      <div class="equation-content" hidden>
+                        <div class="equation-main">$\Gamma_{sph} = \Gamma_{plane} + (1 - \Gamma_{plane}) \cdot F(w)$</div>
+                      </div>
+                    </div>
                   </div>
 
                   <!-- GRID ENGINE Section -->
@@ -676,20 +689,7 @@
                           <option value="iso9613">ISO 9613-2</option>
                         </select>
                       </label>
-<label class="toggle" for="probeSommerfeldCorrection">
-                        <input type="checkbox" id="probeSommerfeldCorrection" />
-                        <span>Sommerfeld Correction</span>
-                      </label>
-                      <div class="equation-collapsible" data-equation="sommerfeld">
-                        <div class="equation-header" role="button" tabindex="0">
-                          <span class="equation-toggle">▶</span>
-                          <span>equation</span>
-                        </div>
-                        <div class="equation-content" hidden>
-                          <div class="equation-main">$\Gamma_{sph} = \Gamma_{plane} + (1 - \Gamma_{plane}) \cdot F(w)$</div>
-                        </div>
-                      </div>
-                      <label class="property-row property-row-stack">
+<label class="property-row property-row-stack">
                         <span>Impedance Model</span>
                         <select class="ui-inset" id="probeImpedanceModel">
                           <option value="delanyBazley">Delany-Bazley</option>
