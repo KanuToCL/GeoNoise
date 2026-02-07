@@ -25,8 +25,9 @@ This document tracks architectural issues, inconsistencies, and refactoring oppo
 |------------|---------------|----------------------|--------|
 | `renderPropertiesFor` | ~260 lines | `ui/contextPanel/properties.ts` | `0d3099b` |
 | `createPinnedContextPanel` + `refreshPinnedContextPanels` | ~175 lines | `ui/contextPanel/pinnedPanel.ts` | `7f2a2bf` |
-| Scene I/O wiring (`downloadScene`, `wireSaveLoad`, `buildScenePayload`) | ~26 lines | Wired to `io/` module | pending |
-| **Total this session** | **~461 lines** | **3 extractions** | |
+| Scene I/O wiring (`downloadScene`, `wireSaveLoad`, `buildScenePayload`) | ~26 lines | Wired to `io/` module | `391a651` |
+| Mapbox feature flag (`ENABLE_MAPBOX`) | N/A | `constants.ts`, `mapboxUI.ts` | pending |
+| **Total this session** | **~461 lines** | **4 extractions/features** | |
 
 ### What's Next (Priority Order)
 
@@ -37,6 +38,28 @@ This document tracks architectural issues, inconsistencies, and refactoring oppo
 5. **Remaining context panel functions** (~100 lines) → `ui/contextPanel/`
 6. **requestProbeUpdate / requestLiveProbeUpdates** (~30 lines) → `probe/request.ts` (optional)
 7. **Split `mapboxUI.ts`** (~1,100 lines) → `mapbox/` directory (medium-term)
+
+---
+
+## Feature Flags
+
+Feature flags are defined in `apps/web/src/constants.ts`. They allow disabling features while keeping code in the codebase.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `ENABLE_RAY_VISUALIZATION` | `false` | Ray visualization in probe inspector (disabled due to bug) |
+| `ENABLE_MAPBOX` | `false` | Mapbox map overlay feature (disabled for initial main merge) |
+
+### ENABLE_MAPBOX
+
+When `false`:
+- Map toggle button in toolbar is hidden
+- Map control panel is hidden
+- Scale comparison panel is hidden
+- `initMapboxUI()` returns early without wiring event listeners
+- `isMapVisible()` and `isMapInteractive()` always return `false`
+
+To enable: Set `ENABLE_MAPBOX = true` in `constants.ts` and rebuild.
 
 ---
 

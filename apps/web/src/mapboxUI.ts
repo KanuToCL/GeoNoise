@@ -24,6 +24,7 @@ interface MapboxUIState {
   isMapInteractive: boolean;
   map: MapboxMap | null;
   currentStyle: MapStyle;
+  isEnabled: boolean;
 }
 
 const uiState: MapboxUIState = {
@@ -31,6 +32,7 @@ const uiState: MapboxUIState = {
   isMapInteractive: false,
   map: null,
   currentStyle: "dark",
+  isEnabled: true,
 };
 
 // DOM Elements
@@ -82,10 +84,26 @@ let getPixelsPerMeter: GetPixelsPerMeterCallback | null = null;
  * Initialize Mapbox UI integration
  */
 export function initMapboxUI(options?: {
+  enabled?: boolean;
   onScaleSync?: ScaleSyncCallback;
   onMapMove?: MapMoveCallback;
   getPixelsPerMeter?: GetPixelsPerMeterCallback;
 }): void {
+  // Check if feature is enabled (defaults to true for backwards compatibility)
+  uiState.isEnabled = options?.enabled ?? true;
+
+  // If disabled, hide all map-related UI elements and bail early
+  if (!uiState.isEnabled) {
+    const mapToggle = document.getElementById("mapToggleButton");
+    const mapControlPanel = document.getElementById("mapControlPanel");
+    const scaleComparisonPanel = document.getElementById("scaleComparisonPanel");
+
+    if (mapToggle) mapToggle.style.display = "none";
+    if (mapControlPanel) mapControlPanel.style.display = "none";
+    if (scaleComparisonPanel) scaleComparisonPanel.style.display = "none";
+    return;
+  }
+
   // Store callbacks
   if (options?.onScaleSync) onScaleSync = options.onScaleSync;
   if (options?.onMapMove) onMapMove = options.onMapMove;

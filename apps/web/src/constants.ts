@@ -18,6 +18,13 @@ import type { MapRange } from './types/index.js';
  */
 export const ENABLE_RAY_VISUALIZATION = false;
 
+/**
+ * Enable Mapbox map overlay feature.
+ * Set to false to hide all map-related UI and functionality from users.
+ * This allows merging the feature branch while keeping the map disabled.
+ */
+export const ENABLE_MAPBOX = false;
+
 // =============================================================================
 // NOISE MAP CONFIGURATION
 // =============================================================================
