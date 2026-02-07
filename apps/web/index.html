@@ -1615,6 +1615,22 @@
                   <li>Side diffraction around barrier edges</li>
                   <li>Over-top diffraction</li>
                 </ul>
+                <div class="spec-text" style="margin-top: 8px;"><strong>Ground Effect Models:</strong></div>
+                <ul class="spec-list" style="margin-left: 16px;">
+                  <li><strong>Physical Impedance:</strong> Complex reflection coefficient from surface impedance</li>
+                  <li><strong>ISO 9613-2:</strong> Tabulated absorption coefficients (0.01–0.60)</li>
+                </ul>
+                <div class="spec-text" style="margin-top: 8px;"><strong>Impedance Models</strong> (when Physical Impedance selected):</div>
+                <ul class="spec-list" style="margin-left: 16px;">
+                  <li><strong>Delany-Bazley:</strong></li>
+                </ul>
+                <div class="equation-pill" style="margin-left: 16px;">$Z_n = 1 + 9.08(f/\sigma)^{-0.75} - j \cdot 11.9(f/\sigma)^{-0.73}$</div>
+                <ul class="spec-list" style="margin-left: 16px;">
+                  <li><strong>Delany-Bazley-Miki:</strong></li>
+                </ul>
+                <div class="equation-pill" style="margin-left: 16px;">$Z_n = 1 + 5.5(f/\sigma)^{-0.632} - j \cdot 8.43(f/\sigma)^{-0.632}$</div>
+                <div class="spec-text" style="margin-top: 8px;"><strong>Reflection Coefficient:</strong></div>
+                <div class="equation-pill">$\Gamma = \frac{Z_n \cos\theta - 1}{Z_n \cos\theta + 1}$</div>
                 <div class="spec-text" style="margin-top: 8px;"><strong>Summation:</strong></div>
                 <div class="equation-pill">p = Σ pᵢ·e<sup>jφᵢ</sup> &nbsp; where φ = -k·d</div>
                 <div class="spec-text">Phasor (coherent) summation with phase from path length.</div>
