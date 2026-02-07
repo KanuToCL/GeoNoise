@@ -146,7 +146,7 @@
           <!-- Main canvas for noise visualization -->
           <canvas id="mapCanvas" style="position: absolute; inset: 0; z-index: 1;"></canvas>
 
-          <!-- Floating Map Control Panel -->
+          <!-- Floating Map Control Panel (hidden by default, shown by JS when ENABLE_MAPBOX is true) -->
           <div id="mapControlPanel" style="
             position: absolute;
             top: 80px;
@@ -156,7 +156,7 @@
             border-radius: 12px;
             padding: 12px 16px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            display: flex;
+            display: none;
             flex-direction: column;
             gap: 10px;
             min-width: 220px;
@@ -910,9 +910,9 @@
               >
                 <span class="dock-label">M</span>
               </button>
-              <!-- Separator before map tools -->
-              <div class="dock-separator" style="width: 1px; height: 24px; background: var(--border-soft); margin: 0 4px;"></div>
-              <!-- Map overlay button -->
+              <!-- Separator before map tools (hidden by default, shown by JS when ENABLE_MAPBOX is true) -->
+              <div id="mapToolsSeparator" class="dock-separator" style="display: none; width: 1px; height: 24px; background: var(--border-soft); margin: 0 4px;"></div>
+              <!-- Map overlay button (hidden by default, shown by JS when ENABLE_MAPBOX is true) -->
               <button
                 class="dock-button ui-button"
                 id="mapToggleButton"
@@ -920,6 +920,7 @@
                 type="button"
                 aria-label="Toggle Map Overlay"
                 title="Toggle Mapbox map overlay"
+                style="display: none;"
               >
                 <svg class="dock-icon" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>

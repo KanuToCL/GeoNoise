@@ -109,6 +109,16 @@ export function initMapboxUI(options?: {
   if (options?.onMapMove) onMapMove = options.onMapMove;
   if (options?.getPixelsPerMeter) getPixelsPerMeter = options.getPixelsPerMeter;
 
+  // Show map control panel (hidden by default in HTML to prevent flash)
+  const mapControlPanel = document.getElementById("mapControlPanel");
+  if (mapControlPanel) mapControlPanel.style.display = "flex";
+
+  // Show map toggle button and separator in dock
+  const mapToggle = document.getElementById("mapToggleButton");
+  const mapToolsSeparator = document.getElementById("mapToolsSeparator");
+  if (mapToggle) mapToggle.style.display = "";
+  if (mapToolsSeparator) mapToolsSeparator.style.display = "";
+
   // Get DOM elements
   mapToggleButton = document.getElementById("mapToggleButton") as HTMLButtonElement | null;
   mapboxContainer = document.getElementById("mapboxContainer") as HTMLDivElement | null;
