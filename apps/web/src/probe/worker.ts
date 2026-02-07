@@ -60,6 +60,7 @@ export interface ProbeConfig {
   barrierSideDiffraction: PropagationConfig['barrierSideDiffraction'];
   groundType: PropagationConfig['groundType'];
   groundMixedFactor: number;
+  groundModel?: 'impedance' | 'iso9613';
   atmosphericAbsorption: PropagationConfig['atmosphericAbsorption'];
   temperature?: number;
   humidity?: number;
@@ -106,6 +107,7 @@ export function buildProbeRequest(
       barrierSideDiffraction: config.barrierSideDiffraction ?? 'auto',
       groundType: config.groundType ?? 'mixed',
       groundMixedFactor: config.groundMixedFactor ?? 0.5,
+      groundModel: config.groundModel ?? 'impedance',
       atmosphericAbsorption: config.atmosphericAbsorption ?? 'simple',
       temperature: config.temperature,
       humidity: config.humidity,

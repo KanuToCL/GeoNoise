@@ -669,6 +669,13 @@
                     </div>
                     <div class="probe-ground-group">
                       <span class="probe-paths-label">Ground Physics</span>
+                      <label class="property-row property-row-stack">
+                        <span>Ground Effect Model</span>
+                        <select class="ui-inset" id="probeGroundModel">
+                          <option value="impedance" selected>Physical Impedance</option>
+                          <option value="iso9613">ISO 9613-2</option>
+                        </select>
+                      </label>
 <label class="toggle" for="probeSommerfeldCorrection">
                         <input type="checkbox" id="probeSommerfeldCorrection" />
                         <span>Sommerfeld Correction</span>

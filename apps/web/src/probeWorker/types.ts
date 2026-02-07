@@ -70,11 +70,14 @@ export type Spectrum9 = [
 
 export type BarrierSideDiffractionMode = 'off' | 'auto' | 'on';
 export type AtmosphericAbsorptionModel = 'none' | 'simple' | 'iso9613';
+export type GroundEffectModel = 'impedance' | 'iso9613';
 
 export interface ProbeConfig {
   groundReflection: boolean;
   groundType: 'hard' | 'soft' | 'mixed';
   groundMixedFactor: number;
+  /** Ground effect model: 'impedance' for full Delany-Bazley, 'iso9613' for simplified absorption */
+  groundModel: GroundEffectModel;
   wallReflections: boolean;
   barrierDiffraction: boolean;
   barrierSideDiffraction: BarrierSideDiffractionMode;

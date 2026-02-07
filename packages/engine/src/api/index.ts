@@ -182,6 +182,8 @@ export interface ProbeConfig {
   barrierSideDiffraction?: 'off' | 'auto' | 'on';
   groundType?: 'hard' | 'soft' | 'mixed';
   groundMixedFactor?: number;
+  /** Ground effect model: 'impedance' for full Delany-Bazley, 'iso9613' for simplified absorption */
+  groundModel?: 'impedance' | 'iso9613';
   atmosphericAbsorption?: 'none' | 'simple' | 'iso9613';
   temperature?: number;
   humidity?: number;

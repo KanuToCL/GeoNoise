@@ -2,7 +2,7 @@
  * Ground Reflection Module for Probe Worker
  */
 
-import type { Complex, ImpedanceModel, GroundReflectionCoeff } from './types.js';
+import type { Complex, ImpedanceModel, GroundReflectionCoeff, GroundEffectModel } from './types.js';
 
 const EPSILON = 1e-10;
 
@@ -13,6 +13,71 @@ export const FLOW_RESISTIVITY = {
   compactSoil: 100_000,
   snow: 30_000,
 } as const;
+
+/**
+ * ISO 9613-2 Table 2: Ground absorption coefficients by frequency.
+ * These represent the fraction of sound energy absorbed (not reflected).
+ *
+ * | Freq (Hz) | Hard  | Soft  |
+ * |-----------|-------|-------|
+ * | 63        | 0.01  | 0.10  |
+ * | 125       | 0.01  | 0.15  |
+ * | 250       | 0.01  | 0.20  |
+ * | 500       | 0.01  | 0.30  |
+ * | 1000      | 0.02  | 0.40  |
+ * | 2000      | 0.02  | 0.50  |
+ * | 4000      | 0.02  | 0.55  |
+ * | 8000      | 0.03  | 0.60  |
+ */
+const ISO9613_GROUND_ABSORPTION: Record<number, { hard: number; soft: number }> = {
+  63: { hard: 0.01, soft: 0.10 },
+  125: { hard: 0.01, soft: 0.15 },
+  250: { hard: 0.01, soft: 0.20 },
+  500: { hard: 0.01, soft: 0.30 },
+  1000: { hard: 0.02, soft: 0.40 },
+  2000: { hard: 0.02, soft: 0.50 },
+  4000: { hard: 0.02, soft: 0.55 },
+  8000: { hard: 0.03, soft: 0.60 },
+};
+
+const OCTAVE_BANDS = [63, 125, 250, 500, 1000, 2000, 4000, 8000];
+
+/**
+ * Get ISO 9613-2 ground absorption coefficient for a given frequency and ground type.
+ * Returns the reflection coefficient magnitude (1 - absorption).
+ */
+function getISO9613Absorption(
+  frequency: number,
+  groundType: 'hard' | 'soft' | 'mixed',
+  mixedFactor: number
+): number {
+  // Find closest octave band
+  let closestBand = OCTAVE_BANDS[0];
+  let closestDist = Math.abs(Math.log2(frequency / closestBand));
+  for (const band of OCTAVE_BANDS) {
+    const dist = Math.abs(Math.log2(frequency / band));
+    if (dist < closestDist) {
+      closestDist = dist;
+      closestBand = band;
+    }
+  }
+
+  const coeffs = ISO9613_GROUND_ABSORPTION[closestBand];
+  if (!coeffs) {
+    // Fallback for 16000 Hz - extrapolate from 8000 Hz
+    return groundType === 'hard' ? 0.03 : 0.65;
+  }
+
+  if (groundType === 'hard') {
+    return coeffs.hard;
+  } else if (groundType === 'soft') {
+    return coeffs.soft;
+  } else {
+    // Mixed: linear interpolation based on G factor
+    const G = Math.max(0, Math.min(1, mixedFactor));
+    return coeffs.hard * (1 - G) + coeffs.soft * G;
+  }
+}
 
 export function complexDivide(a: Complex, b: Complex): Complex {
   const denom = b.re * b.re + b.im * b.im;
@@ -70,15 +135,29 @@ export function getGroundReflectionCoeff(
   mixedFactor: number,
   frequency: number,
   incidenceAngle?: number,
-  model: ImpedanceModel = 'auto'
+  impedanceModel: ImpedanceModel = 'auto',
+  groundEffectModel: GroundEffectModel = 'impedance'
 ): GroundReflectionCoeff {
+  // ISO 9613-2 simplified model: uses Table 2 absorption coefficients
+  if (groundEffectModel === 'iso9613') {
+    const absorption = getISO9613Absorption(frequency, groundType, mixedFactor);
+    // Reflection magnitude = 1 - absorption (energy-based)
+    // Phase shift: π for hard ground (total reflection), less for soft
+    const magnitude = 1 - absorption;
+    // Simplified phase model: hard ground has near-π phase shift,
+    // soft ground has reduced phase shift due to absorption
+    const phase = Math.PI * magnitude;
+    return { magnitude, phase };
+  }
+
+  // Full impedance model: Delany-Bazley/Miki with complex reflection coefficient
   let flowResistivity: number;
   if (groundType === 'hard') flowResistivity = FLOW_RESISTIVITY.hard;
   else if (groundType === 'soft') flowResistivity = FLOW_RESISTIVITY.soft;
   else flowResistivity = calculateMixedFlowResistivity(mixedFactor);
 
   const theta = incidenceAngle ?? Math.PI / 2 - 0.087;
-  const Zn = calculateSurfaceImpedance(frequency, flowResistivity, model);
+  const Zn = calculateSurfaceImpedance(frequency, flowResistivity, impedanceModel);
   const Gamma = calculateReflectionCoefficient(Zn, theta);
 
   return { magnitude: complexMagnitude(Gamma), phase: complexPhase(Gamma) };

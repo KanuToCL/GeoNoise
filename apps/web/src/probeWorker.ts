@@ -143,6 +143,7 @@ const DEFAULT_CONFIG: ProbeConfig = {
   groundReflection: true,
   groundType: 'mixed',
   groundMixedFactor: 0.5,
+  groundModel: 'impedance',
   wallReflections: true,
   barrierDiffraction: true,
   barrierSideDiffraction: 'auto',
@@ -359,7 +360,10 @@ function computeSourceCoherent(
       const groundCoeff = getGroundReflectionCoeff(
         config.groundType,
         config.groundMixedFactor,
-        freq
+        freq,
+        undefined, // incidenceAngle - use default
+        'auto',    // impedanceModel
+        config.groundModel
       );
 
       const groundAtten = spreadingLoss(groundPathDistance);
@@ -496,6 +500,7 @@ function calculateProbe(req: ProbeRequest): ProbeResult {
     barrierSideDiffraction: req.config?.barrierSideDiffraction ?? DEFAULT_CONFIG.barrierSideDiffraction,
     groundType: req.config?.groundType ?? DEFAULT_CONFIG.groundType,
     groundMixedFactor: req.config?.groundMixedFactor ?? DEFAULT_CONFIG.groundMixedFactor,
+    groundModel: req.config?.groundModel ?? DEFAULT_CONFIG.groundModel,
     atmosphericAbsorption: req.config?.atmosphericAbsorption ?? DEFAULT_CONFIG.atmosphericAbsorption,
     temperature: req.config?.temperature ?? DEFAULT_CONFIG.temperature,
     humidity: req.config?.humidity ?? DEFAULT_CONFIG.humidity,

@@ -400,6 +400,7 @@ const probeWallReflections = document.querySelector('#probeWallReflections') as 
 const probeBarrierDiffraction = document.querySelector('#probeBarrierDiffraction') as HTMLInputElement | null;
 const probeSommerfeldCorrection = document.querySelector('#probeSommerfeldCorrection') as HTMLInputElement | null;
 const probeImpedanceModel = document.querySelector('#probeImpedanceModel') as HTMLSelectElement | null;
+const probeGroundModel = document.querySelector('#probeGroundModel') as HTMLSelectElement | null;
 
 // Equation display elements
 const groundModelEquation = document.querySelector('#groundModelEquation') as HTMLDivElement | null;
@@ -1997,6 +1998,7 @@ function requestProbeUpdate(probeId: string, _options?: { immediate?: boolean })
     barrierSideDiffraction: getPropagationConfig().barrierSideDiffraction ?? 'auto',
     groundType: getPropagationConfig().groundType ?? 'mixed',
     groundMixedFactor: getPropagationConfig().groundMixedFactor ?? 0.5,
+    groundModel: (probeGroundModel?.value as 'impedance' | 'iso9613') ?? 'impedance',
     atmosphericAbsorption: getPropagationConfig().atmosphericAbsorption ?? 'simple',
     ...getMeteoConfig(),
   };
@@ -2879,6 +2881,27 @@ function wireProbeEngineControls() {
   probeImpedanceModel?.addEventListener('change', () => {
     console.log('[Probe] Impedance Model:', probeImpedanceModel.value);
   });
+
+  // Helper to update impedance model availability based on ground model
+  function updateImpedanceModelAvailability() {
+    if (!probeImpedanceModel || !probeGroundModel) return;
+    const isImpedanceMode = probeGroundModel.value === 'impedance';
+    probeImpedanceModel.disabled = !isImpedanceMode;
+    // Also update visual styling of the parent label
+    const parentLabel = probeImpedanceModel.closest('label');
+    if (parentLabel) {
+      parentLabel.style.opacity = isImpedanceMode ? '1' : '0.5';
+      parentLabel.style.pointerEvents = isImpedanceMode ? 'auto' : 'none';
+    }
+  }
+
+  probeGroundModel?.addEventListener('change', () => {
+    console.log('[Probe] Ground Model:', probeGroundModel.value);
+    updateImpedanceModelAvailability();
+  });
+
+  // Initialize impedance model availability on load
+  updateImpedanceModelAvailability();
   /* eslint-enable no-console */
 }
 
