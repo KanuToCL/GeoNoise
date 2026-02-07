@@ -30,11 +30,13 @@ This document tracks architectural issues, inconsistencies, and refactoring oppo
 
 ### What's Next (Priority Order)
 
-1. **renderSources** (~250 lines) → `ui/sources.ts`
-2. **createPinnedProbePanel / probe rendering** (~200 lines) → wire to `probe/` module
-3. **wireMapSettings / wireDisplaySettings** (~150 lines) → `ui/settings.ts`
+1. ~~**renderSources**~~ ✅ Already extracted to `ui/sources.ts` (commit `40534ed`)
+2. ~~**Probe module calls**~~ ✅ Already properly wired with thin wrappers
+3. ~~**wireMapSettings / wireDisplaySettings**~~ ✅ Already extracted to `ui/settings.ts`
 4. ~~**Scene I/O functions**~~ ✅ Wired to `io/` module
 5. **Remaining context panel functions** (~100 lines) → `ui/contextPanel/`
+6. **requestProbeUpdate / requestLiveProbeUpdates** (~30 lines) → `probe/request.ts` (optional)
+7. **Split `mapboxUI.ts`** (~1,100 lines) → `mapbox/` directory (medium-term)
 
 ---
 
@@ -49,13 +51,15 @@ This document tracks architectural issues, inconsistencies, and refactoring oppo
 **Progress:** Down from 7,911 lines to 5,142 lines (35% reduction achieved)
 
 The main entry point still contains ~175 functions across multiple responsibilities:
-- ~~Probe system~~ → Partially extracted to `probe/` module
+- ~~Probe system~~ → Fully wired to `probe/` module with thin wrappers
 - ~~Compute orchestration~~ → Extracted to `compute/orchestration/`
 - ~~Pointer/keyboard handlers~~ → Extracted to `interaction/pointer.ts`, `interaction/keyboard.ts`
 - ~~Context panel properties~~ → Extracted to `ui/contextPanel/properties.ts`
 - ~~Pinned context panels~~ → Extracted to `ui/contextPanel/pinnedPanel.ts`
 - ~~Scene I/O (save, load, download)~~ → Wired to `io/` module
-- UI wiring (dock, settings, equations, propagation) → Partially extracted
+- ~~Sources list UI~~ → Extracted to `ui/sources.ts`
+- ~~Map/display settings~~ → Extracted to `ui/settings.ts`
+- UI wiring (dock, equations, propagation) → Partially extracted
 
 **Proposed Split (Updated):**
 ```
@@ -207,10 +211,11 @@ apps/web/src/
 
 | Function/Section | ~Lines | Target Module | Priority |
 |------------------|--------|---------------|----------|
-| `renderSources` + source list UI | ~250 | `ui/sources.ts` | High |
-| `createProbeSnapshotWrapper` | ~100 | wire to `probe/snapshots.ts` | High |
-| `wireMapSettings` + `wireDisplaySettings` | ~150 | `ui/settings.ts` | Medium |
+| ~~`renderSources` + source list UI~~ | ~~250~~ | ~~`ui/sources.ts`~~ | ✅ Done |
+| ~~`createProbeSnapshotWrapper`~~ | ~~100~~ | ~~`probe/snapshots.ts`~~ | ✅ Done (thin wrapper) |
+| ~~`wireMapSettings` + `wireDisplaySettings`~~ | ~~150~~ | ~~`ui/settings.ts`~~ | ✅ Done |
 | ~~Scene I/O wrappers~~ | ~~100~~ | ~~wire to `io/` module~~ | ✅ Done |
+| `requestProbeUpdate` + `requestLiveProbeUpdates` | ~30 | `probe/request.ts` (optional) | Low |
 | `createFieldLabel`, `createInlineField` | ~80 | already in `ui/contextPanel/fields.ts` | Low |
 | Remaining legend/stats functions | ~80 | wire to `results/` module | Low |
 | Drawing mode submenu state | ~100 | already in `ui/toolbar.ts` | Low |
@@ -314,16 +319,17 @@ State has been consolidated into `state/` modules:
 
 | Target | Lines | Destination | Effort |
 |--------|-------|-------------|--------|
-| `renderSources` | ~250 | `ui/sources.ts` | Medium |
-| Wire probe module calls | ~150 | Replace inline with module calls | Small |
+| ~~`renderSources`~~ | ~~250~~ | ~~`ui/sources.ts`~~ | ✅ Done |
+| ~~Wire probe module calls~~ | ~~150~~ | ~~Already wired~~ | ✅ Done |
 
 ### Short-term
 
 | Target | Lines | Destination | Effort |
 |--------|-------|-------------|--------|
-| `wireMapSettings` | ~100 | `ui/settings.ts` | Small |
-| `wireDisplaySettings` | ~80 | `ui/settings.ts` | Small |
+| ~~`wireMapSettings`~~ | ~~100~~ | ~~`ui/settings.ts`~~ | ✅ Done |
+| ~~`wireDisplaySettings`~~ | ~~80~~ | ~~`ui/settings.ts`~~ | ✅ Done |
 | Remaining legend functions | ~80 | Wire to `results/` | Small |
+| `requestProbeUpdate` orchestration | ~30 | `probe/request.ts` | Small (optional) |
 
 ### Medium-term
 
