@@ -21,7 +21,9 @@ const projects = [
 
 // Use npx to run tsc, which works in CI/Vercel environments where tsc isn't in PATH
 // The -b flag enables project references (build mode)
-execSync(`npx tsc -b ${projects.join(' ')}`, {
+// The --force flag ensures we rebuild even if tsc thinks files are up-to-date
+// (needed because we delete dist folder above)
+execSync(`npx tsc -b ${projects.join(' ')} --force`, {
   cwd: repoRoot,
   stdio: 'inherit',
 });
