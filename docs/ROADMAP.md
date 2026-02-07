@@ -61,6 +61,9 @@ The physics computation appears correct. The issue is isolated to the visualizat
 ### ✅ Recently Completed
 
 - **Mapbox Map Overlay Integration** (v0.8.0) - Real-world map backgrounds with pan/zoom sync
+- **Probe Calculating Indicator** (v0.7.0) - Shows "Computing..." state with timing and status chip
+- **Drawing Tools UX Improvements** (v0.7.0) - Center-outward and 4-corner polygon modes for buildings/barriers
+- **Calculation Profile Presets** (v0.6.0) - ISO 9613-2 and Accurate profiles (UI dropdown feature-flagged)
 - **Settings Panel UI Redesign** (v0.5.0) - Tabbed category selection with animated slide-out panels
 - **Physics Audit Fixes #5, #6, #12** (v0.4.8) - Side diffraction geometry, Delany-Bazley bounds, dual sigma models
 - **Barrier side diffraction toggle** (v0.4.2) - See [CHANGELOG.md](./CHANGELOG.md)
@@ -68,13 +71,13 @@ The physics computation appears correct. The issue is isolated to the visualizat
 
 ### 🔨 In Progress / High Priority
 
-- Visual indicator when probe is "calculating"
 - **Physics audit fixes** (7 remaining - see below)
+- Expose `maxReflections` setting in UI (currently hardcoded to 0)
 
 ### 📅 Planned (This Cycle)
 
 - Building diffraction models UI exposure
-- Expose `maxReflections` setting in UI (currently hardcoded to 0)
+- Multi-order reflections (see [docs/feat-dev/multi-order-rays.md](./feat-dev/multi-order-rays.md))
 
 ## ~~Settings Panel UI Redesign~~ ✅ COMPLETED
 
@@ -237,19 +240,20 @@ type SettingsPanelState = {
 
 ---
 
-- **[Select Box Multi-Selection Tool](./FEATURE_SELECT_BOX.md)** - Rectangular marquee selection of multiple elements for batch operations (delete, duplicate). Ctrl+click drag to draw select box, shift+click for additive selection.
+- **[Select Box Multi-Selection Tool](./feat-dev/FEATURE_SELECT_BOX.md)** - Rectangular marquee selection of multiple elements for batch operations (delete, duplicate). Ctrl+click drag to draw select box, shift+click for additive selection.
+- **[Building Import from Mapbox](./feat-dev/BUILDING_IMPORT.md)** - Import OSM building footprints directly from Mapbox.
 
 ---
 
-## Calculation Profile Presets
+## ~~Calculation Profile Presets~~ ✅ COMPLETED
 
-> **Status:** ✅ Complete
+> **Status:** ✅ Complete (UI feature-flagged)
 > **Priority:** High
-> **Target:** v0.6.0
+> **Completed:** v0.6.0
 
 ### Overview
 
-GeoNoise currently offers many physics settings that users must configure individually. A **profile-based system** offers validated presets while preserving full customization.
+GeoNoise offers profile-based presets with validated physics configurations. The infrastructure is fully implemented in `apps/web/src/ui/panels/propagation.ts`. The profile dropdown is currently disabled via feature flag `data-feature-profile-dropdown="false"` in index.html.
 
 The two primary profiles target different versions of ISO 9613-2:
 - **ISO 9613-2:1996** - Original standard (current implementation)
@@ -635,14 +639,13 @@ The following implementations were verified as **physically accurate**:
 
 ---
 
-## High Priority - In Progress
+## ~~High Priority - In Progress~~ ✅ COMPLETED
 
-### Visual Indicator When Probe is Calculating
+### ~~Visual Indicator When Probe is Calculating~~ ✅
 
-Add a loading/calculating indicator to show when probe computation is in progress.
+> **Status:** ✅ Completed in v0.7.0
 
-**Status:** In Progress
-**Priority:** High
+Added a status chip and "Computing..." indicator in the compute panel (`apps/web/src/ui/compute.ts`). Shows timing, warnings, and error states.
 
 ---
 
@@ -849,14 +852,14 @@ From the original project TODO:
 
 ---
 
-## Probe Ray Visualization
+## ~~Probe Ray Visualization~~ ✅ IMPLEMENTED
 
-> **Status:** 📋 Planned
+> **Status:** ✅ Implemented (feature-flagged, pending visualization bug fix)
 > **Priority:** Medium
 
 ### Overview
 
-Add a toggle in the probe inspector to visualize all rays traced by the Probe engine, both on the map and as a level breakdown in the inspector panel.
+The probe ray visualization feature is fully implemented in the worker (`probeWorker.ts:164-176, 527-567`). Path geometry collection is gated behind `includePathGeometry` flag. The feature is currently hidden from production due to a visualization bug (see Critical Bugs section).
 
 ### Inspector Panel: Path Breakdown
 
@@ -1035,19 +1038,19 @@ The ray visualization container uses neumorphic raised styling:
 
 | Feature | Priority | Effort | Status |
 |---------|----------|--------|--------|
-| LaTeX equation rendering | High | Low | ✅ Complete |
-| Probe calculating indicator | High | Low | In Progress |
-| Expose maxReflections UI | Medium | Low | Planned |
+| **Probe ray visualization** | Medium | Medium | ✅ Implemented (feature-flagged) |
+| Expose maxReflections UI | High | Low | Planned (schema ready) |
+| Multi-order reflections | High | High | Planned (see feat-dev/) |
 | Configurable diffraction models | Medium | High | Future |
+| Profile dropdown enable | Low | Low | Ready (feature-flagged off) |
 | Ghost source visualization | Low | Medium | Future |
 | LOD performance modes | Low | High | Future |
 | Probe comparison mode | Low | Medium | Future |
-| WebGPU acceleration | Low | Very High | Future |
+| WebGPU/Wasm acceleration | Low | Very High | Future (see feat-dev/multi-order-rays.md) |
 | Spatial caching | Low | Medium | Future |
 | Terrain/topography | Low | Very High | Future |
 | Diffracted path reflections | Low | High | Future |
 | Auralization/HRTF | Low | Very High | Future |
-| Bouncing/physics equation tiles | Low | Medium | Future |
 
 ---
 
