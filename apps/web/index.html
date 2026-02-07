@@ -594,14 +594,6 @@
                       <span>Ground Effects</span>
                     </label>
                     <label class="property-row property-row-stack">
-                      <span>Ground Surface</span>
-                      <select class="ui-inset" id="propagationGroundType">
-                        <option value="hard">Hard (Asphalt, Concrete)</option>
-                        <option value="mixed" selected>Mixed</option>
-                        <option value="soft">Soft (Grass, Soil)</option>
-                      </select>
-                    </label>
-                    <label class="property-row property-row-stack">
                       <span>Ground Effect Model</span>
                       <select class="ui-inset" id="propagationGroundModel">
                         <option value="twoRayPhasor">Ground Interference</option>
@@ -617,6 +609,14 @@
                         <div class="equation-main" id="groundModelEquation">$A_{gr} = -20\log_{10}|1 + \Gamma \cdot (r_1/r_2) \cdot e^{jk(r_2-r_1)}|$</div>
                       </div>
                     </div>
+                    <label class="property-row property-row-stack">
+                      <span>Ground Surface</span>
+                      <select class="ui-inset" id="propagationGroundType">
+                        <option value="hard">Hard (Asphalt, Concrete)</option>
+                        <option value="mixed" selected>Mixed</option>
+                        <option value="soft">Soft (Grass, Soil)</option>
+                      </select>
+                    </label>
 <label class="property-row property-row-stack" id="propagationGroundMixedSigmaModelRow">
                       <span>Mixed Interpolation</span>
                       <select class="ui-inset" id="propagationGroundMixedSigmaModel">
