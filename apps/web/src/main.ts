@@ -49,14 +49,6 @@ import {
   getPanelCenter,
 } from './entities/index.js';
 
-// KaTeX auto-render function (loaded from CDN)
-declare function renderMathInElement(
-  element: HTMLElement,
-  options?: {
-    delimiters?: Array<{ left: string; right: string; display: boolean }>;
-    throwOnError?: boolean;
-  }
-): void;
 
 import {
   panelId,
@@ -520,7 +512,7 @@ const layers = {
 let pixelsPerMeter = 3;
 let activeTool: Tool = 'select';
 let selection: Selection = { type: 'none' };
-let activeProbeId: string | null = null;
+const activeProbeId: string | null = null;
 let hoverSelection: Selection | null = null;
 // Pinned context panels - interactive inspector panels for non-probe elements
 type PinnedContextPanel = {

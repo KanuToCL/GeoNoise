@@ -11,7 +11,7 @@ import type { ComputeReceiversResponse } from '@geonoise/engine';
 import type { ComputePreference } from '../../computePreference.js';
 import type { Receiver } from '../../entities/index.js';
 import type { SceneResults, ReceiverResult } from '../../export.js';
-import { dbToEnergy } from '../../utils/index.js';
+import { dbToEnergy, energyToDb } from '../../utils/index.js';
 import { isStaleError } from './scene.js';
 import type { ComputeCallbacks, DragContribution } from './types.js';
 
@@ -136,9 +136,6 @@ export function applyReceiverDelta(
   receiverEnergyTotals: Map<string, number>
 ): boolean {
   if (!dragContribution || dragContribution.sourceId !== sourceId) return false;
-
-  // Import dynamically to avoid circular dependency
-  const { energyToDb } = require('../../utils/index.js');
 
   for (const receiver of results.receivers) {
     const id = receiver.id;
