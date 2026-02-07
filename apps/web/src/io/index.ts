@@ -17,6 +17,7 @@ export {
   buildScenePayload,
   serializeScene,
   generateFilename,
+  downloadScene,
 } from './serialize.js';
 
 // Deserialization

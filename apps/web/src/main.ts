@@ -127,7 +127,6 @@ import {
 // === Spectrum UI Module ===
 import {
   createSpectrumEditor as createSpectrumEditorModule,
-  createSpectrumBar as createSpectrumBarModule,
 } from './ui/spectrum/index.js';
 
 // === Propagation Controls Module ===
@@ -152,6 +151,13 @@ import {
   createPinnedContextPanel as createPinnedContextPanelModule,
   refreshPinnedContextPanels as refreshPinnedContextPanelsModule,
 } from './ui/contextPanel/pinnedPanel.js';
+
+// === Sources List Module ===
+import {
+  type SourcesContext,
+  type SourcesCallbacks,
+  renderSources as renderSourcesModule,
+} from './ui/sources.js';
 
 // === Equations Module ===
 import {
@@ -241,7 +247,9 @@ import {
   drawMeasurement as drawMeasurementModule,
   drawSelectBox as drawSelectBoxModule,
 } from './rendering/index.js';
-import { nextSequence } from './io/index.js';
+import {
+  nextSequence,
+} from './io/index.js';
 import {
   getGridCounts,
   computeMapRange,
@@ -2191,53 +2199,6 @@ function refreshNoiseMapVisualization() {
   requestRender();
 }
 
-function createFieldLabel(label: string, tooltipText?: string) {
-  const wrapper = document.createElement('span');
-  wrapper.className = 'field-label';
-  const text = document.createElement('span');
-  text.textContent = label;
-  wrapper.appendChild(text);
-
-  if (tooltipText) {
-    const tooltip = document.createElement('span');
-    tooltip.className = 'tooltip';
-    const trigger = document.createElement('button');
-    trigger.type = 'button';
-    trigger.className = 'tooltip-trigger ui-button';
-    trigger.textContent = 'i';
-    trigger.setAttribute('aria-label', `${label} info`);
-    const content = document.createElement('span');
-    content.className = 'tooltip-content';
-    const note = document.createElement('span');
-    note.className = 'tooltip-note';
-    note.textContent = tooltipText;
-    content.appendChild(note);
-    tooltip.appendChild(trigger);
-    tooltip.appendChild(content);
-    wrapper.appendChild(tooltip);
-  }
-
-  return wrapper;
-}
-
-function createInlineField(label: string, value: number, onChange: (value: number) => void, tooltipText?: string) {
-  const field = document.createElement('label');
-  field.className = 'source-field';
-  const name = createFieldLabel(label, tooltipText);
-  const input = document.createElement('input');
-  input.type = 'number';
-  input.classList.add('ui-inset');
-  input.step = '0.1';
-  input.value = value.toString();
-  input.addEventListener('change', () => {
-    const next = Number(input.value);
-    if (Number.isFinite(next)) onChange(next);
-  });
-  field.appendChild(name);
-  field.appendChild(input);
-  return field;
-}
-
 // === Spectrum Functions (delegating to ui/spectrum module) ===
 
 /** Wrapper for createSpectrumEditor that passes displayWeighting and readCssVar */
@@ -2249,149 +2210,43 @@ function createSpectrumEditor(
   return createSpectrumEditorModule(source, onChangeSpectrum, onChangeGain, displayWeighting, readCssVar);
 }
 
-/** Wrapper for createSpectrumBar that uses module version */
-function createSpectrumBar(spectrum: Spectrum9, weighting: FrequencyWeighting = 'Z'): HTMLElement {
-  return createSpectrumBarModule(spectrum, weighting);
+/** Build context for renderSources module */
+function buildSourcesContext(): SourcesContext {
+  return {
+    sources: scene.sources,
+    selection,
+    soloSourceId,
+    collapsedSources,
+    displayWeighting,
+    isSourceEnabled,
+  };
 }
 
+/** Build callbacks for renderSources module */
+function buildSourcesCallbacks(): SourcesCallbacks {
+  return {
+    onMarkDirty: markDirty,
+    onPushHistory: pushHistory,
+    onSetSelection: setSelection,
+    onRenderProperties: renderProperties,
+    onComputeScene: computeScene,
+    onSoloToggle: (sourceId: string) => {
+      soloSourceId = soloSourceId === sourceId ? null : sourceId;
+      return soloSourceId;
+    },
+    onRenderSources: renderSources,
+  };
+}
+
+/** Render sources list - wrapper for module */
 function renderSources() {
   if (!sourceTable) return;
-  sourceTable.innerHTML = '';
-  if (!scene.sources.length) {
-    sourceTable.innerHTML = '<span class="legend-empty">No sources yet.</span>';
-    return;
-  }
-
-  for (const source of scene.sources) {
-    const row = document.createElement('div');
-    row.className = 'source-row';
-    row.classList.toggle('is-muted', !isSourceEnabled(source));
-    row.classList.toggle('is-selected', selection.type === 'source' && selection.id === source.id);
-    const header = document.createElement('div');
-    header.className = 'source-row-header';
-    const nameInput = document.createElement('input');
-    nameInput.className = 'source-name ui-inset';
-    nameInput.type = 'text';
-    nameInput.value = source.name;
-    nameInput.placeholder = 'Name';
-    nameInput.addEventListener('input', () => {
-      source.name = nameInput.value;
-      markDirty();
-    });
-    nameInput.addEventListener('change', () => {
-      pushHistory();
-    });
-    const idTag = document.createElement('span');
-    idTag.className = 'source-id';
-    idTag.textContent = source.id.toUpperCase();
-
-    const controls = document.createElement('div');
-    controls.className = 'source-controls';
-    const soloButton = document.createElement('button');
-    soloButton.type = 'button';
-    soloButton.className = 'source-chip ui-button';
-    soloButton.textContent = 'S';
-    soloButton.classList.toggle('is-active', soloSourceId === source.id);
-    soloButton.setAttribute('aria-pressed', soloSourceId === source.id ? 'true' : 'false');
-    soloButton.setAttribute('aria-label', soloSourceId === source.id ? 'Unsolo source' : 'Solo source');
-    soloButton.title = soloSourceId === source.id ? 'Unsolo source' : 'Solo source';
-    soloButton.addEventListener('click', (event) => {
-      event.stopPropagation();
-      soloSourceId = soloSourceId === source.id ? null : source.id;
-      pushHistory();
-      renderSources();
-      renderProperties();
-      computeScene();
-    });
-    const muteButton = document.createElement('button');
-    muteButton.type = 'button';
-    muteButton.className = 'source-chip ui-button';
-    muteButton.textContent = 'M';
-    muteButton.classList.toggle('is-active', !source.enabled);
-    muteButton.setAttribute('aria-pressed', !source.enabled ? 'true' : 'false');
-    muteButton.setAttribute('aria-label', source.enabled ? 'Mute source' : 'Unmute source');
-    muteButton.title = source.enabled ? 'Mute source' : 'Unmute source';
-    muteButton.addEventListener('click', (event) => {
-      event.stopPropagation();
-      source.enabled = !source.enabled;
-      pushHistory();
-      renderSources();
-      renderProperties();
-      computeScene();
-    });
-    controls.appendChild(soloButton);
-    controls.appendChild(muteButton);
-    const collapseButton = document.createElement('button');
-    collapseButton.type = 'button';
-    collapseButton.className = 'source-collapse';
-    const isCollapsed = collapsedSources.has(source.id);
-    collapseButton.textContent = isCollapsed ? '>' : 'v';
-    collapseButton.setAttribute('aria-label', isCollapsed ? 'Expand source' : 'Collapse source');
-    collapseButton.title = isCollapsed ? 'Expand' : 'Collapse';
-    collapseButton.addEventListener('click', (event) => {
-      event.stopPropagation();
-      if (collapsedSources.has(source.id)) {
-        collapsedSources.delete(source.id);
-      } else {
-        collapsedSources.add(source.id);
-      }
-      renderSources();
-    });
-
-    const titleBlock = document.createElement('div');
-    titleBlock.className = 'source-title';
-    titleBlock.appendChild(nameInput);
-    titleBlock.appendChild(idTag);
-
-    const headerActions = document.createElement('div');
-    headerActions.className = 'source-actions';
-    headerActions.appendChild(controls);
-    headerActions.appendChild(collapseButton);
-
-    header.appendChild(titleBlock);
-    header.appendChild(headerActions);
-    row.appendChild(header);
-
-    const fields = document.createElement('div');
-    fields.className = 'source-fields';
-
-    // Overall power display (computed from spectrum)
-    const overallZ = calculateOverallLevel(source.spectrum, 'Z');
-    const overallA = calculateOverallLevel(source.spectrum, 'A');
-    const powerDisplay = document.createElement('div');
-    powerDisplay.className = 'source-power-display';
-    powerDisplay.innerHTML = `<span class="source-power-label">Power:</span> <strong>${formatLevel(overallZ)}</strong> dBZ / <strong>${formatLevel(overallA)}</strong> dBA`;
-    fields.appendChild(powerDisplay);
-
-    // Compact spectrum visualization
-    const spectrumBar = createSpectrumBar(source.spectrum, displayWeighting);
-    fields.appendChild(spectrumBar);
-
-    fields.appendChild(createInlineField('Height (m)', source.z, (value) => {
-      source.z = value;
-      pushHistory();
-      renderProperties();
-      computeScene();
-    }));
-
-    if (!collapsedSources.has(source.id)) {
-      row.appendChild(fields);
-    }
-
-    row.addEventListener('click', (event) => {
-      const target = event.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'BUTTON') return;
-      setSelection({ type: 'source', id: source.id });
-    });
-
-    sourceTable.appendChild(row);
-  }
-
-  if (sourceSumMode) {
-    sourceSumMode.textContent = soloSourceId
-      ? `Summation: Energetic (dB) - Solo ${soloSourceId.toUpperCase()}`
-      : 'Summation: Energetic (dB)';
-  }
+  renderSourcesModule(
+    sourceTable,
+    buildSourcesContext(),
+    buildSourcesCallbacks(),
+    sourceSumMode
+  );
 }
 
 function duplicateSource(source: Source): Source {
@@ -2671,24 +2526,65 @@ function updateMapUI() {
   updateMapButtonState();
 }
 
+// === Map/Display Settings Thin Wrappers ===
+
+function buildMapSettingsElements(): MapSettingsElements {
+  return { mapRenderStyleToggle, mapBandStepInput, mapBandStepRow, mapAutoScaleToggle };
+}
+
+function buildMapSettingsState(): MapSettingsState {
+  return { mapRenderStyle, mapBandStep, mapAutoScale, displayBand };
+}
+
+function buildMapSettingsCallbacks(): MapSettingsCallbacks {
+  return {
+    getMapBandStep,
+    setMapRenderStyle: (style) => { mapRenderStyle = style; },
+    setMapBandStep: (step) => { mapBandStep = step; },
+    setMapAutoScale: (autoScale) => { mapAutoScale = autoScale; },
+    onRefreshVisualization: refreshNoiseMapVisualization,
+  };
+}
+
+function buildDisplaySettingsElements(): DisplaySettingsElements {
+  return { displayWeightingSelect, displayBandSelect };
+}
+
+function buildDisplaySettingsState(): DisplaySettingsState {
+  return { displayWeighting, displayBand };
+}
+
+function buildDisplaySettingsCallbacks(): DisplaySettingsCallbacks {
+  return {
+    setDisplayWeighting: (weighting) => { displayWeighting = weighting; },
+    setDisplayBand: (band) => { displayBand = band; },
+    setMapBandStep: (step) => { mapBandStep = step; },
+    updateMapSettingsControls,
+    renderSources,
+    renderResults,
+    renderProperties,
+    isNoiseMapVisible: () => layers.noiseMap,
+    recomputeNoiseMap: (requestId) => {
+      void computeNoiseMapInternal({ resolutionPx: RES_HIGH, silent: false, requestId });
+    },
+    requestRender,
+  };
+}
+
 function updateMapSettingsControls() {
-  if (mapRenderStyleToggle) {
-    mapRenderStyleToggle.checked = mapRenderStyle === 'Contours';
-  }
-  if (mapBandStepInput) {
-    mapBandStepInput.value = getMapBandStep().toString();
-    mapBandStepInput.disabled = mapRenderStyle !== 'Contours';
-  }
-  if (mapBandStepRow) {
-    mapBandStepRow.classList.toggle('is-hidden', mapRenderStyle !== 'Contours');
-  }
-  if (mapAutoScaleToggle) {
-    mapAutoScaleToggle.checked = mapAutoScale;
-  }
+  updateMapSettingsControlsModule(buildMapSettingsElements(), buildMapSettingsState(), getMapBandStep);
 }
 
 function wireMapSettings() {
-  if (!mapRenderStyleToggle && !mapBandStepInput && !mapAutoScaleToggle) return;
+  wireMapSettingsModule(buildMapSettingsElements(), buildMapSettingsState(), buildMapSettingsCallbacks());
+}
+
+function wireDisplaySettings() {
+  wireDisplaySettingsModule(buildDisplaySettingsElements(), buildDisplaySettingsState(), buildDisplaySettingsCallbacks());
+}
+
+function wireRefineButton() {
+  if (!refineButton) return;
 
   updateMapSettingsControls();
 

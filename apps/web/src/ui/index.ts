@@ -100,3 +100,24 @@ export {
   showComputeError,
   updateComputeUI,
 } from './compute.js';
+
+// Sources List
+export {
+  type SourceSelection,
+  type SourcesContext,
+  type SourcesCallbacks,
+  renderSources,
+} from './sources.js';
+
+// Settings
+export {
+  type MapSettingsElements,
+  type DisplaySettingsElements,
+  type MapSettingsState,
+  type DisplaySettingsState,
+  type MapSettingsCallbacks,
+  type DisplaySettingsCallbacks,
+  updateMapSettingsControls,
+  wireMapSettings,
+  wireDisplaySettings,
+} from './settings.js';

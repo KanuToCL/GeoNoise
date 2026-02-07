@@ -89,3 +89,27 @@ export function generateFilename(name: string): string {
     .toLowerCase();
   return `${sanitized}.json`;
 }
+
+/**
+ * Download scene as a JSON file
+ *
+ * @param scene - The current scene data
+ * @param name - Scene name
+ * @param propagation - Propagation configuration
+ */
+export function downloadScene(
+  scene: SceneData,
+  name: string,
+  propagation: PropagationConfig
+): void {
+  const json = serializeScene(scene, name, propagation);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = generateFilename(name);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
