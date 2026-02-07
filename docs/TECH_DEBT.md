@@ -3,7 +3,7 @@
 This document tracks architectural issues, inconsistencies, and refactoring opportunities in the GeoNoise codebase.
 
 **Last Updated:** 2026-02-07
-**Overall Health Score:** 7.0/10 (main.ts reduced to 5,357 lines; 2,554 lines extracted)
+**Overall Health Score:** 7.2/10 (main.ts reduced to 5,142 lines; 2,769 lines extracted)
 **Next Milestone:** Reduce main.ts to ~3,500 lines (then ~2,000 lines)
 
 ---
@@ -14,52 +14,53 @@ This document tracks architectural issues, inconsistencies, and refactoring oppo
 
 | Metric | Value | Change |
 |--------|-------|--------|
-| **main.ts lines** | 5,357 | ↓ 2,554 from 7,911 |
-| **Modules extracted** | 16+ | +2 this session |
-| **Functions in main.ts** | ~180 | ↓ from 232 |
-| **Health Score** | 7.0/10 | ↑ from 6.5/10 |
+| **main.ts lines** | 5,142 | ↓ 2,769 from 7,911 (35% reduction) |
+| **Modules extracted** | 17+ | +3 this session |
+| **Functions in main.ts** | ~175 | ↓ from 232 |
+| **Health Score** | 7.2/10 | ↑ from 7.0/10 |
 
 ### What Got Done (This Session)
 
-| Extraction | Lines Removed | Module Created | Commit |
-|------------|---------------|----------------|--------|
+| Extraction | Lines Removed | Module Created/Wired | Commit |
+|------------|---------------|----------------------|--------|
 | `renderPropertiesFor` | ~260 lines | `ui/contextPanel/properties.ts` | `0d3099b` |
 | `createPinnedContextPanel` + `refreshPinnedContextPanels` | ~175 lines | `ui/contextPanel/pinnedPanel.ts` | `7f2a2bf` |
-| **Total this session** | **~435 lines** | **2 new modules** | |
+| Scene I/O wiring (`downloadScene`, `wireSaveLoad`, `buildScenePayload`) | ~26 lines | Wired to `io/` module | pending |
+| **Total this session** | **~461 lines** | **3 extractions** | |
 
 ### What's Next (Priority Order)
 
 1. **renderSources** (~250 lines) → `ui/sources.ts`
 2. **createPinnedProbePanel / probe rendering** (~200 lines) → wire to `probe/` module
 3. **wireMapSettings / wireDisplaySettings** (~150 lines) → `ui/settings.ts`
-4. **Scene I/O functions** (~130 lines) → wire to `io/` module
+4. ~~**Scene I/O functions**~~ ✅ Wired to `io/` module
 5. **Remaining context panel functions** (~100 lines) → `ui/contextPanel/`
 
 ---
 
 ## Critical Issues
 
-### 1. Monolithic main.ts (~5,357 lines) ⚠️ IN PROGRESS
+### 1. Monolithic main.ts (~5,142 lines) ⚠️ IN PROGRESS
 
 **Priority:** High
 **Effort:** Large (ongoing)
 **Location:** `apps/web/src/main.ts`
 
-**Progress:** Down from 7,911 lines to 5,357 lines (32% reduction achieved)
+**Progress:** Down from 7,911 lines to 5,142 lines (35% reduction achieved)
 
-The main entry point still contains ~180 functions across multiple responsibilities:
+The main entry point still contains ~175 functions across multiple responsibilities:
 - ~~Probe system~~ → Partially extracted to `probe/` module
 - ~~Compute orchestration~~ → Extracted to `compute/orchestration/`
 - ~~Pointer/keyboard handlers~~ → Extracted to `interaction/pointer.ts`, `interaction/keyboard.ts`
 - ~~Context panel properties~~ → Extracted to `ui/contextPanel/properties.ts`
 - ~~Pinned context panels~~ → Extracted to `ui/contextPanel/pinnedPanel.ts`
+- ~~Scene I/O (save, load, download)~~ → Wired to `io/` module
 - UI wiring (dock, settings, equations, propagation) → Partially extracted
-- Scene I/O (save, load, download) → Ready to wire
 
 **Proposed Split (Updated):**
 ```
 apps/web/src/
-├── main.ts                    # Entry point (~5,357 lines → target ~2,000)
+├── main.ts                    # Entry point (~5,142 lines → target ~2,000)
 │
 ├── entities/                  # Entity definitions and helpers ✅ COMPLETE
 │   ├── building.ts            ✅ Done
@@ -209,7 +210,7 @@ apps/web/src/
 | `renderSources` + source list UI | ~250 | `ui/sources.ts` | High |
 | `createProbeSnapshotWrapper` | ~100 | wire to `probe/snapshots.ts` | High |
 | `wireMapSettings` + `wireDisplaySettings` | ~150 | `ui/settings.ts` | Medium |
-| Scene I/O wrappers | ~100 | wire to `io/` module | Medium |
+| ~~Scene I/O wrappers~~ | ~~100~~ | ~~wire to `io/` module~~ | ✅ Done |
 | `createFieldLabel`, `createInlineField` | ~80 | already in `ui/contextPanel/fields.ts` | Low |
 | Remaining legend/stats functions | ~80 | wire to `results/` module | Low |
 | Drawing mode submenu state | ~100 | already in `ui/toolbar.ts` | Low |
@@ -299,7 +300,7 @@ State has been consolidated into `state/` modules:
 
 | File | Lines | Status | Action |
 |------|-------|--------|--------|
-| `main.ts` | ~5,357 | 🟡 Improving | Continue extraction (target: 2,000) |
+| `main.ts` | ~5,142 | 🟡 Improving | Continue extraction (target: 2,000) |
 | `mapboxUI.ts` | ~1,100 | 🟡 Growing | Monitor, consider split if >1,500 |
 | `ui/contextPanel/properties.ts` | ~415 | 🟢 Acceptable | Complete, well-structured |
 | `interaction/pointer.ts` | ~680 | 🟢 Acceptable | Complete, well-structured |
@@ -315,7 +316,6 @@ State has been consolidated into `state/` modules:
 |--------|-------|-------------|--------|
 | `renderSources` | ~250 | `ui/sources.ts` | Medium |
 | Wire probe module calls | ~150 | Replace inline with module calls | Small |
-| Wire I/O module calls | ~100 | Replace inline with module calls | Small |
 
 ### Short-term
 
@@ -341,6 +341,7 @@ State has been consolidated into `state/` modules:
 | `0d3099b` | Extract renderPropertiesFor to ui/contextPanel/properties module | -260 lines |
 | `7f2a2bf` | Extract createPinnedContextPanel to ui/contextPanel/pinnedPanel module | -175 lines |
 | `3f2f69e` | Fix trailing newline to pinnedPanel.ts | cleanup |
+| pending | Wire scene I/O to io/ module (downloadScene, wireSaveLoad, remove buildScenePayload) | -26 lines |
 
 ---
 

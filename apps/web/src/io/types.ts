@@ -5,20 +5,10 @@
  */
 
 import type { Point, Source, Receiver, Panel, Probe, BuildingData } from '../entities/index.js';
+import type { PropagationConfig } from '@geonoise/core';
 
-/**
- * Propagation configuration saved with scenes
- */
-export type PropagationConfig = {
-  spreading: 'spherical' | 'cylindrical' | 'hybrid';
-  atmosphericAbsorption: 'none' | 'simple' | 'iso9613';
-  groundReflection: boolean;
-  groundModel: 'rigid' | 'impedance' | 'delany-bazley';
-  groundType: 'hard' | 'soft' | 'mixed';
-  groundMixedFactor?: number;
-  groundMixedSigmaModel?: 'iso9613' | 'ansi';
-  barrierSideDiffraction?: 'none' | 'auto' | 'always';
-};
+// Re-export PropagationConfig for convenience
+export type { PropagationConfig };
 
 /**
  * Scene payload structure for save/load operations

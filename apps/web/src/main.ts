@@ -159,6 +159,19 @@ import {
   renderSources as renderSourcesModule,
 } from './ui/sources.js';
 
+// === Settings Module ===
+import {
+  type MapSettingsElements,
+  type MapSettingsState,
+  type MapSettingsCallbacks,
+  type DisplaySettingsElements,
+  type DisplaySettingsState,
+  type DisplaySettingsCallbacks,
+  updateMapSettingsControls as updateMapSettingsControlsModule,
+  wireMapSettings as wireMapSettingsModule,
+  wireDisplaySettings as wireDisplaySettingsModule,
+} from './ui/settings.js';
+
 // === Equations Module ===
 import {
   type EquationElements,
@@ -249,6 +262,10 @@ import {
 } from './rendering/index.js';
 import {
   nextSequence,
+  downloadScene as downloadSceneModule,
+  openSceneFile,
+  calculateSequences,
+  type DeserializedScene,
 } from './io/index.js';
 import {
   getGridCounts,
@@ -2585,87 +2602,6 @@ function wireDisplaySettings() {
 
 function wireRefineButton() {
   if (!refineButton) return;
-
-  updateMapSettingsControls();
-
-  mapRenderStyleToggle?.addEventListener('change', () => {
-    mapRenderStyle = mapRenderStyleToggle.checked ? 'Contours' : 'Smooth';
-    updateMapSettingsControls();
-    refreshNoiseMapVisualization();
-  });
-
-  const applyBandStep = (shouldClamp: boolean) => {
-    if (!mapBandStepInput) return;
-    const next = Number(mapBandStepInput.value);
-    if (!Number.isFinite(next)) {
-      if (shouldClamp) {
-        mapBandStepInput.value = getMapBandStep().toString();
-      }
-      return;
-    }
-    mapBandStep = Math.min(20, Math.max(1, next));
-    if (shouldClamp) {
-      mapBandStepInput.value = mapBandStep.toString();
-    }
-    refreshNoiseMapVisualization();
-  };
-
-  mapBandStepInput?.addEventListener('input', () => {
-    applyBandStep(false);
-  });
-
-  mapBandStepInput?.addEventListener('change', () => {
-    applyBandStep(true);
-  });
-
-  mapAutoScaleToggle?.addEventListener('change', () => {
-    mapAutoScale = mapAutoScaleToggle.checked;
-    refreshNoiseMapVisualization();
-  });
-}
-
-function wireDisplaySettings() {
-  if (!displayWeightingSelect && !displayBandSelect) return;
-
-  // Initialize from current state
-  if (displayWeightingSelect) {
-    displayWeightingSelect.value = displayWeighting;
-  }
-  if (displayBandSelect) {
-    displayBandSelect.value = displayBand === 'overall' ? 'overall' : String(displayBand);
-  }
-
-  displayWeightingSelect?.addEventListener('change', () => {
-    displayWeighting = displayWeightingSelect.value as FrequencyWeighting;
-    renderSources();
-    renderResults();
-    renderProperties();
-    // Recompute noise map with new weighting if the map layer is visible
-    if (layers.noiseMap) {
-      void computeNoiseMapInternal({ resolutionPx: RES_HIGH, silent: false, requestId: 'grid:weighting-change' });
-    }
-    requestRender();
-  });
-
-  displayBandSelect?.addEventListener('change', () => {
-    const value = displayBandSelect.value;
-    displayBand = value === 'overall' ? 'overall' : (Number(value) as DisplayBand);
-    // Update band step to use appropriate default for overall vs per-band display
-    mapBandStep = displayBand === 'overall' ? DEFAULT_MAP_BAND_STEP : DEFAULT_MAP_BAND_STEP_PERBAND;
-    updateMapSettingsControls();
-    renderSources();
-    renderResults();
-    renderProperties();
-    // Recompute noise map with new band selection if the map layer is visible
-    if (layers.noiseMap) {
-      void computeNoiseMapInternal({ resolutionPx: RES_HIGH, silent: false, requestId: 'grid:band-change' });
-    }
-    requestRender();
-  });
-}
-
-function wireRefineButton() {
-  if (!refineButton) return;
   refineButton.addEventListener('click', () => {
     // Manual refine overrides any queued low-res update.
     queuedMapResolutionPx = null;
@@ -4840,68 +4776,33 @@ function wireProbePanel() {
   });
 }
 
-function buildScenePayload() {
-  return {
-    version: 1,
-    name: sceneNameInput?.value ?? 'Untitled',
-    sources: scene.sources.map((source) => ({ ...source })),
-    receivers: scene.receivers.map((receiver) => ({ ...receiver })),
-    panels: scene.panels.map((panel) => ({
-      ...panel,
-      points: panel.points.map((point) => ({ ...point })),
-      sampling: { ...panel.sampling },
-    })),
-    probes: scene.probes.map((probe) => ({ ...probe })),
-    buildings: scene.buildings.map((building) => building.toData()),
-    barriers: scene.barriers.map((barrier) => ({
-      ...barrier,
-      p1: { ...barrier.p1 },
-      p2: { ...barrier.p2 },
-      transmissionLoss: Number.isFinite(barrier.transmissionLoss ?? Infinity) ? barrier.transmissionLoss : undefined,
-    })),
-    propagation: getPropagationConfig(),
-  };
-}
-
 function downloadScene() {
-  const payload = buildScenePayload();
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  const name = payload.name?.trim() || 'geonoise-scene';
-  link.href = url;
-  link.download = `${name.replace(/\s+/g, '-').toLowerCase()}.json`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  downloadSceneModule(scene, sceneNameInput?.value ?? 'Untitled', getPropagationConfig());
 }
 
-function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
-  scene.sources = payload.sources.map((source) => ({ ...source }));
-  scene.receivers = payload.receivers.map((receiver) => ({ ...receiver }));
-  scene.panels = payload.panels.map((panel) => ({
-    ...panel,
-    points: panel.points.map((point) => ({ ...point })),
-    sampling: { ...panel.sampling },
-  }));
-  scene.probes = (payload.probes ?? []).map((probe) => ({
-    ...probe,
-    z: probe.z ?? PROBE_DEFAULT_Z,
-  }));
-  scene.buildings = (payload.buildings ?? []).map((building) => new Building(building));
-  // Backwards-compatible load: scenes saved before barriers existed simply omit this field.
-  scene.barriers = (payload.barriers ?? []).map((barrier) => ({
-    ...barrier,
-    p1: { ...barrier.p1 },
-    p2: { ...barrier.p2 },
-  }));
-  sourceSeq = nextSequence('s', scene.sources);
-  receiverSeq = nextSequence('r', scene.receivers);
-  panelSeq = nextSequence('p', scene.panels);
-  probeSeq = nextSequence('pr', scene.probes);
-  buildingSeq = nextSequence('bd', scene.buildings);
-  barrierSeq = nextSequence('b', scene.barriers);
+function applyLoadedScene(
+  loadedScene: DeserializedScene,
+  name: string,
+  propagation?: PropagationConfig
+) {
+  // Apply deserialized scene data
+  scene.sources = loadedScene.sources;
+  scene.receivers = loadedScene.receivers;
+  scene.panels = loadedScene.panels;
+  scene.probes = loadedScene.probes;
+  scene.buildings = loadedScene.buildings;
+  scene.barriers = loadedScene.barriers;
+
+  // Calculate sequence numbers from io module
+  const seqs = calculateSequences(loadedScene);
+  sourceSeq = seqs.sourceSeq;
+  receiverSeq = seqs.receiverSeq;
+  panelSeq = seqs.panelSeq;
+  probeSeq = seqs.probeSeq;
+  buildingSeq = seqs.buildingSeq;
+  barrierSeq = seqs.barrierSeq;
+
+  // Reset UI state
   collapsedSources.clear();
   soloSourceId = null;
   selection = { type: 'none' };
@@ -4922,12 +4823,12 @@ function applyLoadedScene(payload: ReturnType<typeof buildScenePayload>) {
   const emptySet = new Set<string>();
   pruneProbeData(emptySet);
   clearPinnedProbes();
-  if (payload.propagation) {
-    updatePropagationConfig(payload.propagation);
+  if (propagation) {
+    updatePropagationConfig(propagation);
     updatePropagationControls();
   }
   if (sceneNameInput) {
-    sceneNameInput.value = payload.name || 'Untitled';
+    sceneNameInput.value = name;
   }
   updateCounts();
   setSelection({ type: 'none' });
@@ -4947,28 +4848,16 @@ function wireSaveLoad() {
     markSaved();
   });
 
-  loadButton?.addEventListener('click', () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'application/json';
-    input.addEventListener('change', async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      try {
-        const text = await file.text();
-        const parsed = JSON.parse(text) as ReturnType<typeof buildScenePayload>;
-        if (!parsed || !Array.isArray(parsed.sources) || !Array.isArray(parsed.receivers) || !Array.isArray(parsed.panels)) {
-          // eslint-disable-next-line no-console
-          console.error('Invalid scene file');
-          return;
-        }
-        applyLoadedScene(parsed);
-      } catch (error) {
+  loadButton?.addEventListener('click', async () => {
+    const result = await openSceneFile();
+    if (!result.success) {
+      if (result.error && result.error !== 'File selection cancelled') {
         // eslint-disable-next-line no-console
-        console.error('Failed to load scene', error);
+        console.error('Failed to load scene:', result.error);
       }
-    });
-    input.click();
+      return;
+    }
+    applyLoadedScene(result.scene, result.name, result.propagation);
   });
 }
 
