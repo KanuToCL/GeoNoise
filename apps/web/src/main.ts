@@ -12,7 +12,7 @@ import {
   saveTheme,
   type Theme,
 } from './theme.js';
-import { initMapboxUI, syncMapToCanvasZoom, syncMapToCanvasPan, isMapVisible, isMapInteractive } from './mapboxUI.js';
+import { initMapboxUI, syncMapToCanvasZoom, syncMapToCanvasPan, isMapVisible, isMapInteractive, getMapCrossfader, setOnCrossfaderChange } from './mapboxUI.js';
 import { engineCompute } from '@geonoise/engine-backends';
 import { createEmptyScene, type EngineConfig, type PropagationConfig } from '@geonoise/core';
 import {
@@ -972,7 +972,9 @@ function buildNoiseMapTexture(grid: ComputeGridResponse['result'], range: MapRan
 
   const image = mapCtx.createImageData(cols, rows);
   const span = range.max - range.min;
-  const alpha = 200;
+  // Crossfader: 0% map = full colormap (alpha 255), 100% map = no colormap (alpha 0)
+  const crossfader = getMapCrossfader();
+  const alpha = Math.round(255 * (1 - crossfader / 100));
 
   for (let y = 0; y < rows; y += 1) {
     // Canvas image space is y-down; grid space is y-up.
@@ -3946,6 +3948,7 @@ function renderLoop() {
   needsUpdate = false;
 
   const rect = canvas.getBoundingClientRect();
+
   ctx.clearRect(0, 0, rect.width, rect.height);
 
   // Only fill background if map is not visible
@@ -3954,6 +3957,7 @@ function renderLoop() {
     ctx.fillRect(0, 0, rect.width, rect.height);
   }
 
+  // Draw colormap (bottom layer)
   if (layers.noiseMap) {
     drawNoiseMap();
   }
@@ -3962,6 +3966,7 @@ function renderLoop() {
     drawGrid();
   }
 
+  // Draw entities (top layer - all on same canvas now)
   if (layers.panels) {
     drawPanels();
     for (const panelResult of results.panels) {
@@ -5133,6 +5138,11 @@ wireSettingsPopover();
       }
     },
     getPixelsPerMeter: () => pixelsPerMeter,
+  });
+
+  // Wire up crossfader callback to rebuild colormap when slider changes
+  setOnCrossfaderChange(() => {
+    refreshNoiseMapVisualization();
   });
 
   updateUndoRedoButtons();

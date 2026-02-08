@@ -140,10 +140,10 @@
     <div class="app-shell">
       <!-- Fullscreen map canvas layer. -->
         <div class="canvas-frame">
-          <!-- Mapbox map overlay container (hidden by default) -->
-          <div id="mapboxContainer" class="mapbox-container" style="display: none; position: absolute; inset: 0; z-index: 0;"></div>
+          <!-- Mapbox map overlay (hidden by default, behind canvas) -->
+          <div id="mapboxContainer" class="mapbox-container" style="display: none; position: absolute; inset: 0; z-index: 0; pointer-events: none;"></div>
 
-          <!-- Main canvas for noise visualization -->
+          <!-- Main canvas for all visualization (colormap + entities) -->
           <canvas id="mapCanvas" style="position: absolute; inset: 0; z-index: 1;"></canvas>
 
           <!-- Floating Map Control Panel (hidden by default, shown by JS when ENABLE_MAPBOX is true) -->
@@ -249,8 +249,8 @@
               </div>
 
               <div style="display: flex; align-items: center; gap: 8px;">
-                <label style="font-size: 11px; color: #aaa;">Opacity:</label>
-                <input id="mapOpacitySlider" type="range" min="10" max="100" value="80" style="flex: 1; accent-color: #4a90d9;">
+                <label style="font-size: 11px; color: #aaa;">Map:</label>
+                <input id="mapOpacitySlider" type="range" min="0" max="100" value="80" style="flex: 1; accent-color: #4a90d9;">
                 <span id="mapOpacityValue" style="font-size: 11px; color: #aaa; min-width: 32px;">80%</span>
               </div>
 

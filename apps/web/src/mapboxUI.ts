@@ -35,6 +35,10 @@ const uiState: MapboxUIState = {
   isEnabled: true,
 };
 
+// Crossfader value: 0 = full colormap, 100 = full map
+let mapCrossfader = 80; // Default 80% map
+let onCrossfaderChange: (() => void) | null = null;
+
 // DOM Elements
 let mapToggleButton: HTMLButtonElement | null = null;
 let mapboxContainer: HTMLDivElement | null = null;
@@ -408,14 +412,20 @@ function wireFloatingPanel(): void {
     hideMap();
   });
 
-  // Opacity slider
+  // Crossfader slider (0 = full colormap, 100 = full map)
   mapOpacitySlider?.addEventListener("input", () => {
     const value = parseInt(mapOpacitySlider!.value, 10);
+    mapCrossfader = value;
     if (mapOpacityValue) {
       mapOpacityValue.textContent = `${value}%`;
     }
+    // Set map opacity directly from crossfader
     if (mapboxContainer) {
       mapboxContainer.style.opacity = String(value / 100);
+    }
+    // Trigger colormap rebuild with inverse alpha
+    if (onCrossfaderChange) {
+      onCrossfaderChange();
     }
   });
 
@@ -486,11 +496,11 @@ function toggleMapInteractivity(): void {
     if (uiState.isMapInteractive) {
       // Enable map interactivity - map gets pointer events
       mapboxContainer.style.pointerEvents = "auto";
-      mapboxContainer.style.zIndex = "2"; // Put map on top temporarily
+      mapboxContainer.style.zIndex = "2"; // Put map on top temporarily for interaction
     } else {
       // Disable map interactivity - canvas gets pointer events
       mapboxContainer.style.pointerEvents = "none";
-      mapboxContainer.style.zIndex = "0"; // Put map behind canvas
+      mapboxContainer.style.zIndex = "0"; // Map stays behind canvas (which is z-index 1)
 
       // Sync MAP zoom to match CANVAS scale when locking
       if (uiState.map && getPixelsPerMeter) {
@@ -984,6 +994,22 @@ export function setMapZoom(zoom: number): void {
 export function getMapZoom(): number | null {
   if (!uiState.map) return null;
   return uiState.map.getZoom();
+}
+
+/**
+ * Get the current crossfader value (0-100)
+ * 0 = full colormap, 100 = full map
+ */
+export function getMapCrossfader(): number {
+  return mapCrossfader;
+}
+
+/**
+ * Set a callback to be called when the crossfader changes
+ * Used to trigger colormap rebuild
+ */
+export function setOnCrossfaderChange(callback: () => void): void {
+  onCrossfaderChange = callback;
 }
 
 /**
