@@ -420,3 +420,15 @@ This pattern:
 - **Run build after each change** to catch TypeScript errors early
 - Use `git` for commits (not `sl` in this project)
 - The interaction/ and interactions/ directories are separate (pointer/keyboard vs hitTest/drag)
+
+---
+
+## Known Bugs
+
+### Four-Corner Polygon Creation Bug
+
+**Location:** Building polygon tool (draw mode)
+**Symptom:** When creating a polygon by placing exactly four corners, there's an issue with the creation flow
+**Status:** Not yet investigated
+**Priority:** Medium
+**Added:** 2026-02-07

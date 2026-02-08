@@ -36,7 +36,7 @@ const uiState: MapboxUIState = {
 };
 
 // Crossfader value: 0 = full colormap, 100 = full map
-let mapCrossfader = 80; // Default 80% map
+let mapCrossfader = 0; // Default to full colormap on initial load
 let onCrossfaderChange: (() => void) | null = null;
 
 // DOM Elements
@@ -356,6 +356,8 @@ async function showMap(): Promise<void> {
     uiState.isMapInteractive = false;
     mapboxContainer.style.pointerEvents = "none";
     mapboxContainer.style.zIndex = "0";
+    // Set initial opacity based on crossfader value
+    mapboxContainer.style.opacity = String(mapCrossfader / 100);
 
     uiState.isMapVisible = true;
     updateMapButtonState();
