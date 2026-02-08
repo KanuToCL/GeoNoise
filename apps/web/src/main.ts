@@ -1,3 +1,4 @@
+import { initAnalytics } from './analytics.js';
 import {
   detectWebGPU,
   loadPreference,
@@ -5073,6 +5074,9 @@ function wirePropagationControls() {
 }
 
 function init() {
+  // Initialize Vercel Analytics
+  initAnalytics();
+
   // Recalculate sequence counters based on demo scene elements to avoid ID collisions.
   // Without this, hardcoded initial values (e.g. buildingSeq=2) would collide with
   // pre-loaded demo scene IDs (bd1-bd5), causing duplicate IDs when adding new elements.
