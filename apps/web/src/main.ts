@@ -1,4 +1,18 @@
-import { initAnalytics } from './analytics.js';
+import {
+  initAnalytics,
+  trackCreateSource,
+  trackCreateReceiver,
+  trackCreateProbe,
+  trackCreateBuilding,
+  trackCreateBarrier,
+  trackCreatePanel,
+  trackCompute,
+  trackGenerateMap,
+  trackExport,
+  trackSaveScene,
+  trackLoadScene,
+  trackToolChange,
+} from './analytics.js';
 import {
   detectWebGPU,
   loadPreference,
@@ -2290,6 +2304,7 @@ function duplicateBuilding(building: Building): Building {
 
 function setActiveTool(tool: Tool) {
   activeTool = tool;
+  trackToolChange(tool);
   if (tool !== 'add-barrier') {
     barrierDraft = null;
     barrierDraftAnchored = false;
@@ -3530,6 +3545,7 @@ function commitBarrierDraft() {
     transmissionLoss: Number.POSITIVE_INFINITY,
   };
   scene.barriers.push(barrier);
+  trackCreateBarrier();
   barrierDraft = null;
   barrierDraftAnchored = false;
   barrierDragActive = false;
@@ -3582,6 +3598,7 @@ function commitBuildingDraft() {
   });
 
   scene.buildings.push(building);
+  trackCreateBuilding('rectangle');
   buildingDraft = null;
   buildingDraftAnchored = false;
   buildingDragActive = false;
@@ -3627,6 +3644,7 @@ function commitBuildingCenterDraft() {
   });
 
   scene.buildings.push(building);
+  trackCreateBuilding('rectangle');
   buildingCenterDraft = null;
   buildingDragActive = false;
   setSelection({ type: 'building', id: building.id });
@@ -3673,6 +3691,7 @@ function commitBuildingPolygonDraft() {
   });
 
   scene.buildings.push(building);
+  trackCreateBuilding('polygon');
   buildingPolygonDraft = [];
   buildingPolygonPreviewPoint = null;
   setSelection({ type: 'building', id: building.id });
@@ -3745,6 +3764,7 @@ function addPanelAt(point: Point) {
     sampling: { resolution: 10, pointCap: 300 },
   };
   scene.panels.push(panel);
+  trackCreatePanel();
   setSelection({ type: 'panel', id: panel.id });
   updateCounts();
   pushHistory();
@@ -3766,6 +3786,7 @@ function addSourceAt(point: Point) {
     enabled: true,
   };
   scene.sources.push(source);
+  trackCreateSource();
   setSelection({ type: 'source', id: source.id });
   updateCounts();
   pushHistory();
@@ -3781,6 +3802,7 @@ function addReceiverAt(point: Point) {
     z: 1.5,
   };
   scene.receivers.push(receiver);
+  trackCreateReceiver();
   setSelection({ type: 'receiver', id: receiver.id });
   updateCounts();
   pushHistory();
@@ -3796,6 +3818,7 @@ function addProbeAt(point: Point) {
     z: PROBE_DEFAULT_Z,
   };
   scene.probes.push(probe);
+  trackCreateProbe();
   setSelection({ type: 'probe', id: probe.id });
   pushHistory({ invalidateMap: false });
   requestRender();
@@ -4544,7 +4567,10 @@ function wireKeyboard() {
 
 function wireExport() {
   if (!exportCsv) return;
-  exportCsv.addEventListener('click', () => downloadCsv());
+  exportCsv.addEventListener('click', () => {
+    trackExport('csv');
+    downloadCsv();
+  });
 }
 
 function wireHistory() {
@@ -4559,6 +4585,7 @@ function wireComputeButton() {
       cancelCompute();
       return;
     }
+    trackCompute();
     computeScene();
   });
 }
@@ -4566,6 +4593,7 @@ function wireComputeButton() {
 function wireMeshButton() {
   if (!meshButton) return;
   meshButton.addEventListener('click', () => {
+    trackGenerateMap();
     void computeNoiseMap();
   });
 }
@@ -4799,6 +4827,7 @@ function wireProbePanel() {
 }
 
 function downloadScene() {
+  trackSaveScene();
   downloadSceneModule(scene, sceneNameInput?.value ?? 'Untitled', getPropagationConfig());
 }
 
@@ -4879,6 +4908,7 @@ function wireSaveLoad() {
       }
       return;
     }
+    trackLoadScene();
     applyLoadedScene(result.scene, result.name, result.propagation);
   });
 }
