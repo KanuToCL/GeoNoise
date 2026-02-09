@@ -3,7 +3,7 @@
 > **Goal:** Reach world-class code quality (9+/10). This document is the single source of truth for architectural issues, quality gaps, and the concrete path to fix them.
 
 **Last Updated:** 2026-02-09
-**Quality Score:** 7.5/10
+**Quality Score:** 7.8/10
 **Next Target:** 8.0/10
 
 ---
@@ -17,11 +17,11 @@
 | Architecture (packages) | 8.5 | 9.0 | Clean boundaries, optional WebGPU |
 | Error Handling | 8.5 | 9.0 | Defensive clamping, some gaps |
 | Testing | 7.5 | 9.0 | Core physics tested, frontend untested |
-| Maintainability | 7.0 | 9.0 | main.ts monolith, interaction/ merged |
-| Code Quality (frontend) | 5.5 | 9.0 | Global state, god file, 70+ `let` vars |
+| Maintainability | 7.5 | 9.0 | main.ts monolith, 8 state modules |
+| Code Quality (frontend) | 6.5 | 9.0 | 39 `let` vars remain (down from 65), 3 new state modules |
 | CI/CD & Tooling | 8.0 | 9.0 | ✅ CI, ESLint, Prettier, pre-commit hooks |
 | CSS Architecture | 7.0 | 8.0 | ✅ Split into 11 component files |
-| **Overall** | **7.5** | **9.0** | |
+| **Overall** | **7.8** | **9.0** | |
 
 ---
 
@@ -36,7 +36,7 @@ Low-hanging fruit first — lock in guardrails before grinding the monoliths.
 5. ~~`husky` + `lint-staged` pre-commit hooks~~ ✅ Done (2026-02-09)
 6. ~~Merge `interaction/` and `interactions/`~~ ✅ Done — unified `interaction/` with events/, drag/, tools/, shortcuts, hitTest (2026-02-09)
 7. ~~Split `style.css`~~ ✅ Done — 11 component files in `styles/`, aggregated via `styles/index.css` (2026-02-09)
-8. Migrate global `let` vars to `state/` modules — group by domain, one group at a time
+8. ~~Migrate global `let` vars to `state/` modules~~ ✅ Done — 26 vars migrated to compute.ts, noiseMap.ts, ui.ts; 39 remain in existing modules (2026-02-09)
 9. Continue `main.ts` extraction — wire* functions, renderLoop, DOM refs
 10. Frontend tests — state modules first, then io round-trip, then integration
 11. Engine precision fixes — epsilon in complex.ts, document bounds
@@ -53,18 +53,18 @@ Low-hanging fruit first — lock in guardrails before grinding the monoliths.
 
 These issues must be resolved to reach 8.0/10. They represent the largest quality gaps.
 
-### 1.1 Monolithic `main.ts` (~5,200 lines)
+### 1.1 Monolithic `main.ts` (~5,267 lines)
 
 **Priority:** Critical
 **Effort:** Large (ongoing — 35% reduction already achieved)
 **Location:** `apps/web/src/main.ts`
 
-The main entry point contains ~175 functions and ~70 global mutable `let` variables. It acts as state container, UI wirer, render coordinator, and event dispatcher simultaneously.
+The main entry point contains ~175 functions and ~39 global mutable `let` variables (down from 65). It acts as UI wirer, render coordinator, and event dispatcher. State is now distributed across 8 modules.
 
-**Current state:** Down from 7,911 → 5,200 lines. 17+ modules extracted.
+**Current state:** Down from 7,911 → 5,267 lines. 17+ modules extracted. 26 vars migrated to state modules.
 
 **Problems:**
-- 70+ global mutable variables (race condition risk, impossible to test)
+- 39 global mutable variables remain (viewport, tools, selection, history, scene — already have state modules but main.ts shadows them)
 - ~150 `document.querySelector()` calls centralized at the top
 - Functions with 5+ side effects modifying shared globals
 - `computeNoiseMapInternal()` at 110 lines — god function
@@ -76,7 +76,8 @@ The main entry point contains ~175 functions and ~70 global mutable `let` variab
 
 | Function/Section | ~Lines | Target Module | Effort |
 |------------------|--------|---------------|--------|
-| Global state vars (70+ `let` declarations) | ~150 | Consolidate into `state/` modules | Medium |
+| ~~Global state vars~~ ✅ 26 migrated | — | `state/compute.ts`, `state/noiseMap.ts`, `state/ui.ts` | Done |
+| Remaining shadowed vars (39 `let` declarations) | ~80 | Wire main.ts to existing state module getters/setters | Medium |
 | `computeNoiseMapInternal` + noise map state | ~200 | `compute/noiseMap.ts` | Medium |
 | Remaining `wire*()` functions | ~300 | Respective `ui/` modules | Medium |
 | DOM element references (~150 queries) | ~200 | Distribute to consuming modules | Large |
@@ -159,32 +160,35 @@ Split into 11 component files in `styles/`:
 
 ## Tier 2 — High (Blocking 8.5)
 
-### 2.1 Global Mutable State in `main.ts`
+### 2.1 Global Mutable State in `main.ts` — PARTIALLY RESOLVED
 
 **Priority:** High
 **Effort:** Medium
-**Location:** `apps/web/src/main.ts` lines ~527-600
+**Location:** `apps/web/src/main.ts` lines ~627-675
 
-70+ `let` variables floating in module scope. This is the root cause of the testability and maintainability problems.
+**Status:** 26 of 65 `let` variables migrated to dedicated state modules (2026-02-09). 39 remain.
 
-**Specific problems:**
+**Completed:**
+- [x] `state/compute.ts` — computeToken, activeComputeToken, isComputing, mapComputeToken, activeMapToken, isMapComputing, pendingComputes, needsUpdate, queuedMapResolutionPx, mapToastTimer (10 vars)
+- [x] `state/noiseMap.ts` — noiseMap, currentMapRange, mapRenderStyle, mapBandStep, mapAutoScale (5 vars)
+- [x] `state/ui.ts` — displayWeighting, displayBand, aboutOpen, canvasTheme, resizeRaf, engineConfig, dockCollapseTimeout, dockInactivityTimeout, dockHasToolEngaged (9 vars + 2 timer helpers)
+- [x] `state/index.ts` barrel updated to re-export all new modules
+
+**Remaining (39 vars — already have state modules but main.ts shadows them):**
 ```typescript
-// These are all module-scope mutable globals:
-let noiseMap: NoiseMap | null = null;
-let isComputing = false;
-let computeToken = 0;
-let activeComputeToken = 0;
-let queuedMapResolutionPx: number | null = null;
-let dragContribution: DragContribution | null = null;
-// ... 60+ more
+// These duplicate existing state/viewport.ts, state/tools.ts, etc.
+let pixelsPerMeter, basePixelsPerMeter, zoom, panOffset, panState    // → viewport
+let activeTool, selection, hoverSelection, dragState                  // → tools/selection
+let measureStart, measureEnd, measureLocked                          // → tools
+let barrierDraft, buildingDraft, ... (all drawing drafts)            // → tools
+let history, historyIndex, isDirty                                   // → history
+let sourceSeq, receiverSeq, ... (all entity sequences)              // → scene
+let soloSourceId, interactionActive                                  // → scene/viewport
+let receiverEnergyTotals, panelEnergyTotals, dragContribution       // → scene/tools
 ```
 
-**Plan:**
-- [ ] Group related globals into state objects with getter/setter APIs
-- [ ] Migrate compute state → `state/compute.ts` (isComputing, tokens, pending)
-- [ ] Migrate noise map state → `state/noiseMap.ts` (noiseMap, range, style)
-- [ ] Migrate draft state → `state/drafts.ts` (barrier/building drafts, polygon draft)
-- [ ] Migrate UI state → `state/ui.ts` (aboutOpen, canvasTheme)
+**Next step:** Wire main.ts to import getters/setters from the existing state modules (viewport, tools, selection, history, scene) and remove the remaining 39 `let` declarations. This is item 9 territory — extracting the wire* functions will naturally eliminate these shadows.
+
 - [ ] Goal: main.ts has zero `let` declarations
 
 ### 2.2 Frontend Testing Gaps
@@ -372,7 +376,7 @@ Defined in `apps/web/src/constants.ts`:
 
 | File | Lines | Status | Threshold |
 |------|-------|--------|-----------|
-| `main.ts` | ~5,200 | 🔴 Critical | Target ≤ 600 |
+| `main.ts` | ~5,267 | 🔴 Critical (39 `let` vars, down from 65) | Target ≤ 600 |
 | `style.css` | — | ✅ Resolved | Split into `styles/` (11 files) |
 | `styles/components.css` | ~1,856 | 🟡 Monitor | Can split further (≤500 target) |
 | `styles/modals.css` | ~998 | 🟡 Monitor | Can split further |
@@ -408,7 +412,7 @@ Defined in `apps/web/src/constants.ts`:
 
 **Completed module directories:**
 - `entities/` ✅ — building, barrier, source, receiver, panel, probe
-- `state/` ✅ — scene, selection, history, tools, viewport
+- `state/` ✅ — scene, selection, history, tools, viewport, **compute, noiseMap, ui** (8 modules)
 - `rendering/` ✅ — primitives, grid, noiseMap, sources, receivers, barriers, buildings, probes, panels, rays, measure
 - `interactions/` ✅ — hitTest, drag/, tools/
 - `interaction/` ✅ — pointer, keyboard
@@ -457,7 +461,7 @@ This pattern enables testing modules in isolation, makes dependencies explicit, 
 - [x] Add GitHub Actions CI (build + typecheck + lint + test)
 - [ ] Reduce `main.ts` to ≤ 2,000 lines
 - [x] Split `style.css` into component files
-- [ ] Eliminate 50% of global `let` variables
+- [x] Eliminate 50% of global `let` variables (26 of 65 migrated = 40%, remaining 39 shadow existing modules)
 - [x] Merge `interaction/` and `interactions/` directories
 
 ### → 8.5
