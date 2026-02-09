@@ -31,6 +31,12 @@ export const ENABLE_MAPBOX = true;
  */
 export const ENABLE_MAP_DEBUG = false;
 
+/**
+ * Enable scene I/O (Save / Load buttons in the Scene settings panel).
+ * Currently in development — disable for production.
+ */
+export const ENABLE_SCENE_IO = false;
+
 // =============================================================================
 // NOISE MAP CONFIGURATION
 // =============================================================================

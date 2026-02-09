@@ -25,6 +25,30 @@
 
 ---
 
+## Attack Order
+
+Low-hanging fruit first — lock in guardrails before grinding the monoliths.
+
+1. `.prettierrc` + `.prettierignore` — config only, 5 min
+2. `eslint.config.mjs` — config + pass cleanly, 30 min
+3. Add `lint` scripts to each package — wire up turbo, 15 min
+4. `.github/workflows/ci.yml` — build + typecheck + lint + test, 30 min
+5. `husky` + `lint-staged` pre-commit hooks — 15 min
+6. Merge `interaction/` and `interactions/` — rename + barrel export, 30 min
+7. Split `style.css` — extract theme vars, then component files one at a time
+8. Migrate global `let` vars to `state/` modules — group by domain, one group at a time
+9. Continue `main.ts` extraction — wire* functions, renderLoop, DOM refs
+10. Frontend tests — state modules first, then io round-trip, then integration
+11. Engine precision fixes — epsilon in complex.ts, document bounds
+12. Export pattern standardization — flat barrels everywhere
+13. `eval()` → `/* @vite-ignore */` dynamic import
+14. Extract `index.html` inline styles to CSS
+15. Polish — JSDoc gaps, physics citations, test type safety
+
+> **Rule:** finish each item fully before starting the next. Commit after each.
+
+---
+
 ## Tier 1 — Critical (Blocking 8.0)
 
 These issues must be resolved to reach 8.0/10. They represent the largest quality gaps.

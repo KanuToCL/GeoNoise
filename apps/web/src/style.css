@@ -4418,6 +4418,48 @@ html[data-feature-profile-dropdown="false"] .settings-profile-banner {
   gap: 6px;
 }
 
+/* Scene action buttons */
+.scene-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow:
+    3px 3px 6px rgba(100, 110, 130, 0.25),
+    -2px -2px 5px rgba(255, 255, 255, 0.7);
+  transition: box-shadow 120ms ease, transform 120ms ease;
+}
+
+.scene-action-btn:hover {
+  box-shadow:
+    1px 1px 3px rgba(100, 110, 130, 0.2),
+    -1px -1px 2px rgba(255, 255, 255, 0.6);
+  transform: scale(0.98);
+}
+
+.scene-action-btn:active {
+  box-shadow:
+    inset 2px 2px 4px rgba(100, 110, 130, 0.25),
+    inset -1px -1px 3px rgba(255, 255, 255, 0.5);
+  transform: scale(0.97);
+}
+
+.scene-action-danger {
+  color: #b91c1c;
+}
+
+.scene-action-danger:hover {
+  color: #991b1b;
+}
+
 .settings-slide-popup .property-row span {
   font-size: 12px;
   color: var(--text-soft);
@@ -4924,7 +4966,7 @@ html:not([data-feature-profile-dropdown="true"]) .settings-profile-banner {
 .map-panel {
   position: absolute;
   top: 80px;
-  right: 16px;
+  left: 16px;
   z-index: 1000;
   background: var(--bg);
   border-radius: var(--radius-md);
@@ -5161,21 +5203,45 @@ html:not([data-feature-profile-dropdown="true"]) .settings-profile-banner {
   appearance: none;
   width: 18px;
   height: 18px;
-  background: linear-gradient(145deg, #f0f4f8, #d8dfe8);
+  background: var(--bg);
   border-radius: 50%;
-  cursor: pointer;
-  box-shadow: 2px 2px 5px var(--shadow-dark), -2px -2px 5px var(--shadow-light);
-  border: none;
+  cursor: grab;
+  box-shadow:
+    2px 2px 5px rgba(100, 110, 130, 0.35),
+    -1px -1px 3px rgba(255, 255, 255, 0.8);
+  border: 2px solid var(--active-blue);
+  transition: transform 100ms ease, box-shadow 100ms ease;
+}
+
+.map-panel-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow:
+    3px 3px 6px rgba(100, 110, 130, 0.4),
+    -2px -2px 4px rgba(255, 255, 255, 0.9);
+}
+
+.map-panel-slider::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.05);
+  box-shadow:
+    inset 2px 2px 4px rgba(100, 110, 130, 0.25),
+    inset -1px -1px 3px rgba(255, 255, 255, 0.5);
 }
 
 .map-panel-slider::-moz-range-thumb {
   width: 18px;
   height: 18px;
-  background: linear-gradient(145deg, #f0f4f8, #d8dfe8);
+  background: var(--bg);
   border-radius: 50%;
-  cursor: pointer;
-  box-shadow: 2px 2px 5px var(--shadow-dark), -2px -2px 5px var(--shadow-light);
-  border: none;
+  cursor: grab;
+  box-shadow:
+    2px 2px 5px rgba(100, 110, 130, 0.35),
+    -1px -1px 3px rgba(255, 255, 255, 0.8);
+  border: 2px solid var(--active-blue);
+}
+
+.map-panel-slider::-moz-range-thumb:hover {
+  transform: scale(1.1);
 }
 
 .map-panel-slider-value {
@@ -5194,6 +5260,20 @@ html:not([data-feature-profile-dropdown="true"]) .settings-profile-banner {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.map-scale-mismatch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #b45309;
+  background: #fef3c7;
+  border-radius: 6px;
+  box-shadow: inset 2px 2px 4px rgba(180, 83, 9, 0.1),
+              inset -1px -1px 3px rgba(255, 255, 255, 0.5);
 }
 
 .map-panel-search-results {

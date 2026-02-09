@@ -80,6 +80,7 @@ export interface MapboxConfig {
   center?: [number, number];
   zoom?: number;
   interactive?: boolean;
+  debug?: boolean;
 }
 
 export interface MapboxState {
@@ -218,7 +219,7 @@ export function loadMapboxLibrary(): Promise<void> {
  * Initialize a Mapbox map instance
  */
 export async function initializeMap(config: MapboxConfig): Promise<MapboxMap> {
-  const { accessToken, container, style = "dark", center = [-122.4194, 37.7749], zoom = 12, interactive = true } = config;
+  const { accessToken, container, style = "dark", center = [-122.249782, 37.808972], zoom = 12, interactive = true, debug = false } = config;
 
   // Load the library first
   await loadMapboxLibrary();
@@ -245,8 +246,10 @@ export async function initializeMap(config: MapboxConfig): Promise<MapboxMap> {
     map.addControl(new mapboxgl.NavigationControl(), "top-right");
   }
 
-  // Always add scale control for verification (bottom-left to compare with GeoNoise scale bar)
-  map.addControl(new mapboxgl.ScaleControl({ maxWidth: 150, unit: 'metric' }), "bottom-left");
+  // Only add scale control in debug mode (for visual comparison)
+  if (debug) {
+    map.addControl(new mapboxgl.ScaleControl({ maxWidth: 150, unit: 'metric' }), "bottom-left");
+  }
 
   // Wait for map to load
   await new Promise<void>((resolve, reject) => {

@@ -156,6 +156,9 @@
             </div>
 
             <div id="mapPanelBody" class="map-panel-body">
+              <!-- Scale mismatch warning (safety check, hidden by default) -->
+              <div id="mapScaleMismatchIndicator" class="map-scale-mismatch" style="display: none;">⚠ Scale drift</div>
+
               <!-- Location Search -->
               <div class="map-panel-section" style="position: relative;">
                 <label class="map-panel-label">Search Location</label>
@@ -177,9 +180,9 @@
               <div class="map-panel-section">
                 <label class="map-panel-label">Map Style</label>
                 <div class="map-panel-styles">
-                  <button id="mapStyleStreets" type="button" class="map-panel-style-btn">Streets</button>
+                  <button id="mapStyleStreets" type="button" class="map-panel-style-btn is-active">Streets</button>
                   <button id="mapStyleSatellite" type="button" class="map-panel-style-btn">Satellite</button>
-                  <button id="mapStyleDark" type="button" class="map-panel-style-btn is-active">Dark</button>
+                  <button id="mapStyleDark" type="button" class="map-panel-style-btn">Dark</button>
                 </div>
               </div>
 
@@ -337,8 +340,8 @@
                   <button class="settings-category-btn" id="settingsCatDisplay" data-category="display" type="button">
                     display
                   </button>
-                  <button class="settings-category-btn" id="settingsCatLayers" data-category="layers" type="button">
-                    layers
+                  <button class="settings-category-btn" id="settingsCatScene" data-category="scene" type="button">
+                    scene
                   </button>
                 </div>
               </div>
@@ -625,41 +628,55 @@
                   </div>
 
                 </div>
-              </div>
 
-              <!-- Layers Panel -->
-              <div class="settings-slide-panel" id="settingsPanelLayers" data-panel="layers">
-                <div class="settings-panel-header">layers</div>
-                <div class="settings-panel-content">
-                  <div class="settings-section">
-                    <div class="settings-title">visibility</div>
-                    <label class="toggle" for="layerSources">
-                      <input type="checkbox" id="layerSources" checked />
-                      <span>Sources</span>
-                    </label>
-                    <label class="toggle" for="layerReceivers">
-                      <input type="checkbox" id="layerReceivers" checked />
-                      <span>Receivers</span>
-                    </label>
-                    <label class="toggle" for="layerPanels">
-                      <input type="checkbox" id="layerPanels" checked />
-                      <span>Measure Grids</span>
-                    </label>
-                    <label class="toggle" for="layerNoiseMap">
-                      <input type="checkbox" id="layerNoiseMap" />
-                      <span>Noise Map</span>
-                    </label>
-                    <label class="toggle" for="layerGrid">
-                      <input type="checkbox" id="layerGrid" />
-                      <span>Grid Overlay</span>
-                    </label>
+              <!-- Scene Panel -->
+                <div class="settings-slide-panel" id="settingsPanelScene" data-panel="scene">
+                  <div class="settings-panel-header">scene</div>
+                  <div class="settings-panel-content">
+                    <div class="settings-section">
+                      <div class="settings-title">visibility</div>
+                      <label class="toggle" for="layerSources">
+                        <input type="checkbox" id="layerSources" checked />
+                        <span>Sources</span>
+                      </label>
+                      <label class="toggle" for="layerReceivers">
+                        <input type="checkbox" id="layerReceivers" checked />
+                        <span>Receivers</span>
+                      </label>
+                      <label class="toggle" for="layerPanels">
+                        <input type="checkbox" id="layerPanels" checked />
+                        <span>Measure Grids</span>
+                      </label>
+                      <label class="toggle" for="layerNoiseMap">
+                        <input type="checkbox" id="layerNoiseMap" />
+                        <span>Noise Map</span>
+                      </label>
+                      <label class="toggle" for="layerGrid">
+                        <input type="checkbox" id="layerGrid" />
+                        <span>Grid Overlay</span>
+                      </label>
+                    </div>
+                    <div class="settings-section">
+                      <div class="settings-title">actions</div>
+                      <button id="resetSceneBtn" type="button" class="scene-action-btn scene-action-danger">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                        Reset Scene
+                      </button>
+                      <button id="saveSceneBtn" type="button" class="scene-action-btn" style="display: none;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                        Save Scene
+                      </button>
+                      <button id="loadSceneBtn" type="button" class="scene-action-btn" style="display: none;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Load Scene
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
       <!-- Floating UI overlay (non-blocking except for interactive elements). -->
       <div class="ui-layer">
@@ -1773,7 +1790,7 @@
         </div>
 <div class="spec-tray" style="text-align: center;">
 <div style="font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 4px;">GeoNoise</div>
-          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px;">Version 0.7.0</div>
+          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px;">Version 0.8.2</div>
           <div style="height: 1px; background: var(--border-soft); margin: 12px 0;"></div>
           <div style="font-size: 13px; color: var(--text-soft); margin-bottom: 8px;">Developed by</div>
 <div style="font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 12px;">Sergio Peña</div>

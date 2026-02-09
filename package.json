@@ -1,6 +1,6 @@
 {
   "name": "geonoise2",
-  "version": "0.7.0",
+  "version": "0.8.2",
   "private": true,
   "description": "Noise solver at distance - outdoor sound planning over real maps",
   "workspaces": [

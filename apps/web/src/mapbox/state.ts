@@ -24,7 +24,7 @@ export const uiState: MapboxUIState = {
   isMapVisible: false,
   isMapInteractive: false,
   map: null,
-  currentStyle: "dark",
+  currentStyle: "streets",
   isEnabled: true,
 };
 

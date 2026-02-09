@@ -2,6 +2,17 @@
  * Map control panel: drag behaviour and collapse toggle.
  */
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Minimum top position: just below the topbar + 8px padding */
+function getMinTop(): number {
+  const topbar = document.querySelector(".topbar") as HTMLElement | null;
+  if (topbar) {
+    return topbar.getBoundingClientRect().bottom + 8;
+  }
+  return 60; // safe fallback
+}
+
 // ── Map panel drag ──────────────────────────────────────────────────────────
 
 export function initMapPanelDrag(): void {
@@ -15,13 +26,16 @@ export function initMapPanelDrag(): void {
   let initialLeft = 0;
   let initialTop = 0;
 
-  // Load saved position from localStorage
+  // Load saved position from localStorage (clamped to safe bounds)
   const savedPosition = localStorage.getItem("geonoise.mapPanelPosition");
   if (savedPosition) {
     try {
       const { left, top } = JSON.parse(savedPosition);
-      panel.style.left = `${left}px`;
-      panel.style.top = `${top}px`;
+      const minTop = getMinTop();
+      const safeTop = Math.max(minTop, top);
+      const safeLeft = Math.max(10, Math.min(left, window.innerWidth - 100));
+      panel.style.left = `${safeLeft}px`;
+      panel.style.top = `${safeTop}px`;
       panel.style.right = "auto";
     } catch {
       // Ignore invalid saved position
@@ -54,11 +68,12 @@ export function initMapPanelDrag(): void {
     const newLeft = initialLeft + deltaX;
     const newTop = initialTop + deltaY;
 
+    const minTop = getMinTop();
     const maxLeft = window.innerWidth - panel.offsetWidth - 10;
     const maxTop = window.innerHeight - panel.offsetHeight - 10;
 
     const clampedLeft = Math.max(10, Math.min(maxLeft, newLeft));
-    const clampedTop = Math.max(10, Math.min(maxTop, newTop));
+    const clampedTop = Math.max(minTop, Math.min(maxTop, newTop));
 
     panel.style.left = `${clampedLeft}px`;
     panel.style.top = `${clampedTop}px`;

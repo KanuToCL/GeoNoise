@@ -238,6 +238,7 @@ import {
   ENABLE_RAY_VISUALIZATION,
   ENABLE_MAPBOX,
   ENABLE_MAP_DEBUG,
+  ENABLE_SCENE_IO,
   DEFAULT_MAP_RANGE,
   DEFAULT_MAP_BAND_STEP,
   DEFAULT_MAP_BAND_STEP_PERBAND,
@@ -425,6 +426,9 @@ const layerReceivers = document.querySelector('#layerReceivers') as HTMLInputEle
 const layerPanels = document.querySelector('#layerPanels') as HTMLInputElement | null;
 const layerNoiseMap = document.querySelector('#layerNoiseMap') as HTMLInputElement | null;
 const layerGrid = document.querySelector('#layerGrid') as HTMLInputElement | null;
+const resetSceneBtn = document.querySelector('#resetSceneBtn') as HTMLButtonElement | null;
+const saveSceneBtn = document.querySelector('#saveSceneBtn') as HTMLButtonElement | null;
+const loadSceneBtn = document.querySelector('#loadSceneBtn') as HTMLButtonElement | null;
 const displayWeightingSelect = document.querySelector('#displayWeighting') as HTMLSelectElement | null;
 const displayBandSelect = document.querySelector('#displayBand') as HTMLSelectElement | null;
 
@@ -2636,6 +2640,57 @@ function wireRefineButton() {
   });
 }
 
+function wireSceneActions() {
+  // Show Save/Load buttons only when feature-flagged on
+  if (ENABLE_SCENE_IO) {
+    if (saveSceneBtn) saveSceneBtn.style.display = 'flex';
+    if (loadSceneBtn) loadSceneBtn.style.display = 'flex';
+  }
+
+  // Reset Scene — clears all elements, blanks the canvas, preserves map
+  resetSceneBtn?.addEventListener('click', () => {
+    const hasElements = scene.sources.length > 0 || scene.receivers.length > 0
+      || scene.panels.length > 0 || scene.probes.length > 0
+      || scene.buildings.length > 0 || scene.barriers.length > 0;
+
+    if (!hasElements) return;
+
+    if (!confirm('Reset scene? All sources, receivers, buildings, barriers, and measurement grids will be removed.')) {
+      return;
+    }
+
+    // Clear selection
+    setSelection({ type: 'none' });
+
+    // Clear all scene entities
+    scene.sources = [];
+    scene.receivers = [];
+    scene.panels = [];
+    scene.probes = [];
+    scene.buildings = [];
+    scene.barriers = [];
+
+    // Reset sequences
+    sourceSeq = 0;
+    receiverSeq = 0;
+    panelSeq = 0;
+    probeSeq = 0;
+    buildingSeq = 0;
+    barrierSeq = 0;
+
+    // Invalidate the noise map (blanks the canvas)
+    invalidateNoiseMap();
+
+    // Commit to history
+    pushHistory({ invalidateMap: true });
+
+    // Update UI counts
+    updateCounts();
+
+    requestRender();
+  });
+}
+
 function wireLayersPopover() {
   if (!layersButton || !layersPopover) return;
   const container = layersButton.closest('.layers-toggle') as HTMLDivElement | null;
@@ -2685,7 +2740,7 @@ function wireSettingsPopover() {
   const slidePanels = slidePopup?.querySelectorAll('.settings-slide-panel') as NodeListOf<HTMLDivElement> | undefined;
 
   // State
-  let activeCategory: 'display' | 'environmental' | 'physics' | 'layers' | null = null;
+  let activeCategory: 'display' | 'environmental' | 'physics' | 'scene' | null = null;
 
   // Move popover and slide popup to body to escape all stacking contexts
   document.body.appendChild(settingsPopover);
@@ -2714,7 +2769,7 @@ function wireSettingsPopover() {
   };
 
   // Show a specific category panel in the slide popup
-  const showPanel = (category: 'display' | 'environmental' | 'physics' | 'layers') => {
+  const showPanel = (category: 'display' | 'environmental' | 'physics' | 'scene') => {
     activeCategory = category;
 
     // Update buttons: make clicked one active
@@ -2796,7 +2851,7 @@ function wireSettingsPopover() {
   // Wire category button clicks
   categoryButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
-      const category = btn.dataset.category as 'display' | 'environmental' | 'physics' | 'layers' | undefined;
+      const category = btn.dataset.category as 'display' | 'environmental' | 'physics' | 'scene' | undefined;
       if (!category) return;
 
       if (activeCategory === category) {
@@ -5125,6 +5180,7 @@ function init() {
   wireLayerToggle(layerPanels, 'panels');
   wireLayerToggle(layerNoiseMap, 'noiseMap');
   wireLayerToggle(layerGrid, 'grid');
+  wireSceneActions();
   wirePreference();
   wireTools();
   wireDockLabels();

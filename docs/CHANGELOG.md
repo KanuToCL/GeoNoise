@@ -4,6 +4,61 @@ This document contains the implementation history of completed features. For pla
 
 ---
 
+## v0.8.2 (2026-02-09)
+
+### Scene Panel, Map UX Polish & Safety Checks
+
+**Status:** ✅ Complete
+
+Continued polish of the map control panel and settings system. Renamed "Layers" to "Scene" with reset functionality, improved slider styling, added drag/topbar clamping, and introduced a silent scale mismatch safety checker.
+
+#### UX Changes
+
+| Change | Description |
+|--------|-------------|
+| **Slider matches spectrum style** | Map opacity slider thumb now has neumorphic raised styling with blue ring, matching the energy-per-band sliders in the Sources panel |
+| **Slider track color fill** | Dynamic `linear-gradient` shows filled portion in blue via `updateSliderFill()` |
+| **Panel can't hide behind topbar** | `getMinTop()` queries the topbar's bottom edge; drag clamping and saved-position restore both respect this boundary |
+| **Streets default on activation** | First map activation defaults to Streets style (was Dark) |
+| **67% opacity on activation** | Map opens at 67% opacity with crossfader synced to render pipeline; 0% when map is off (full colormap) |
+| **Reset Scene** | New "Reset Scene" button clears all sources, receivers, buildings, barriers, and grids with confirmation dialog |
+| **Visibility toggles first** | Scene panel shows layer visibility toggles at top, actions (Reset) at bottom |
+| **Save/Load Scene (flagged off)** | Placeholder buttons hidden behind `ENABLE_SCENE_IO` feature flag |
+| **Default coordinates** | Map centers on 37.808972, -122.249782 (East Bay) on first load |
+
+#### Architecture
+
+| Change | Detail |
+|--------|--------|
+| **"Layers" → "Scene"** | Settings category renamed across HTML, JS type unions, and DOM queries |
+| **`ENABLE_SCENE_IO` flag** | `constants.ts` — gates Save/Load buttons for future development |
+| **`wireSceneActions()`** | `main.ts` — wires Reset Scene with confirmation, entity clearing, history commit |
+| **`updateSliderFill()`** | `lifecycle.ts` — dynamic track fill on init, input, show, and hide |
+| **`getMinTop()`** | `panel.ts` — topbar-aware drag boundary helper |
+| **`checkScaleMismatch()`** | `lifecycle.ts` — compares Mapbox m/px vs GeoNoise scale bar, amber warning at >5% drift |
+
+#### CSS Additions
+
+| Selector | Purpose |
+|----------|---------|
+| `.scene-action-btn` | Neumorphic raised→flat→sunken button for scene actions |
+| `.scene-action-danger` | Red color variant for destructive actions |
+| `.map-scale-mismatch` | Amber sunken indicator bar for scale drift warnings |
+| `.map-panel-slider::-webkit-slider-thumb` | Blue-ringed thumb with hover/active/grab states |
+| `.map-panel-slider::-moz-range-thumb` | Firefox equivalent |
+
+#### Bug Fixes
+
+| Bug | Fix |
+|-----|-----|
+| Both Dark and Streets buttons active | Removed stale `is-active` class from Dark button in HTML |
+| Crossfader not auto-applying on activation | Added `onCrossfaderChange()` callback in `showMap()` |
+| Mapbox native ScaleControl always visible | Gated behind `debug: true` in `initializeMap()` |
+| Scene panel blank/empty | Fixed pre-existing HTML `</div>` nesting — physics panel had extra closing tag that prematurely closed `#settingsSlidePopup` |
+| Panel position left | Moved from `right: 16px` to `left: 16px` |
+
+---
+
 ## v0.8.1 (2026-02-09)
 
 ### Map Control Panel Polish & Modular Architecture

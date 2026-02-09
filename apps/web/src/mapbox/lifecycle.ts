@@ -22,7 +22,6 @@ import {
   mapStyleStreets,
   mapStyleSatellite,
   mapStyleDark,
-  mapCrossfader,
   onScaleSync,
   onMapMove,
   getPixelsPerMeter,
@@ -36,6 +35,21 @@ import {
 import { openTokenModal, showError } from "./token.js";
 import { updateScaleComparisonPanel } from "./scaleComparison.js";
 import { updateCoordinateInputs } from "./search.js";
+
+// ── Slider fill ────────────────────────────────────────────────────────────
+
+function updateSliderFill(slider: HTMLInputElement): void {
+  const min = parseFloat(slider.min) || 0;
+  const max = parseFloat(slider.max) || 100;
+  const value = parseFloat(slider.value);
+  const pct = ((value - min) / (max - min)) * 100;
+  // Blue fill on left, keep the neumorphic sunken base on right
+  slider.style.background =
+    `linear-gradient(to right, var(--active-blue) 0%, var(--active-blue) ${pct}%, var(--bg) ${pct}%)`;
+  // Re-apply the sunken inset shadow since background shorthand can clear it
+  slider.style.boxShadow =
+    "inset 2px 2px 4px rgba(100,110,130,0.3), inset -1px -1px 3px rgba(255,255,255,0.6)";
+}
 
 // ── Map toggle (dock button) ────────────────────────────────────────────────
 
@@ -77,9 +91,10 @@ export async function showMap(): Promise<void> {
         accessToken: token,
         container: mapboxContainer,
         style: uiState.currentStyle,
-        center: [-122.4194, 37.7749],
+        center: [-122.249782, 37.808972],
         zoom: 16,
         interactive: true,
+        debug: debugEnabled,
       });
 
       setupMapSyncListeners();
@@ -88,7 +103,20 @@ export async function showMap(): Promise<void> {
     uiState.isMapInteractive = false;
     mapboxContainer.style.pointerEvents = "none";
     mapboxContainer.style.zIndex = "0";
-    mapboxContainer.style.opacity = String(mapCrossfader / 100);
+
+// Default to 67% opacity on activation
+    setMapCrossfader(67);
+    mapboxContainer.style.opacity = "0.67";
+    if (mapOpacitySlider) {
+      mapOpacitySlider.value = "67";
+      updateSliderFill(mapOpacitySlider);
+    }
+    if (mapOpacityValue) {
+      mapOpacityValue.textContent = "67%";
+    }
+    if (onCrossfaderChange) {
+      onCrossfaderChange();
+    }
 
     uiState.isMapVisible = true;
     updateMapButtonState();
@@ -128,6 +156,20 @@ export function hideMap(): void {
 
   mapboxContainer.style.display = "none";
   uiState.isMapVisible = false;
+
+  // Reset crossfader to 0 so colormap renders at full opacity
+  setMapCrossfader(0);
+  if (mapOpacitySlider) {
+    mapOpacitySlider.value = "0";
+    updateSliderFill(mapOpacitySlider);
+  }
+  if (mapOpacityValue) {
+    mapOpacityValue.textContent = "0%";
+  }
+  if (onCrossfaderChange) {
+    onCrossfaderChange();
+  }
+
   updateMapButtonState();
   updateFloatingPanelState();
 
@@ -186,6 +228,9 @@ export function wireFloatingPanelControls(): void {
   });
 
   // Crossfader slider
+  if (mapOpacitySlider) {
+    updateSliderFill(mapOpacitySlider);
+  }
   mapOpacitySlider?.addEventListener("input", () => {
     const value = parseInt(mapOpacitySlider!.value, 10);
     setMapCrossfader(value);
@@ -195,6 +240,7 @@ export function wireFloatingPanelControls(): void {
     if (mapboxContainer) {
       mapboxContainer.style.opacity = String(value / 100);
     }
+    updateSliderFill(mapOpacitySlider!);
     if (onCrossfaderChange) {
       onCrossfaderChange();
     }
@@ -225,6 +271,47 @@ export function updateFloatingPanelState(): void {
 
 // ── Map info display ────────────────────────────────────────────────────────
 
+let lastScaleWarningTime = 0;
+
+function checkScaleMismatch(mapboxMetersPerPixel: number): void {
+  const scaleTextEl = document.getElementById("scaleText");
+  const scaleLineEl = document.getElementById("scaleLine");
+  if (!scaleTextEl || !scaleLineEl) return;
+
+  const textMatch = scaleTextEl.textContent?.match(/(\d+)/);
+  const widthMatch = scaleLineEl.style.width?.match(/(\d+)/);
+  if (!textMatch || !widthMatch) return;
+
+  const geonoiseMeters = parseInt(textMatch[1], 10);
+  const geonoisePixels = parseInt(widthMatch[1], 10);
+  if (geonoisePixels === 0) return;
+
+  const geonoiseMetersPerPixel = geonoiseMeters / geonoisePixels;
+  const ratio = mapboxMetersPerPixel / geonoiseMetersPerPixel;
+  const drift = Math.abs(ratio - 1);
+
+  const indicator = document.getElementById("mapScaleMismatchIndicator");
+
+  if (drift > 0.05) {
+    const now = Date.now();
+    if (now - lastScaleWarningTime > 5000) {
+      console.warn(
+        `[GeoNoise] Scale mismatch: Mapbox ${mapboxMetersPerPixel.toFixed(3)} m/px vs ` +
+        `GeoNoise ${geonoiseMetersPerPixel.toFixed(3)} m/px (${(drift * 100).toFixed(1)}% drift)`,
+      );
+      lastScaleWarningTime = now;
+    }
+    if (indicator) {
+      indicator.style.display = "flex";
+      indicator.textContent = `⚠ Scale drift ${(drift * 100).toFixed(0)}%`;
+    }
+  } else {
+    if (indicator) {
+      indicator.style.display = "none";
+    }
+  }
+}
+
 export function updateMapInfo(): void {
   if (!uiState.map) return;
 
@@ -241,6 +328,9 @@ export function updateMapInfo(): void {
   if (debugEnabled) {
     updateScaleComparisonPanel(dimensions.metersPerPixel);
   }
+
+  // Always check scale mismatch as a safety measure
+  checkScaleMismatch(dimensions.metersPerPixel);
 }
 
 // ── Zoom / pan sync ─────────────────────────────────────────────────────────
