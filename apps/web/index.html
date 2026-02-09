@@ -147,139 +147,54 @@
           <canvas id="mapCanvas" style="position: absolute; inset: 0; z-index: 1;"></canvas>
 
           <!-- Floating Map Control Panel (hidden by default, shown by JS when ENABLE_MAPBOX is true) -->
-          <div id="mapControlPanel" style="
-            position: absolute;
-            top: 80px;
-            right: 16px;
-            z-index: 1000;
-            background: rgba(40, 44, 52, 0.95);
-            border-radius: 12px;
-            padding: 12px 16px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            display: none;
-            flex-direction: column;
-            gap: 10px;
-            min-width: 220px;
-            max-height: calc(100vh - 200px);
-            overflow-y: auto;
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(255,255,255,0.1);
-          ">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-              <span style="font-size: 13px; font-weight: 600; color: #fff;">🗺️ Map Overlay</span>
-              <span id="mapStatusBadge" style="
-                font-size: 10px;
-                padding: 2px 8px;
-                border-radius: 10px;
-                background: #dc3545;
-                color: white;
-              ">OFF</span>
+          <div id="mapControlPanel" class="map-panel">
+            <div class="map-panel-header">
+              <span class="map-panel-title">Map</span>
+              <button id="mapPanelCollapseBtn" type="button" class="map-panel-collapse-btn" aria-label="Collapse panel">
+                <span class="map-panel-collapse-icon">−</span>
+              </button>
             </div>
 
-            <button id="loadMapButton" type="button" style="
-              padding: 10px 16px;
-              font-size: 13px;
-              font-weight: 500;
-              border: none;
-              border-radius: 8px;
-              background: linear-gradient(135deg, #4a90d9, #357abd);
-              color: white;
-              cursor: pointer;
-              transition: all 0.2s;
-            ">
-              Load Map
-            </button>
-
-            <div id="mapControls" style="display: none; flex-direction: column; gap: 10px;">
+            <div id="mapPanelBody" class="map-panel-body">
               <!-- Location Search -->
-              <div style="display: flex; flex-direction: column; gap: 6px; position: relative;">
-                <label style="font-size: 11px; color: #aaa; font-weight: 500;">Search Location:</label>
-                <input id="mapSearchInput" type="text" placeholder="Search address or place..."
-                  style="padding: 8px 10px; font-size: 11px; border-radius: 6px; background: rgba(255,255,255,0.1); color: #fff; border: none; outline: none;">
-                <div id="mapSearchResults" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: rgba(40,44,52,0.98); border-radius: 6px; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);"></div>
+              <div class="map-panel-section" style="position: relative;">
+                <label class="map-panel-label">Search Location</label>
+                <input id="mapSearchInput" type="text" placeholder="Search address or place..." class="map-panel-input">
+                <div id="mapSearchResults" class="map-panel-search-results"></div>
               </div>
 
               <!-- Coordinate Input -->
-              <div style="display: flex; flex-direction: column; gap: 6px;">
-                <label style="font-size: 11px; color: #aaa; font-weight: 500;">Coordinates:</label>
-                <div style="display: flex; gap: 6px; align-items: center;">
-                  <input id="mapLatInput" type="text" placeholder="Lat"
-                    style="flex: 1; padding: 8px 6px; font-size: 11px; border-radius: 6px; background: rgba(255,255,255,0.1); color: #fff; border: none; outline: none; text-align: center;">
-                  <input id="mapLngInput" type="text" placeholder="Lng"
-                    style="flex: 1; padding: 8px 6px; font-size: 11px; border-radius: 6px; background: rgba(255,255,255,0.1); color: #fff; border: none; outline: none; text-align: center;">
-                  <button id="mapGoToCoords" type="button" style="padding: 8px 12px; font-size: 11px; border: none; border-radius: 6px; background: rgba(74, 144, 217, 0.5); color: #fff; cursor: pointer;">Go</button>
+              <div class="map-panel-section">
+                <label class="map-panel-label">Coordinates</label>
+                <div class="map-panel-coords">
+                  <input id="mapLatInput" type="text" placeholder="Lat" class="map-panel-input">
+                  <input id="mapLngInput" type="text" placeholder="Lng" class="map-panel-input">
+                  <button id="mapGoToCoords" type="button" class="map-panel-btn">Go</button>
                 </div>
               </div>
 
               <!-- Style Switcher -->
-              <div style="display: flex; flex-direction: column; gap: 6px;">
-                <label style="font-size: 11px; color: #aaa; font-weight: 500;">Map Style:</label>
-                <div style="display: flex; gap: 6px;">
-                  <button id="mapStyleStreets" type="button" style="
-                    flex: 1;
-                    padding: 8px 10px;
-                    font-size: 11px;
-                    border: none;
-                    border-radius: 6px;
-                    background: rgba(255,255,255,0.1);
-                    color: #ccc;
-                    cursor: pointer;
-                  ">Streets</button>
-                  <button id="mapStyleSatellite" type="button" style="
-                    flex: 1;
-                    padding: 8px 10px;
-                    font-size: 11px;
-                    border: none;
-                    border-radius: 6px;
-                    background: rgba(255,255,255,0.1);
-                    color: #ccc;
-                    cursor: pointer;
-                  ">Satellite</button>
-                  <button id="mapStyleDark" type="button" style="
-                    flex: 1;
-                    padding: 8px 10px;
-                    font-size: 11px;
-                    border: none;
-                    border-radius: 6px;
-                    background: rgba(74, 144, 217, 0.5);
-                    color: #fff;
-                    cursor: pointer;
-                  ">Dark</button>
+              <div class="map-panel-section">
+                <label class="map-panel-label">Map Style</label>
+                <div class="map-panel-styles">
+                  <button id="mapStyleStreets" type="button" class="map-panel-style-btn">Streets</button>
+                  <button id="mapStyleSatellite" type="button" class="map-panel-style-btn">Satellite</button>
+                  <button id="mapStyleDark" type="button" class="map-panel-style-btn is-active">Dark</button>
                 </div>
               </div>
 
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <label style="font-size: 11px; color: #aaa;">Map:</label>
-                <input id="mapOpacitySlider" type="range" min="0" max="100" value="0" style="flex: 1; accent-color: #4a90d9;">
-                <span id="mapOpacityValue" style="font-size: 11px; color: #aaa; min-width: 32px;">0%</span>
+              <!-- Opacity Slider -->
+              <div class="map-panel-slider-row">
+                <span class="map-panel-slider-label">Opacity:</span>
+                <input id="mapOpacitySlider" type="range" min="0" max="100" value="0" class="map-panel-slider">
+                <span id="mapOpacityValue" class="map-panel-slider-value">0%</span>
               </div>
 
-              <div style="font-size: 10px; color: #888; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+              <!-- Scale Info (debug) -->
+              <div class="map-panel-info">
                 <div id="mapScaleInfo">Scale: -- m/px</div>
                 <div id="mapCenterInfo">Center: --, --</div>
               </div>
-
-              <!-- Toggle Map Interactivity -->
-              <button id="toggleMapInteractiveButton" type="button" style="
-                padding: 8px 12px;
-                font-size: 12px;
-                border: none;
-                border-radius: 6px;
-                background: rgba(74, 144, 217, 0.3);
-                color: #4a90d9;
-                cursor: pointer;
-              ">🔓 Enable Map Panning</button>
-
-              <button id="hideMapButton" type="button" style="
-                padding: 8px 12px;
-                font-size: 12px;
-                border: none;
-                border-radius: 6px;
-                background: rgba(220, 53, 69, 0.2);
-                color: #dc3545;
-                cursor: pointer;
-                margin-top: 4px;
-              ">Hide Map</button>
             </div>
           </div>
 

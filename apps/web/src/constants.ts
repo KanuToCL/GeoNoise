@@ -23,7 +23,13 @@ export const ENABLE_RAY_VISUALIZATION = false;
  * Set to false to hide all map-related UI and functionality from users.
  * This allows merging the feature branch while keeping the map disabled.
  */
-export const ENABLE_MAPBOX = false;
+export const ENABLE_MAPBOX = true;
+
+/**
+ * Enable map debug info overlays (scale info, center coordinates,
+ * scale comparison panel). Disable for production.
+ */
+export const ENABLE_MAP_DEBUG = false;
 
 // =============================================================================
 // NOISE MAP CONFIGURATION

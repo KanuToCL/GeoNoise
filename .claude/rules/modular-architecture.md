@@ -90,6 +90,7 @@ When adding new code, follow this hierarchy:
    ├── Entity + operations  → entities/ or models/
    ├── UI component         → components/ or ui/
    ├── Side effect          → services/ or api/
+   ├── CSS styles           → styles/<component>.css (NEVER main style.css)
    └── Orchestration        → entry point only
 
 2. WHO uses it?
@@ -121,11 +122,198 @@ The main entry point (main.ts, index.ts, App.tsx) is for **orchestration only**.
 - Complex handlers → `interactions/`
 - UI component logic → `ui/`
 - Entity definitions → `entities/`
+- DOM element queries → distribute to consuming modules
+- Mutable state variables → `state/` modules
 
 ### Before Adding Code to Entry Point, Ask:
 1. Is this orchestration/wiring? → OK
 2. Is this reusable logic? → Extract to module
 3. Could another file use this? → Extract to module
+4. Is this a `let` variable? → Belongs in a `state/` module with getter/setter API
+
+---
+
+## State Management Rules
+
+### No Bare Global `let` Variables
+
+Every piece of mutable state should live behind a getter/setter API in a `state/` module.
+
+```typescript
+// ❌ BAD — bare global let in main.ts or any module
+let isComputing = false;
+let computeToken = 0;
+
+// ✅ GOOD — encapsulated in state module
+// state/compute.ts
+let _isComputing = false;
+let _computeToken = 0;
+
+export function isComputing(): boolean { return _isComputing; }
+export function setComputing(v: boolean): void { _isComputing = v; }
+export function nextComputeToken(): number { return ++_computeToken; }
+export function getComputeToken(): number { return _computeToken; }
+```
+
+### Why?
+- Makes mutations **trackable** (set breakpoint on setter)
+- Makes state **testable** (reset between tests)
+- Makes dependencies **explicit** (import what you use)
+- Prevents **race conditions** (can add guards in setter)
+
+### State Module Pattern
+
+```typescript
+// state/<domain>.ts
+
+// === Private state ===
+let _value: Type = defaultValue;
+
+// === Getters ===
+export function getValue(): Type { return _value; }
+
+// === Setters ===
+export function setValue(v: Type): void { _value = v; }
+
+// === Reset (for testing) ===
+export function resetState(): void { _value = defaultValue; }
+```
+
+---
+
+## CSS / Styling Rules
+
+### No Monolithic Stylesheets
+
+CSS follows the same modularity rules as TypeScript. One giant CSS file is as bad as one giant TS file.
+
+### Structure
+
+```
+styles/
+├── theme.css          # CSS custom properties (colors, spacing, fonts, shadows)
+├── reset.css          # Normalize/reset styles
+├── layout.css         # App-level layout (grid areas, viewport)
+├── toolbar.css        # Toolbar component styles
+├── panels.css         # Panel component styles
+├── modals.css         # Modal component styles
+├── canvas.css         # Canvas overlay and cursor styles
+├── spectrum.css       # Spectrum editor/chart styles
+└── index.css          # @import aggregator
+```
+
+### Rules
+
+| Rule | Rationale |
+|------|-----------|
+| No CSS file > 500 lines | Same readability heuristic as TS |
+| Use CSS custom properties for all colors/spacing | Single source of truth for theming |
+| Use BEM naming: `.block__element--modifier` | Prevents naming collisions, self-documents hierarchy |
+| One component = one CSS file | Changes are localized |
+| No inline `<style>` blocks in HTML | HTML is structure, CSS is presentation |
+
+### Naming Convention (BEM)
+
+```css
+/* Block */
+.panel { }
+
+/* Element */
+.panel__header { }
+.panel__body { }
+.panel__footer { }
+
+/* Modifier */
+.panel--collapsed { }
+.panel__header--sticky { }
+```
+
+### Custom Properties
+
+```css
+/* theme.css — single source of truth */
+:root {
+  --color-bg: #1a1a2e;
+  --color-surface: #252540;
+  --color-text: #e0e0e0;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --radius-sm: 4px;
+  --shadow-inset: inset 2px 2px 4px rgba(0,0,0,0.3);
+}
+```
+
+---
+
+## Testing Rules
+
+### When to Write Tests
+
+| Scenario | Test Required? |
+|----------|---------------|
+| New physics/math function | **Always** — with known reference values |
+| New state module | **Always** — getter/setter behavior, reset |
+| New utility function | **Always** — pure functions are trivial to test |
+| Bug fix | **Always** — regression test proving the fix |
+| New UI wiring | Recommended — verify DOM interactions |
+| Refactoring (extract module) | **Always** — verify behavior preserved |
+| New entity factory | Recommended — verify defaults |
+
+### Test Quality Standards
+
+1. **One behavior per test** — test name describes what's being verified
+2. **Use `toBeCloseTo()` for floats** — with explicit precision parameter
+3. **No `as any` in tests** — define proper result types
+4. **Include edge cases** — zero, negative, very large, null/undefined
+5. **Comment expected values** — show the math or reference
+
+```typescript
+// ✅ GOOD
+it('spherical spreading at 1m equals exact 4π constant', () => {
+  const EXACT_SPHERICAL = 10 * Math.log10(4 * Math.PI); // ≈ 10.99 dB
+  expect(spreadingLoss(1, 'spherical')).toBeCloseTo(EXACT_SPHERICAL, 10);
+});
+
+// ❌ BAD
+it('works', () => {
+  expect((result as any).value).toBeTruthy();
+});
+```
+
+### Test Coverage Targets
+
+| Package | Current | Target |
+|---------|---------|--------|
+| `packages/shared` | Good | 90% |
+| `packages/engine` | Strong | 90% |
+| `packages/core` | Partial | 80% |
+| `packages/geo` | Unknown | 80% |
+| `packages/engine-backends` | Minimal | 70% |
+| `apps/web` | Nearly zero | 60% |
+
+---
+
+## CI / Quality Gate Rules
+
+### Every PR Must Pass
+
+```
+typecheck → lint → test → build
+```
+
+If any step fails, the PR cannot merge. No exceptions.
+
+### Enforced via CI
+
+- GitHub Actions runs on every push and PR
+- Lint configuration lives in repo (not just in devDependencies)
+- Pre-commit hooks catch issues before they reach CI
+
+### Enforced via Pre-Commit
+
+- `lint-staged` formats and lints changed files
+- `husky` runs hooks on commit and push
 
 ---
 
@@ -221,6 +409,10 @@ Benefits:
 | "Utils" file > 200 lines | Junk drawer | Split by domain |
 | Need word "and" to describe file | Multiple responsibilities | Split into focused modules |
 | Agent reads 500+ lines for small change | Poor modularity | Extract to focused module |
+| CSS file > 500 lines | Style monolith | Split by component |
+| Bare `let` in module scope | Untracked mutation | Wrap in state module |
+| `as any` in test file | Weak type coverage | Define proper result types |
+| No tests for new module | Quality regression risk | Write tests before merging |
 
 ---
 
@@ -233,6 +425,11 @@ Before committing new code:
 - [ ] File still passes the four questions test
 - [ ] Barrel exports updated if new public API
 - [ ] No new circular dependencies
+- [ ] No new bare `let` variables in main.ts
+- [ ] New CSS goes in component file, not monolithic style.css
+- [ ] New functions have tests (or documented reason why not)
+- [ ] `npm run build` passes
+- [ ] `npm run typecheck` passes
 
 ---
 
@@ -242,7 +439,8 @@ Before committing new code:
 - **Screaming Architecture** - Folder structure reveals domain, not framework
 - **Module Extraction Refactoring** - Inverse of "inline module"
 - **Strangler Fig Pattern** - Gradual monolith decomposition
+- **BEM Methodology** - Block Element Modifier CSS naming convention
 
 ---
 
-*Last updated: 2026-02-06*
+*Last updated: 2026-02-09*

@@ -36,14 +36,10 @@ function resolveFilePath(urlPath) {
   }
 
   if (urlPath === '/style.css') {
-    const cssDist = resolve(dist, 'style.css');
-    if (existsSync(cssDist)) return cssDist;
     return resolve(root, 'src', 'style.css');
   }
 
   if (urlPath === '/styles/theme.css') {
-    const themeDist = resolve(dist, 'styles', 'theme.css');
-    if (existsSync(themeDist)) return themeDist;
     return resolve(root, 'src', 'styles', 'theme.css');
   }
 
