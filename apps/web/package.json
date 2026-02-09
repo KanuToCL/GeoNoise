@@ -10,9 +10,5 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts"
-  },
-  "dependencies": {
-    "@vercel/analytics": "^1.6.1",
-    "posthog-js": "^1.342.1"
   }
 }

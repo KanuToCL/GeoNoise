@@ -3,10 +3,10 @@
  *
  * Combines Vercel Analytics (visitor tracking) and PostHog (feature usage tracking).
  * All analytics concerns are centralized here to keep main.ts clean.
+ *
+ * Note: Uses script injection instead of npm imports because the app uses
+ * TypeScript-only compilation (no bundler). Bare module specifiers don't work in browsers.
  */
-
-import { inject } from '@vercel/analytics';
-import posthog from 'posthog-js';
 
 // PostHog project key - replace with your actual key
 const POSTHOG_KEY = 'phc_REPLACE_WITH_YOUR_KEY';
@@ -15,23 +15,59 @@ const POSTHOG_HOST = 'https://us.i.posthog.com';
 // Track whether PostHog is initialized (skip if no valid key)
 let posthogInitialized = false;
 
+// Declare global posthog type
+declare global {
+  interface Window {
+    posthog?: {
+      init: (key: string, options: Record<string, unknown>) => void;
+      capture: (event: string, properties?: Record<string, unknown>) => void;
+    };
+  }
+}
+
+/**
+ * Inject a script tag and return a promise that resolves when loaded
+ */
+function injectScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
 /**
  * Initialize all analytics tracking.
  * Call once at app startup.
  */
 export function initAnalytics(): void {
-  // Vercel Analytics for page views
-  inject();
+  // Vercel Analytics for page views (inject script tag)
+  injectScript('https://va.vercel-scripts.com/v1/script.js').catch((err) => {
+    // eslint-disable-next-line no-console
+    console.warn('Vercel Analytics failed to load:', err);
+  });
 
   // PostHog for feature usage (only if key is configured)
   if (POSTHOG_KEY && !POSTHOG_KEY.includes('REPLACE')) {
-    posthog.init(POSTHOG_KEY, {
-      api_host: POSTHOG_HOST,
-      capture_pageview: false, // Vercel handles page views
-      capture_pageleave: true,
-      autocapture: false, // We'll track manually for precision
-    });
-    posthogInitialized = true;
+    injectScript('https://us-assets.i.posthog.com/static/array.js')
+      .then(() => {
+        if (window.posthog) {
+          window.posthog.init(POSTHOG_KEY, {
+            api_host: POSTHOG_HOST,
+            capture_pageview: false, // Vercel handles page views
+            capture_pageleave: true,
+            autocapture: false, // We'll track manually for precision
+          });
+          posthogInitialized = true;
+        }
+      })
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn('PostHog failed to load:', err);
+      });
   }
 }
 
@@ -43,8 +79,8 @@ export function initAnalytics(): void {
  * Track a feature usage event
  */
 function track(event: string, properties?: Record<string, unknown>): void {
-  if (!posthogInitialized) return;
-  posthog.capture(event, properties);
+  if (!posthogInitialized || !window.posthog) return;
+  window.posthog.capture(event, properties);
 }
 
 // =============================================================================
