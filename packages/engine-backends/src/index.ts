@@ -38,9 +38,10 @@ export async function createDefaultRouter(options?: { defaultPreference?: Comput
   if (!isTest) {
     try {
       // Dynamic import to avoid hard dependency if package is not present
-      // Use eval to prevent static bundlers (vite) from resolving the import at build time
-      // eslint-disable-next-line no-eval
-      const mod = await eval("import('@geonoise/engine-webgpu')") as WebGPUModule | null;
+      // Use variable to prevent TypeScript from resolving the import at compile time
+      // @vite-ignore prevents static bundlers from resolving the import at build time
+      const webgpuPackage = '@geonoise/engine-webgpu';
+      const mod = await (import(/* @vite-ignore */ webgpuPackage) as Promise<WebGPUModule | null>);
       if (mod && mod.WebGPUBackend) {
         const gpu = new mod.WebGPUBackend();
         if (await gpu.isAvailable()) {
