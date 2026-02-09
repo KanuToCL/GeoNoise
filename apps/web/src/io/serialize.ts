@@ -6,7 +6,7 @@
  */
 
 import type { Source, Receiver, Panel, Probe, Barrier } from '../entities/index.js';
-import { Building } from '../entities/index.js';
+import { type Building } from '../entities/index.js';
 import type { ScenePayload, PropagationConfig } from './types.js';
 
 /**

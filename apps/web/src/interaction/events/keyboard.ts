@@ -13,7 +13,7 @@
  * Uses dependency injection for all state and callbacks to avoid tight coupling.
  */
 
-import type { Point, Selection, Tool } from '../types/index.js';
+import type { Point, Selection, Tool } from '../../types/index.js';
 
 // =============================================================================
 // TYPES

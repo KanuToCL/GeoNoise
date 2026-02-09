@@ -4,7 +4,7 @@
  */
 
 import { SCENE_SCHEMA_VERSION } from '@geonoise/shared';
-import { Scene, SceneSchema } from '../schema/index.js';
+import { type Scene, SceneSchema } from '../schema/index.js';
 
 // ============================================================================
 // Migration Types

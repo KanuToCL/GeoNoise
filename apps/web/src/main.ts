@@ -207,7 +207,7 @@ import {
   handlePointerMove as handlePointerMoveModule,
   handlePointerDown as handlePointerDownModule,
   handlePointerLeave as handlePointerLeaveModule,
-} from './interaction/pointer.js';
+} from './interaction/events/pointer.js';
 
 // === Keyboard/Wheel Handlers Module ===
 import {
@@ -217,7 +217,7 @@ import {
   type KeyboardCallbacks,
   handleWheel as handleWheelModule,
   handleKeyDown as handleKeyDownModule,
-} from './interaction/keyboard.js';
+} from './interaction/events/keyboard.js';
 
 import {
   type Point,
@@ -283,7 +283,7 @@ import {
   mergeBounds,
   buildBandedLegendLabels,
 } from './compute/index.js';
-import { shouldLiveUpdateMap } from './interactions/index.js';
+import { shouldLiveUpdateMap } from './interaction/index.js';
 import {
   isElementSelected,
   selectionToItems,

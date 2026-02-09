@@ -26,7 +26,7 @@
     "test:watch": "vitest",
     "test:physics": "vitest run tests/physics-validation.spec.ts",
     "test:physics-report": "PHYSICS_REPORT=true vitest run tests/physics-validation.spec.ts",
-    "lint": "eslint src --ext .ts",
+    "lint": "ESLINT_USE_FLAT_CONFIG=true eslint src",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
     "perf:baseline": "vitest run --reporter=verbose perf/"

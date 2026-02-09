@@ -47,7 +47,7 @@ export async function createDefaultRouter(options?: { defaultPreference?: Comput
           router.registerBackend({ id: gpu.getBackendId(), engine: gpu });
         }
       }
-    } catch (err) {
+    } catch {
       // Ignore - optional backend
     }
   }

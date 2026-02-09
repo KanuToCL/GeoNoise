@@ -17,8 +17,8 @@ import type {
   DragState,
   SelectableElementType,
   SelectionItem,
-} from '../types/index.js';
-import type { Barrier } from '../entities/index.js';
+} from '../../types/index.js';
+import type { Barrier } from '../../entities/index.js';
 
 // =============================================================================
 // LOCAL TYPES
