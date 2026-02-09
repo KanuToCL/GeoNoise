@@ -29,7 +29,7 @@ import {
 } from './theme.js';
 import { initMapboxUI, syncMapToCanvasZoom, syncMapToCanvasPan, isMapVisible, isMapInteractive, getMapCrossfader, setOnCrossfaderChange } from './mapboxUI.js';
 import { engineCompute } from '@geonoise/engine-backends';
-import { createEmptyScene, type EngineConfig, type PropagationConfig } from '@geonoise/core';
+import { createEmptyScene, type PropagationConfig } from '@geonoise/core';
 import {
   getDefaultEngineConfig,
   type ComputeGridResponse,
@@ -71,7 +71,6 @@ import {
   createFlatSpectrum,
   calculateOverallLevel,
   type Spectrum9,
-  type FrequencyWeighting,
 } from '@geonoise/shared';
 import { buildCsv } from './export.js';
 import type { SceneResults, PanelResult } from './export.js';
@@ -221,16 +220,13 @@ import {
 
 import {
   type Point,
-  type DisplayBand,
   OCTAVE_BAND_LABELS,
   type Tool,
   type SelectionItem,
   type Selection,
   type DragState,
   type DragContribution,
-  type NoiseMap,
   type MapRange,
-  type MapRenderStyle,
   type CanvasTheme,
   sameSelection,
 } from './types/index.js';
@@ -292,6 +288,55 @@ import {
   selectionTypeLabel,
   toolLabel,
   isSourceEnabled,
+  // Compute state
+  nextComputeToken,
+  getActiveComputeToken,
+  setActiveComputeToken,
+  getIsComputing,
+  setIsComputing,
+  nextMapComputeToken,
+  getActiveMapToken,
+  setActiveMapToken,
+  getIsMapComputing,
+  setIsMapComputing,
+  getPendingComputes,
+  setPendingComputes,
+  getNeedsUpdate,
+  setNeedsUpdate,
+  getQueuedMapResolutionPx,
+  setQueuedMapResolutionPx,
+  setMapToastTimer,
+  clearMapToastTimer,
+  // Noise map state
+  getNoiseMap,
+  setNoiseMap,
+  getCurrentMapRange,
+  setCurrentMapRange,
+  getMapRenderStyle,
+  setMapRenderStyle as setMapRenderStyleState,
+  getMapBandStep as getMapBandStepRaw,
+  setMapBandStep as setMapBandStepState,
+  getMapAutoScale,
+  setMapAutoScale as setMapAutoScaleState,
+  // UI state
+  getDisplayWeighting,
+  setDisplayWeighting as setDisplayWeightingState,
+  getDisplayBand,
+  setDisplayBand as setDisplayBandState,
+  getAboutOpen,
+  setAboutOpen,
+  getCanvasTheme,
+  setCanvasTheme,
+  getResizeRaf,
+  setResizeRaf,
+  getEngineConfig,
+  setEngineConfig,
+  setDockCollapseTimeout,
+  clearDockCollapseTimeout,
+  setDockInactivityTimeout,
+  clearDockInactivityTimeout,
+  getDockHasToolEngaged,
+  setDockHasToolEngaged,
 } from './state/index.js';
 
 const canvasEl = document.querySelector<HTMLCanvasElement>('#mapCanvas');
@@ -448,13 +493,12 @@ const canvas = canvasEl;
 const ctx = ctxEl;
 const probeChartCtx = probeChart?.getContext('2d') ?? null;
 
-let resizeRaf: number | null = null;
 const resizeObserver = new ResizeObserver(() => {
-  if (resizeRaf !== null) cancelAnimationFrame(resizeRaf);
-  resizeRaf = requestAnimationFrame(() => {
-    resizeRaf = null;
+  if (getResizeRaf() !== null) cancelAnimationFrame(getResizeRaf()!);
+  setResizeRaf(requestAnimationFrame(() => {
+    setResizeRaf(null);
     resizeCanvas();
-  });
+  }));
 });
 resizeObserver.observe(canvas.closest('.canvas-frame') ?? canvas);
 
@@ -583,32 +627,13 @@ let buildingPolygonDraft: Point[] = [];
 let buildingPolygonPreviewPoint: Point | null = null;
 
 const results: SceneResults = { receivers: [], panels: [] };
-let noiseMap: NoiseMap | null = null;
-let currentMapRange: MapRange | null = null;
-let mapRenderStyle: MapRenderStyle = 'Smooth';
-let mapBandStep = DEFAULT_MAP_BAND_STEP;
-let mapAutoScale = true;
 let receiverEnergyTotals = new Map<string, number>();
 let panelEnergyTotals = new Map<string, Float64Array>();
 let dragContribution: DragContribution | null = null;
 let dragDirty = false;
-let engineConfig: EngineConfig = getDefaultEngineConfig('festival_fast');
-let aboutOpen = false;
-let pendingComputes = 0;
-let canvasTheme: CanvasTheme = readCanvasTheme();
 let isDirty = false;
-// Render loop gate to avoid redrawing a static scene.
-let needsUpdate = true;
-let computeToken = 0;
-let activeComputeToken = 0;
-let isComputing = false;
-let mapComputeToken = 0;
-let activeMapToken = 0;
-let isMapComputing = false;
-let mapToastTimer: number | null = null;
 // True while we want low-res, smoothed map previews.
 let interactionActive = false;
-let queuedMapResolutionPx: number | null = null;
 
 const snapMeters = 5;
 let basePixelsPerMeter = 3;
@@ -618,12 +643,6 @@ let panState: { start: Point; origin: Point } | null = null;
 
 const collapsedSources = new Set<string>();
 let soloSourceId: string | null = null;
-
-/** Current frequency weighting for display (A/C/Z) */
-let displayWeighting: FrequencyWeighting = 'A';
-
-/** Current band to display: 'overall' or band index 0-8 */
-let displayBand: DisplayBand = 'overall';
 
 type SceneSnapshot = {
   sources: Source[];
@@ -656,14 +675,15 @@ let buildingSeq = 2;
 let barrierSeq = 1;
 
 function getPropagationConfig(): PropagationConfig {
-  if (engineConfig.propagation) return engineConfig.propagation;
+  const config = getEngineConfig();
+  if (config.propagation) return config.propagation;
   const fallback = getDefaultEngineConfig('festival_fast');
-  engineConfig = { ...engineConfig, propagation: fallback.propagation };
-  return engineConfig.propagation!;
+  setEngineConfig({ ...config, propagation: fallback.propagation });
+  return getEngineConfig().propagation!;
 }
 
 function updatePropagationConfig(next: Partial<PropagationConfig>) {
-  engineConfig = { ...engineConfig, propagation: { ...getPropagationConfig(), ...next } };
+  setEngineConfig({ ...getEngineConfig(), propagation: { ...getPropagationConfig(), ...next } });
 }
 
 // Environmental conditions state (meteo)
@@ -732,8 +752,11 @@ function readCanvasTheme(): CanvasTheme {
   };
 }
 
+// Eagerly initialize canvasTheme from CSS custom properties
+setCanvasTheme(readCanvasTheme());
+
 function refreshCanvasTheme() {
-  canvasTheme = readCanvasTheme();
+  setCanvasTheme(readCanvasTheme());
   renderProbeInspector();
   renderProbeSnapshots();
   requestRender();
@@ -962,19 +985,19 @@ function formatLegendLevel(value: number) {
 }
 
 function getActiveMapRange(): MapRange {
-  if (mapAutoScale && currentMapRange) return currentMapRange;
+  if (getMapAutoScale() && getCurrentMapRange()) return getCurrentMapRange()!;
   return DEFAULT_MAP_RANGE;
 }
 
 function getMapBandStep() {
   // Use coarser step when viewing a specific frequency band (wider level variation)
-  const defaultStep = displayBand === 'overall' ? DEFAULT_MAP_BAND_STEP : DEFAULT_MAP_BAND_STEP_PERBAND;
-  if (!Number.isFinite(mapBandStep)) return defaultStep;
-  return Math.min(20, Math.max(1, mapBandStep));
+  const defaultStep = getDisplayBand() === 'overall' ? DEFAULT_MAP_BAND_STEP : DEFAULT_MAP_BAND_STEP_PERBAND;
+  if (!Number.isFinite(getMapBandStepRaw())) return defaultStep;
+  return Math.min(20, Math.max(1, getMapBandStepRaw()));
 }
 
 function snapMapValue(value: number) {
-  if (mapRenderStyle !== 'Contours') return value;
+  if (getMapRenderStyle() !== 'Contours') return value;
   const step = getMapBandStep();
   return Math.floor(value / step) * step;
 }
@@ -1075,7 +1098,7 @@ function renderNoiseMapLegend() {
   if (!dbLegend || !dbLegendGradient || !dbLegendLabels) return;
   const range = getActiveMapRange();
   const step = getMapBandStep();
-  const isContours = mapRenderStyle === 'Contours';
+  const isContours = getMapRenderStyle() === 'Contours';
   const stops = buildSmoothLegendStops();
 
   dbLegendGradient.style.backgroundImage = `linear-gradient(90deg, ${stops})`;
@@ -1363,8 +1386,8 @@ function buildNoiseMapGridConfig(resolutionPx?: number, maxPoints?: number) {
   // Per-band noise map display options:
   // - If displayBand is 'overall', compute weighted overall level using displayWeighting
   // - If displayBand is a band index (0-8), compute single-band unweighted level
-  const targetBand = displayBand === 'overall' ? undefined : displayBand;
-  const weighting = displayWeighting;
+  const targetBand = getDisplayBand() === 'overall' ? undefined : getDisplayBand() as number;
+  const weighting = getDisplayWeighting();
 
   return { enabled: true, bounds: padded, resolution, elevation: 1.5, targetBand, weighting };
 }
@@ -1424,10 +1447,10 @@ function updatePanelResult(panelResult: PanelResult) {
 }
 
 function finishCompute(token: number) {
-  if (token !== activeComputeToken) return;
-  pendingComputes = Math.max(0, pendingComputes - 1);
-  if (pendingComputes === 0) {
-    isComputing = false;
+  if (token !== getActiveComputeToken()) return;
+  setPendingComputes(Math.max(0, getPendingComputes() - 1));
+  if (getPendingComputes() === 0) {
+    setIsComputing(false);
     updateComputeUI();
   }
 }
@@ -1439,11 +1462,11 @@ async function computeReceivers(
 ) {
   try {
     const response = (await engineCompute(
-      { kind: 'receivers', scene: engineScene, payload: {}, engineConfig },
+      { kind: 'receivers', scene: engineScene, payload: {}, engineConfig: getEngineConfig() },
       preference,
       'receivers'
     )) as ComputeReceiversResponse;
-    if (token !== activeComputeToken) return;
+    if (token !== getActiveComputeToken()) return;
     const receiverMap = new Map(scene.receivers.map((receiver) => [receiver.id, receiver]));
     results.receivers = response.results.map((result) => {
       const receiver = receiverMap.get(String(result.receiverId));
@@ -1481,13 +1504,13 @@ async function computePanel(
       {
         kind: 'panel',
         scene: engineScene,
-        engineConfig,
+        engineConfig: getEngineConfig(),
         payload: { panelId: panelId(panel.id) },
       },
       preference,
       `panel:${panel.id}`
     )) as ComputePanelResponse;
-    if (token !== activeComputeToken) return;
+    if (token !== getActiveComputeToken()) return;
 
     const result = response.result;
     const panelResult: PanelResult = {
@@ -1523,13 +1546,13 @@ async function computePanel(
 function invalidateNoiseMap() {
   // Any scene edit, load, undo/redo, or compute invalidates the previously generated map.
   // Keeping the map "sticky" would require a stable hash of (scene + engineConfig + bounds + resolution).
-  if (isMapComputing) {
-    activeMapToken = ++mapComputeToken;
-    isMapComputing = false;
+  if (getIsMapComputing()) {
+    setActiveMapToken(nextMapComputeToken());
+    setIsMapComputing(false);
     updateMapUI();
   }
-  noiseMap = null;
-  currentMapRange = null;
+  setNoiseMap(null);
+  setCurrentMapRange(null);
   layers.noiseMap = false;
   if (layerNoiseMap) {
     layerNoiseMap.checked = false;
@@ -1545,7 +1568,7 @@ function invalidateNoiseMap() {
  * while computing the new one in the background.
  */
 function recalculateNoiseMapIfVisible() {
-  if (!layers.noiseMap || !noiseMap) {
+  if (!layers.noiseMap || !getNoiseMap()) {
     return; // Map not visible, nothing to recalculate
   }
   // Use low resolution only during active dragging for responsiveness.
@@ -1587,9 +1610,9 @@ async function computeNoiseMapInternal(options: NoiseMapComputeOptions = {}) {
 
   const preference = getComputePreference();
   const engineScene = buildEngineScene();
-  const token = ++mapComputeToken;
-  activeMapToken = token;
-  isMapComputing = true;
+  const token = nextMapComputeToken();
+  setActiveMapToken(token);
+  setIsMapComputing(true);
   if (!silent) {
     updateMapUI();
     setMapToast('Generating map...', 'busy');
@@ -1601,19 +1624,19 @@ async function computeNoiseMapInternal(options: NoiseMapComputeOptions = {}) {
       {
         kind: 'grid',
         scene: engineScene,
-        engineConfig,
+        engineConfig: getEngineConfig(),
         payload: { gridConfig },
       },
       preference,
       options.requestId ?? 'grid:global'
     )) as ComputeGridResponse;
 
-    if (token !== activeMapToken) return;
+    if (token !== getActiveMapToken()) return;
 
     const computedRange = computeMapRange(response.result.values);
     if (!computedRange) {
-      currentMapRange = null;
-      noiseMap = null;
+      setCurrentMapRange(null);
+      setNoiseMap(null);
       if (!silent) {
         setMapToast('Map has no audible values.', 'error', 3000);
       }
@@ -1622,11 +1645,11 @@ async function computeNoiseMapInternal(options: NoiseMapComputeOptions = {}) {
       return;
     }
 
-    currentMapRange = computedRange;
+    setCurrentMapRange(computedRange);
     const renderRange = getActiveMapRange();
     const texture = buildNoiseMapTexture(response.result, renderRange);
     if (!texture) {
-      noiseMap = null;
+      setNoiseMap(null);
       if (!silent) {
         setMapToast('Map has no audible values.', 'error', 3000);
       }
@@ -1636,14 +1659,14 @@ async function computeNoiseMapInternal(options: NoiseMapComputeOptions = {}) {
     }
 
     const { cols, rows } = getGridCounts(response.result.bounds, response.result.resolution);
-    noiseMap = { ...response.result, cols, rows, texture };
+    setNoiseMap({ ...response.result, cols, rows, texture });
     layers.noiseMap = true;
     if (layerNoiseMap) layerNoiseMap.checked = true;
     if (debugLayer) debugLayer.textContent = layerLabels.noiseMap;
 
     renderNoiseMapLegend();
     // Ensure silent map updates still trigger a frame.
-    needsUpdate = true;
+    setNeedsUpdate(true);
     requestRender();
     if (!silent) {
       setMapToast(null);
@@ -1656,35 +1679,35 @@ async function computeNoiseMapInternal(options: NoiseMapComputeOptions = {}) {
     // eslint-disable-next-line no-console
     console.error('Map compute failed', error);
   } finally {
-    if (token === activeMapToken) {
-      isMapComputing = false;
+    if (token === getActiveMapToken()) {
+      setIsMapComputing(false);
       if (!silent) {
         updateMapUI();
       }
-      if (queuedMapResolutionPx !== null) {
-        const nextResolution = queuedMapResolutionPx;
-        queuedMapResolutionPx = null;
-        recalculateNoiseMap(nextResolution);
+      if (getQueuedMapResolutionPx() !== null) {
+        const nextResolution = getQueuedMapResolutionPx();
+        setQueuedMapResolutionPx(null);
+        recalculateNoiseMap(nextResolution!);
       }
     }
   }
 }
 
 async function computeNoiseMap() {
-  if (isMapComputing) {
+  if (getIsMapComputing()) {
     invalidateNoiseMap();
     setMapToast('Map canceled', 'error', 2000);
     return;
   }
-  queuedMapResolutionPx = null;
+  setQueuedMapResolutionPx(null);
   // Use fine resolution for user-initiated map generation (capped at 10000 points)
   await computeNoiseMapInternal({ resolutionPx: RES_HIGH, requestId: 'grid:generate' });
 }
 
 function recalculateNoiseMap(resolutionPx: number, maxPoints?: number) {
   if (!layers.noiseMap) return;
-  if (isMapComputing) {
-    queuedMapResolutionPx = resolutionPx;
+  if (getIsMapComputing()) {
+    setQueuedMapResolutionPx(resolutionPx);
     return;
   }
   // Silent recompute keeps UI responsive while updating the map texture.
@@ -1708,22 +1731,22 @@ function computeScene(options: { invalidateMap?: boolean; recalculateMap?: boole
 
   const preference = getComputePreference();
   const engineScene = buildEngineScene();
-  pendingComputes = 1 + scene.panels.length;
-  isComputing = true;
-  activeComputeToken = ++computeToken;
+  setPendingComputes(1 + scene.panels.length);
+  setIsComputing(true);
+  setActiveComputeToken(nextComputeToken());
   updateComputeUI();
 
-  void computeReceivers(engineScene, preference, activeComputeToken);
+  void computeReceivers(engineScene, preference, getActiveComputeToken());
   for (const panel of scene.panels) {
-    void computePanel(engineScene, preference, panel, activeComputeToken);
+    void computePanel(engineScene, preference, panel, getActiveComputeToken());
   }
   requestLiveProbeUpdates();
 }
 
 function cancelCompute() {
-  activeComputeToken = ++computeToken;
-  pendingComputes = 0;
-  isComputing = false;
+  setActiveComputeToken(nextComputeToken());
+  setPendingComputes(0);
+  setIsComputing(false);
   updateComputeUI();
 }
 
@@ -1757,7 +1780,7 @@ async function primeReceiverContribution(
 ) {
   try {
     const response = (await engineCompute(
-      { kind: 'receivers', scene: engineScene, payload: {}, engineConfig },
+      { kind: 'receivers', scene: engineScene, payload: {}, engineConfig: getEngineConfig() },
       preference,
       `drag:${sourceId}:receivers`
     )) as ComputeReceiversResponse;
@@ -1782,7 +1805,7 @@ async function primePanelContribution(
 ) {
   try {
     const response = (await engineCompute(
-      { kind: 'panel', scene: engineScene, payload: buildPanelPayload(panel), engineConfig },
+      { kind: 'panel', scene: engineScene, payload: buildPanelPayload(panel), engineConfig: getEngineConfig() },
       preference,
       `drag:${sourceId}:panel:${panel.id}`
     )) as ComputePanelResponse;
@@ -1849,7 +1872,7 @@ async function computeReceiversIncremental(
   if (!receiverBaselineReady(sourceId)) return;
   try {
     const response = (await engineCompute(
-      { kind: 'receivers', scene: engineScene, payload: {}, engineConfig },
+      { kind: 'receivers', scene: engineScene, payload: {}, engineConfig: getEngineConfig() },
       preference,
       `drag:${sourceId}:receivers`
     )) as ComputeReceiversResponse;
@@ -1878,7 +1901,7 @@ async function computePanelIncremental(
   if (!dragContribution.panelEnergy.has(panel.id)) return;
   try {
     const response = (await engineCompute(
-      { kind: 'panel', scene: engineScene, payload: buildPanelPayload(panel), engineConfig },
+      { kind: 'panel', scene: engineScene, payload: buildPanelPayload(panel), engineConfig: getEngineConfig() },
       preference,
       `drag:${sourceId}:panel:${panel.id}`
     )) as ComputePanelResponse;
@@ -1924,15 +1947,15 @@ function computeSceneIncremental(sourceId: string) {
  */
 function getReceiverDisplayLevel(receiver: SceneResults['receivers'][number]): { level: number; unit: string } {
   // If a specific band is selected, show that band's level (unweighted)
-  if (displayBand !== 'overall' && receiver.Leq_spectrum) {
+  if (getDisplayBand() !== 'overall' && receiver.Leq_spectrum) {
     return {
-      level: receiver.Leq_spectrum[displayBand],
-      unit: `dB @ ${OCTAVE_BAND_LABELS[displayBand]} Hz`,
+      level: receiver.Leq_spectrum[getDisplayBand() as number],
+      unit: `dB @ ${OCTAVE_BAND_LABELS[getDisplayBand() as number]} Hz`,
     };
   }
 
   // Show weighted overall level based on selected weighting
-  switch (displayWeighting) {
+  switch (getDisplayWeighting()) {
     case 'C':
       return { level: receiver.LCeq ?? receiver.LAeq, unit: 'dB(C)' };
     case 'Z':
@@ -1974,7 +1997,7 @@ function renderResults() {
           bar.style.height = `${height}%`;
           bar.title = `${OCTAVE_BAND_LABELS[i]}: ${formatLevel(level)} dB`;
           // Highlight the selected band
-          if (displayBand !== 'overall' && i === displayBand) {
+          if (getDisplayBand() !== 'overall' && i === getDisplayBand()) {
             bar.classList.add('is-selected');
           }
           spectrumContainer.appendChild(bar);
@@ -2055,7 +2078,7 @@ function renderProbeInspector() {
     elements,
     rayVizElements,
     getProbeById,
-    displayWeighting,
+    displayWeighting: getDisplayWeighting(),
     readCssVar,
     requestRender,
   });
@@ -2068,7 +2091,7 @@ function resizeProbeChart() {
 
 // renderProbeSnapshots wrapper
 function renderProbeSnapshots() {
-  renderProbeSnapshotsFromModule(displayWeighting, readCssVar);
+  renderProbeSnapshotsFromModule(getDisplayWeighting(), readCssVar);
 }
 
 // getActiveProbe wrapper for probe/ module
@@ -2103,7 +2126,7 @@ function pinProbe(probeId: string) {
     probe,
     uiLayer,
     probePanel,
-    displayWeighting,
+    displayWeighting: getDisplayWeighting(),
     readCssVar,
     onUnpin: unpinProbe,
   });
@@ -2128,7 +2151,7 @@ function togglePinProbe(probeId: string) {
 
 // renderPinnedProbePanel wrapper
 function renderPinnedProbePanel(probeId: string) {
-  renderPinnedProbePanelFromModule(probeId, displayWeighting, readCssVar);
+  renderPinnedProbePanelFromModule(probeId, getDisplayWeighting(), readCssVar);
 }
 
 // renderPinnedProbePanels wrapper
@@ -2147,12 +2170,11 @@ function createProbeSnapshotWrapper(data: ProbeResult['data'], sourceProbeName?:
     coordinates,
     uiLayer,
     probePanel,
-    displayWeighting,
+    displayWeighting: getDisplayWeighting(),
     readCssVar,
   });
 }
 
-// disableRayVisualization wrapper
 function disableRayVisualization() {
   const rayVizElements: RayVizElements = {
     card: rayVizCard,
@@ -2222,14 +2244,15 @@ function refreshPinnedContextPanels() {
 
 function refreshNoiseMapVisualization() {
   renderNoiseMapLegend();
-  if (!noiseMap) {
+  const map = getNoiseMap();
+  if (!map) {
     requestRender();
     return;
   }
   const range = getActiveMapRange();
-  const texture = buildNoiseMapTexture(noiseMap, range);
+  const texture = buildNoiseMapTexture(map, range);
   if (!texture) return;
-  noiseMap.texture = texture;
+  map.texture = texture;
   requestRender();
 }
 
@@ -2241,7 +2264,7 @@ function createSpectrumEditor(
   onChangeSpectrum: (spectrum: Spectrum9) => void,
   onChangeGain: (gain: number) => void
 ): HTMLElement {
-  return createSpectrumEditorModule(source, onChangeSpectrum, onChangeGain, displayWeighting, readCssVar);
+  return createSpectrumEditorModule(source, onChangeSpectrum, onChangeGain, getDisplayWeighting(), readCssVar);
 }
 
 /** Build context for renderSources module */
@@ -2251,7 +2274,7 @@ function buildSourcesContext(): SourcesContext {
     selection,
     soloSourceId,
     collapsedSources,
-    displayWeighting,
+    displayWeighting: getDisplayWeighting(),
     isSourceEnabled,
   };
 }
@@ -2527,22 +2550,19 @@ function updateComputeChip(isBusy: boolean) {
 }
 
 function updateComputeUI() {
-  updateComputeButtonState(isComputing);
-  updateComputeChip(isComputing);
+  updateComputeButtonState(getIsComputing());
+  updateComputeChip(getIsComputing());
 }
 
 function updateMapButtonState() {
   if (!meshButton) return;
-  meshButton.textContent = isMapComputing ? 'Cancel Map' : 'Generate Map';
-  meshButton.classList.toggle('is-cancel', isMapComputing);
+  meshButton.textContent = getIsMapComputing() ? 'Cancel Map' : 'Generate Map';
+  meshButton.classList.toggle('is-cancel', getIsMapComputing());
 }
 
 function setMapToast(message: string | null, state: 'busy' | 'ready' | 'error' = 'busy', autoHideMs?: number) {
   if (!mapToast) return;
-  if (mapToastTimer) {
-    window.clearTimeout(mapToastTimer);
-    mapToastTimer = null;
-  }
+  clearMapToastTimer();
   if (!message) {
     mapToast.classList.remove('is-visible');
     return;
@@ -2551,9 +2571,9 @@ function setMapToast(message: string | null, state: 'busy' | 'ready' | 'error' =
   mapToast.dataset.state = state;
   mapToast.classList.add('is-visible');
   if (autoHideMs) {
-    mapToastTimer = window.setTimeout(() => {
+    setMapToastTimer(window.setTimeout(() => {
       mapToast?.classList.remove('is-visible');
-    }, autoHideMs);
+    }, autoHideMs));
   }
 }
 
@@ -2568,16 +2588,16 @@ function buildMapSettingsElements(): MapSettingsElements {
 }
 
 function buildMapSettingsState(): MapSettingsState {
-  return { mapRenderStyle, mapBandStep, mapAutoScale, displayBand };
+  return { mapRenderStyle: getMapRenderStyle(), mapBandStep: getMapBandStep(), mapAutoScale: getMapAutoScale(), displayBand: getDisplayBand() };
 }
 
 function buildMapSettingsCallbacks(): MapSettingsCallbacks {
   return {
     getState: buildMapSettingsState,
     getMapBandStep,
-    setMapRenderStyle: (style) => { mapRenderStyle = style; },
-    setMapBandStep: (step) => { mapBandStep = step; },
-    setMapAutoScale: (autoScale) => { mapAutoScale = autoScale; },
+    setMapRenderStyle: (style) => { setMapRenderStyleState(style); },
+    setMapBandStep: (step) => { setMapBandStepState(step); },
+    setMapAutoScale: (autoScale) => { setMapAutoScaleState(autoScale); },
     onRefreshVisualization: refreshNoiseMapVisualization,
   };
 }
@@ -2587,14 +2607,14 @@ function buildDisplaySettingsElements(): DisplaySettingsElements {
 }
 
 function buildDisplaySettingsState(): DisplaySettingsState {
-  return { displayWeighting, displayBand };
+  return { displayWeighting: getDisplayWeighting(), displayBand: getDisplayBand() };
 }
 
 function buildDisplaySettingsCallbacks(): DisplaySettingsCallbacks {
   return {
-    setDisplayWeighting: (weighting) => { displayWeighting = weighting; },
-    setDisplayBand: (band) => { displayBand = band; },
-    setMapBandStep: (step) => { mapBandStep = step; },
+    setDisplayWeighting: (weighting) => { setDisplayWeightingState(weighting); },
+    setDisplayBand: (band) => { setDisplayBandState(band); },
+    setMapBandStep: (step) => { setMapBandStepState(step); },
     updateMapSettingsControls,
     renderSources,
     renderResults,
@@ -2623,7 +2643,7 @@ function wireRefineButton() {
   if (!refineButton) return;
   refineButton.addEventListener('click', () => {
     // Manual refine overrides any queued low-res update.
-    queuedMapResolutionPx = null;
+    setQueuedMapResolutionPx(null);
     setInteractionActive(false);
     ctx.imageSmoothingEnabled = false;
     // Force a high-resolution map recompute even if layers.noiseMap is currently off
@@ -2636,7 +2656,7 @@ function wireRefineButton() {
       if (layerNoiseMap) layerNoiseMap.checked = true;
       void computeNoiseMapInternal({ resolutionPx: RES_HIGH, maxPoints: REFINE_POINTS, silent: false, requestId: 'grid:refine' });
     }
-    needsUpdate = true;
+    setNeedsUpdate(true);
     requestRender();
   });
 }
@@ -3119,10 +3139,6 @@ function wireDockLabels() {
   });
 }
 
-let dockCollapseTimeout: ReturnType<typeof setTimeout> | null = null;
-let dockInactivityTimeout: ReturnType<typeof setTimeout> | null = null;
-let dockHasToolEngaged = false; // True when user clicked a non-select tool
-
 function wireDockExpand() {
   if (!dock || !dockFab || !dockExpandable || !toolGrid) return;
 
@@ -3130,14 +3146,8 @@ function wireDockExpand() {
   const INACTIVITY_COLLAPSE_DELAY = 4000; // 4 seconds after tool engagement
 
   const expandDock = () => {
-    if (dockCollapseTimeout) {
-      clearTimeout(dockCollapseTimeout);
-      dockCollapseTimeout = null;
-    }
-    if (dockInactivityTimeout) {
-      clearTimeout(dockInactivityTimeout);
-      dockInactivityTimeout = null;
-    }
+    clearDockCollapseTimeout();
+    clearDockInactivityTimeout();
     dock.classList.add('is-expanded');
     dockFab.setAttribute('aria-expanded', 'true');
   };
@@ -3145,27 +3155,27 @@ function wireDockExpand() {
   const collapseDock = () => {
     dock.classList.remove('is-expanded');
     dockFab.setAttribute('aria-expanded', 'false');
-    dockHasToolEngaged = false;
+    setDockHasToolEngaged(false);
     // Reset to select tool when dock collapses
     setActiveTool('select');
   };
 
   const scheduleHoverCollapse = () => {
     // Only use quick collapse if no tool was engaged
-    if (dockHasToolEngaged) return;
-    if (dockCollapseTimeout) clearTimeout(dockCollapseTimeout);
-    dockCollapseTimeout = setTimeout(() => {
+    if (getDockHasToolEngaged()) return;
+    clearDockCollapseTimeout();
+    setDockCollapseTimeout(setTimeout(() => {
       collapseDock();
-      dockCollapseTimeout = null;
-    }, HOVER_COLLAPSE_DELAY);
+      setDockCollapseTimeout(null);
+    }, HOVER_COLLAPSE_DELAY));
   };
 
   const resetInactivityTimer = () => {
-    if (dockInactivityTimeout) clearTimeout(dockInactivityTimeout);
-    dockInactivityTimeout = setTimeout(() => {
+    clearDockInactivityTimeout();
+    setDockInactivityTimeout(setTimeout(() => {
       collapseDock();
-      dockInactivityTimeout = null;
-    }, INACTIVITY_COLLAPSE_DELAY);
+      setDockInactivityTimeout(null);
+    }, INACTIVITY_COLLAPSE_DELAY));
   };
 
   // Click on FAB expands the dock
@@ -3193,12 +3203,9 @@ function wireDockExpand() {
     }
 
     // Non-select tool clicked - engage tool mode
-    dockHasToolEngaged = true;
+    setDockHasToolEngaged(true);
     // Clear any pending hover collapse
-    if (dockCollapseTimeout) {
-      clearTimeout(dockCollapseTimeout);
-      dockCollapseTimeout = null;
-    }
+    clearDockCollapseTimeout();
     // Start inactivity timer
     resetInactivityTimer();
   });
@@ -3209,7 +3216,7 @@ function wireDockExpand() {
   });
 
   dock.addEventListener('mouseleave', () => {
-    if (dockHasToolEngaged) {
+    if (getDockHasToolEngaged()) {
       // Tool is engaged, don't collapse on hover-out
       // Just let the inactivity timer handle it
       return;
@@ -3219,10 +3226,7 @@ function wireDockExpand() {
 
   // Keep dock open while interacting with it (cancel hover collapse)
   dockExpandable.addEventListener('mouseenter', () => {
-    if (dockCollapseTimeout) {
-      clearTimeout(dockCollapseTimeout);
-      dockCollapseTimeout = null;
-    }
+    clearDockCollapseTimeout();
   });
 
   // Keyboard accessibility
@@ -3240,7 +3244,7 @@ function wireDockExpand() {
   // Close when clicking outside (only if no tool engaged)
   document.addEventListener('click', (e) => {
     if (!dock.contains(e.target as Node) && dock.classList.contains('is-expanded')) {
-      if (!dockHasToolEngaged) {
+      if (!getDockHasToolEngaged()) {
         collapseDock();
       }
     }
@@ -3249,19 +3253,19 @@ function wireDockExpand() {
 
 // Reset inactivity timer when user adds something (call this from add handlers)
 function resetDockInactivityTimer() {
-  if (!dockHasToolEngaged) return;
-  if (dockInactivityTimeout) clearTimeout(dockInactivityTimeout);
-  dockInactivityTimeout = setTimeout(() => {
+  if (!getDockHasToolEngaged()) return;
+  clearDockInactivityTimeout();
+  setDockInactivityTimeout(setTimeout(() => {
     const dockEl = document.querySelector('#dock');
     if (dockEl) {
       dockEl.classList.remove('is-expanded');
       const fabEl = document.querySelector('#dockFab');
       if (fabEl) fabEl.setAttribute('aria-expanded', 'false');
     }
-    dockHasToolEngaged = false;
+    setDockHasToolEngaged(false);
     setActiveTool('select');
-    dockInactivityTimeout = null;
-  }, 4000);
+    setDockInactivityTimeout(null);
+  }, 4000));
 }
 
 function hitTestPanelHandle(point: Point) {
@@ -3884,12 +3888,13 @@ function addProbeAt(point: Point) {
 
 function drawGrid() {
   const rect = canvas.getBoundingClientRect();
-  drawGridModule(ctx, rect.width, rect.height, pixelsPerMeter, canvasTheme);
+  drawGridModule(ctx, rect.width, rect.height, pixelsPerMeter, getCanvasTheme()!);
 }
 
 function drawNoiseMap() {
-  if (!noiseMap) return;
-  drawNoiseMapModule(ctx, noiseMap, worldToCanvas);
+  const map = getNoiseMap();
+  if (!map) return;
+  drawNoiseMapModule(ctx, map, worldToCanvas);
 }
 
 function drawSelectBox() {
@@ -3899,7 +3904,7 @@ function drawSelectBox() {
 
 function drawMeasurement() {
   if (!measureStart || !measureEnd) return;
-  drawMeasurementModule(ctx, measureStart, measureEnd, worldToCanvas, canvasTheme, formatMeters);
+  drawMeasurementModule(ctx, measureStart, measureEnd, worldToCanvas, getCanvasTheme()!, formatMeters);
 }
 
 function drawPanelSamples(panelResult: PanelResult) {
@@ -3910,7 +3915,7 @@ function drawPanelSamples(panelResult: PanelResult) {
     panelResult.LAeq_min,
     panelResult.LAeq_max,
     worldToCanvas,
-    canvasTheme
+    getCanvasTheme()!
   );
 }
 
@@ -3919,18 +3924,18 @@ function drawPanels() {
     ctx,
     scene.panels,
     worldToCanvas,
-    canvasTheme,
+    getCanvasTheme()!,
     (id) => isElementSelected(selection, 'panel', id)
   );
 }
 
 function drawBuildings() {
   // Draw all buildings using the module
-  drawBuildingsModule(ctx, scene.buildings, worldToCanvas, canvasTheme, pixelsPerMeter);
+  drawBuildingsModule(ctx, scene.buildings, worldToCanvas, getCanvasTheme()!, pixelsPerMeter);
 
   // Draw building center draft preview
   if (buildingCenterDraft) {
-    drawBuildingCenterDraft(ctx, buildingCenterDraft, worldToCanvas, canvasTheme);
+    drawBuildingCenterDraft(ctx, buildingCenterDraft, worldToCanvas, getCanvasTheme()!);
   }
 
   // Draw polygon building draft preview (with validation)
@@ -3940,7 +3945,7 @@ function drawBuildings() {
       buildingPolygonDraft,
       buildingPolygonPreviewPoint,
       worldToCanvas,
-      canvasTheme,
+      getCanvasTheme()!,
       isValidQuadrilateral,
       canvas.width
     );
@@ -3953,7 +3958,7 @@ function drawBarriers() {
     ctx,
     scene.barriers,
     worldToCanvas,
-    canvasTheme,
+    getCanvasTheme()!,
     (id) => isElementSelected(selection, 'barrier', id),
     pixelsPerMeter,
     BARRIER_ROTATION_HANDLE_OFFSET_PX
@@ -3961,17 +3966,17 @@ function drawBarriers() {
 
   // Draw barrier draft preview
   if (barrierDraft) {
-    drawBarrierDraft(ctx, barrierDraft, worldToCanvas, canvasTheme);
+    drawBarrierDraft(ctx, barrierDraft, worldToCanvas, getCanvasTheme()!);
   }
 
   // Draw barrier center draft preview
   if (barrierCenterDraft) {
-    drawBarrierCenterDraft(ctx, barrierCenterDraft, worldToCanvas, canvasTheme);
+    drawBarrierCenterDraft(ctx, barrierCenterDraft, worldToCanvas, getCanvasTheme()!);
   }
 
   // Draw building draft preview with dimensions
   if (buildingDraft) {
-    drawBuildingDraft(ctx, buildingDraft, worldToCanvas, canvasTheme);
+    drawBuildingDraft(ctx, buildingDraft, worldToCanvas, getCanvasTheme()!);
   }
 }
 
@@ -3981,7 +3986,7 @@ function drawSources() {
     ctx,
     scene.sources,
     worldToCanvas,
-    canvasTheme,
+    getCanvasTheme()!,
     (id) => isElementSelected(selection, 'source', id),
     soloSourceId,
     hoveredSourceId
@@ -3993,7 +3998,7 @@ function drawReceivers() {
     ctx,
     scene.receivers,
     worldToCanvas,
-    canvasTheme,
+    getCanvasTheme()!,
     (id) => isElementSelected(selection, 'receiver', id)
   );
 }
@@ -4005,7 +4010,7 @@ function drawReceiverBadges() {
     const { level, unit } = getReceiverDisplayLevel(result);
     resultMap.set(result.id, { id: result.id, level, unit });
   }
-  drawReceiverBadgesModule(ctx, scene.receivers, resultMap, worldToCanvas, canvasTheme, formatLevel);
+  drawReceiverBadgesModule(ctx, scene.receivers, resultMap, worldToCanvas, getCanvasTheme()!, formatLevel);
 }
 
 function drawProbes() {
@@ -4013,20 +4018,20 @@ function drawProbes() {
     ctx,
     scene.probes,
     worldToCanvas,
-    canvasTheme,
+    getCanvasTheme()!,
     activeProbeId,
     (id) => isElementSelected(selection, 'probe', id)
   );
 }
 
 function requestRender() {
-  needsUpdate = true;
+  setNeedsUpdate(true);
 }
 
 function renderLoop() {
   requestAnimationFrame(renderLoop);
-  if (!needsUpdate) return;
-  needsUpdate = false;
+  if (!getNeedsUpdate()) return;
+  setNeedsUpdate(false);
 
   const rect = canvas.getBoundingClientRect();
 
@@ -4034,7 +4039,7 @@ function renderLoop() {
 
   // Only fill background if map is not visible
   if (!isMapVisible()) {
-    ctx.fillStyle = canvasTheme.canvasBg;
+    ctx.fillStyle = getCanvasTheme()!.canvasBg;
     ctx.fillRect(0, 0, rect.width, rect.height);
   }
 
@@ -4448,7 +4453,7 @@ function buildWheelCallbacks(): WheelCallbacks {
 
 function buildKeyboardContext(): KeyboardContext {
   return {
-    getAboutOpen: () => aboutOpen,
+    getAboutOpen: () => getAboutOpen(),
     getSelection: () => selection,
     clearMeasure: () => {
       measureStart = null;
@@ -4581,7 +4586,7 @@ function handlePointerUp() {
     dragState = null;
     setInteractionActive(false);
     ctx.imageSmoothingEnabled = false;
-    queuedMapResolutionPx = null;
+    setQueuedMapResolutionPx(null);
     if (dragDirty) {
       pushHistory({ invalidateMap: false });
     }
@@ -4589,7 +4594,7 @@ function handlePointerUp() {
       computeScene({ invalidateMap: false });
       if (shouldRecalculateMap) {
         recalculateNoiseMap(RES_HIGH);
-        needsUpdate = true;
+        setNeedsUpdate(true);
       }
     } else {
       requestProbeUpdate(finishedDrag.id, { immediate: true });
@@ -4638,7 +4643,7 @@ function wireHistory() {
 function wireComputeButton() {
   if (!computeButton) return;
   computeButton.addEventListener('click', () => {
-    if (isComputing) {
+    if (getIsComputing()) {
       cancelCompute();
       return;
     }
@@ -5079,7 +5084,7 @@ function wireActionOverflow() {
 // === About/Author Modals (delegating to ui/modals module) ===
 
 function closeAbout() {
-  aboutOpen = false;
+  setAboutOpen(false);
   closeAboutModule(aboutModal);
 }
 
@@ -5227,7 +5232,7 @@ wireSettingsPopover();
         pixelsPerMeter = newPpm;
         updatePixelsPerMeter();
         updateScaleBar();
-        needsUpdate = true;
+        setNeedsUpdate(true);
       }
     },
     getPixelsPerMeter: () => pixelsPerMeter,
@@ -5244,7 +5249,7 @@ wireSettingsPopover();
   updateMapUI();
   renderNoiseMapLegend();
   resizeCanvas();
-  needsUpdate = true;
+  setNeedsUpdate(true);
   requestRender();
   renderLoop();
   pushHistory({ markDirty: false });

@@ -183,3 +183,68 @@ export {
   zoomAtPoint,
   resetViewport,
 } from './viewport.js';
+
+// Compute state
+export {
+  getComputeToken,
+  nextComputeToken,
+  getActiveComputeToken,
+  setActiveComputeToken,
+  getIsComputing,
+  setIsComputing,
+  getMapComputeToken,
+  nextMapComputeToken,
+  getActiveMapToken,
+  setActiveMapToken,
+  getIsMapComputing,
+  setIsMapComputing,
+  getPendingComputes,
+  setPendingComputes,
+  incrementPendingComputes,
+  decrementPendingComputes,
+  getNeedsUpdate,
+  setNeedsUpdate,
+  getQueuedMapResolutionPx,
+  setQueuedMapResolutionPx,
+  getMapToastTimer,
+  setMapToastTimer,
+  clearMapToastTimer,
+} from './compute.js';
+
+// Noise map state
+export {
+  getNoiseMap,
+  setNoiseMap,
+  getCurrentMapRange,
+  setCurrentMapRange,
+  getMapRenderStyle,
+  setMapRenderStyle,
+  getMapBandStep,
+  setMapBandStep,
+  getMapAutoScale,
+  setMapAutoScale,
+} from './noiseMap.js';
+
+// UI state
+export {
+  getDisplayWeighting,
+  setDisplayWeighting,
+  getDisplayBand,
+  setDisplayBand,
+  getAboutOpen,
+  setAboutOpen,
+  getCanvasTheme,
+  setCanvasTheme,
+  getResizeRaf,
+  setResizeRaf,
+  getEngineConfig,
+  setEngineConfig,
+  getDockCollapseTimeout,
+  setDockCollapseTimeout,
+  clearDockCollapseTimeout,
+  getDockInactivityTimeout,
+  setDockInactivityTimeout,
+  clearDockInactivityTimeout,
+  getDockHasToolEngaged,
+  setDockHasToolEngaged,
+} from './ui.js';
