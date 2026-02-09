@@ -3,7 +3,7 @@
 > **Goal:** Reach world-class code quality (9+/10). This document is the single source of truth for architectural issues, quality gaps, and the concrete path to fix them.
 
 **Last Updated:** 2026-02-09
-**Quality Score:** 7.0/10
+**Quality Score:** 7.5/10
 **Next Target:** 8.0/10
 
 ---
@@ -17,11 +17,11 @@
 | Architecture (packages) | 8.5 | 9.0 | Clean boundaries, optional WebGPU |
 | Error Handling | 8.5 | 9.0 | Defensive clamping, some gaps |
 | Testing | 7.5 | 9.0 | Core physics tested, frontend untested |
-| Maintainability | 6.5 | 9.0 | main.ts monolith, naming overlap |
+| Maintainability | 7.0 | 9.0 | main.ts monolith, interaction/ merged |
 | Code Quality (frontend) | 5.5 | 9.0 | Global state, god file, 70+ `let` vars |
-| CI/CD & Tooling | 5.0 | 9.0 | No CI, no enforced linting |
-| CSS Architecture | 4.0 | 8.0 | Single 5,268-line file, no scoping |
-| **Overall** | **7.0** | **9.0** | |
+| CI/CD & Tooling | 8.0 | 9.0 | ✅ CI, ESLint, Prettier, pre-commit hooks |
+| CSS Architecture | 7.0 | 8.0 | ✅ Split into 11 component files |
+| **Overall** | **7.5** | **9.0** | |
 
 ---
 
@@ -29,19 +29,19 @@
 
 Low-hanging fruit first — lock in guardrails before grinding the monoliths.
 
-1. `.prettierrc` + `.prettierignore` — config only, 5 min
-2. `eslint.config.mjs` — config + pass cleanly, 30 min
-3. Add `lint` scripts to each package — wire up turbo, 15 min
-4. `.github/workflows/ci.yml` — build + typecheck + lint + test, 30 min
-5. `husky` + `lint-staged` pre-commit hooks — 15 min
-6. Merge `interaction/` and `interactions/` — rename + barrel export, 30 min
-7. Split `style.css` — extract theme vars, then component files one at a time
+1. ~~`.prettierrc` + `.prettierignore`~~ ✅ Done (2026-02-09)
+2. ~~`eslint.config.mjs`~~ ✅ Done — flat config, zero errors across 7 packages (2026-02-09)
+3. ~~Add `lint` scripts to each package~~ ✅ Done — all 7 packages wired via turbo (2026-02-09)
+4. ~~`.github/workflows/ci.yml`~~ ✅ Done — build + typecheck + lint + test (2026-02-09)
+5. ~~`husky` + `lint-staged` pre-commit hooks~~ ✅ Done (2026-02-09)
+6. ~~Merge `interaction/` and `interactions/`~~ ✅ Done — unified `interaction/` with events/, drag/, tools/, shortcuts, hitTest (2026-02-09)
+7. ~~Split `style.css`~~ ✅ Done — 11 component files in `styles/`, aggregated via `styles/index.css` (2026-02-09)
 8. Migrate global `let` vars to `state/` modules — group by domain, one group at a time
 9. Continue `main.ts` extraction — wire* functions, renderLoop, DOM refs
 10. Frontend tests — state modules first, then io round-trip, then integration
 11. Engine precision fixes — epsilon in complex.ts, document bounds
-12. Export pattern standardization — flat barrels everywhere
-13. `eval()` → `/* @vite-ignore */` dynamic import
+12. ~~Export pattern standardization~~ ✅ Already consistent — flat barrels everywhere (2026-02-09)
+13. ~~`eval()` → `/* @vite-ignore */` dynamic import~~ ✅ Done (2026-02-09)
 14. Extract `index.html` inline styles to CSS
 15. Polish — JSDoc gaps, physics citations, test type safety
 
@@ -117,82 +117,43 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 ```
 
-### 1.2 No CI/CD Pipeline
+### 1.2 ~~No CI/CD Pipeline~~ ✅ RESOLVED
 
-**Priority:** Critical
-**Effort:** Small
-**Location:** Missing `.github/workflows/`
+**Status:** ✅ Resolved (2026-02-09)
 
-No automated quality gates exist. All quality enforcement depends on developer discipline.
+GitHub Actions CI pipeline added: `.github/workflows/ci.yml` runs `typecheck → lint → build → test` on every push to `main` and on every PR. Node 20 with npm caching.
 
-**Required:**
-- [ ] GitHub Actions workflow: `npm run build && npm test && npm run typecheck`
-- [ ] Run on every push to `main` and on every PR
-- [ ] Fail the build on lint errors, type errors, or test failures
-- [ ] Badge in README showing CI status
+### 1.3 ~~No Enforced Linting~~ ✅ RESOLVED
 
-**Suggested `.github/workflows/ci.yml`:**
+**Status:** ✅ Resolved (2026-02-09)
 
-```yaml
-name: CI
-on: [push, pull_request]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm run build
-      - run: npm test
-```
+- `eslint.config.mjs` — ESLint flat config with `typescript-eslint`, zero errors across 7 packages
+- `.prettierrc` + `.prettierignore` — consistent formatting
+- `husky` + `lint-staged` — pre-commit hooks format + lint changed files
+- All packages have `lint` scripts wired through turbo
+- Rules: `no-explicit-any` (warn), `consistent-type-imports` (warn), `no-console` (warn)
 
-### 1.3 No Enforced Linting
+### 1.4 ~~Monolithic `style.css` (~5,268 lines)~~ ✅ RESOLVED
 
-**Priority:** Critical
-**Effort:** Small
-**Location:** Missing config files
+**Status:** ✅ Resolved (2026-02-09)
 
-ESLint and Prettier are in `devDependencies` but **no configuration files exist**. No `.eslintrc`, `eslint.config.*`, or `.prettierrc` anywhere in the repo.
+Split into 11 component files in `styles/`:
 
-**Required:**
-- [ ] Create root `eslint.config.mjs` (flat config, ESLint 9 compatible)
-- [ ] Create root `.prettierrc` with project conventions
-- [ ] Add `.prettierignore` (dist, node_modules, coverage)
-- [ ] Add `lint` scripts to each package's `package.json`
-- [ ] Add pre-commit hook via `husky` + `lint-staged`
-- [ ] Verify `npm run lint` passes cleanly before merging
+| File | Lines | Content |
+|------|-------|---------|
+| `theme.css` | 339 | CSS custom properties (pre-existing) |
+| `reset.css` | 95 | Box-sizing, scrollbars, html/body |
+| `base.css` | 74 | ui-surface, ui-button, app-shell |
+| `topbar.css` | 149 | Topbar, layers, settings toggle/popover |
+| `dock.css` | 241 | Dock FAB, expandable, tool buttons |
+| `panels.css` | 257 | Context panel, probe panel |
+| `components.css` | 1,856 | Ray-viz, brand, controls, toggles, inspector, etc. |
+| `spectrum.css` | 478 | Spectrum editor with sliders |
+| `modals.css` | 998 | Modals, physics specs, about tabs |
+| `settings.css` | 687 | Settings panel, physics engines, equations |
+| `map.css` | 526 | Mapbox scale, drawing mode, map panel |
 
-**Recommended ESLint rules beyond defaults:**
-- `@typescript-eslint/no-explicit-any` — enforce the existing zero-any practice
-- `@typescript-eslint/consistent-type-imports` — type-only imports
-- `no-console` (warn) — catch debug logs
-- `@typescript-eslint/no-floating-promises` — prevent unhandled async
-
-### 1.4 Monolithic `style.css` (~5,268 lines)
-
-**Priority:** Critical
-**Effort:** Large
-
-A single CSS file with no scoping, no naming convention, and no modular structure. Changing one component risks unintended side effects across the entire UI.
-
-**Problems:**
-- No CSS naming convention (BEM, utility classes, etc.)
-- No CSS custom properties file separated from component styles
-- No component-level scoping (no CSS Modules, no Shadow DOM, no namespacing)
-- Impossible to know which styles are unused
-
-**Plan:**
-- [ ] Extract CSS custom properties to `styles/theme.css` (may already be partially done)
-- [ ] Split into component files: `styles/toolbar.css`, `styles/panels.css`, `styles/modals.css`, etc.
-- [ ] Adopt a consistent naming convention (BEM recommended: `.panel__header--collapsed`)
-- [ ] Use CSS `@import` or a build step to combine them
-- [ ] Consider CSS Modules if a build step is added later
-
-**Target:** No single CSS file > 500 lines. Theme variables in one file, components in their own files.
+`styles/index.css` aggregates all files via `@import`. `components.css` (1,856 lines) can be split further in a future pass.
 
 ---
 
@@ -250,37 +211,33 @@ The `apps/web` package has only 5 trivial tests (CSV export schema, compute pref
 - [ ] Snapshot tests for `rendering/` (canvas output comparison)
 - [ ] Target: 80% coverage across all packages
 
-### 2.3 Confusing Directory Naming: `interaction/` vs `interactions/`
+### 2.3 ~~Confusing Directory Naming: `interaction/` vs `interactions/`~~ ✅ RESOLVED
 
-**Priority:** High
-**Effort:** Small
-**Location:** `apps/web/src/interaction/` and `apps/web/src/interactions/`
+**Status:** ✅ Resolved (2026-02-09)
 
-Two directories with nearly identical names serve different purposes:
-- `interaction/` — pointer.ts, keyboard.ts (raw event handlers)
-- `interactions/` — hitTest.ts, drag/, tools/ (interaction logic)
+Merged into a single `interaction/` directory:
 
-**Plan:**
-- [ ] Merge into a single `interaction/` directory
-- [ ] Subdirectories: `interaction/events/`, `interaction/hitTest/`, `interaction/drag/`, `interaction/tools/`
-- [ ] Or rename: `input/` (raw events) vs `interaction/` (logic)
-- [ ] Add barrel `index.ts` to `interaction/` (currently missing)
+```
+interaction/
+├── events/          ← pointer.ts, keyboard.ts (raw DOM handlers)
+├── drag/            ← handlers, types (from interactions/drag/)
+├── tools/           ← measure tool (from interactions/tools/)
+├── hitTest.ts       ← entity hit detection (from interactions/)
+├── shortcuts.ts     ← shortcut definitions (from interactions/keyboard.ts, renamed)
+└── index.ts         ← barrel export (new)
+```
 
 ---
 
 ## Tier 3 — Medium (Blocking 9.0)
 
-### 3.1 No Pre-Commit Hooks
+### 3.1 ~~No Pre-Commit Hooks~~ ✅ RESOLVED
 
-**Priority:** Medium
-**Effort:** Small
+**Status:** ✅ Resolved (2026-02-09)
 
-No automated enforcement at commit time. Developers can commit code that fails typecheck or lint.
-
-**Required:**
-- [ ] Install `husky` and `lint-staged`
-- [ ] Pre-commit: run `lint-staged` (format + lint changed files)
-- [ ] Pre-push: run `npm run typecheck && npm test`
+- `husky` initialized with pre-commit hook
+- `lint-staged` runs `prettier --write` + `eslint --fix` on `.ts` files, `prettier --write` on `.json/.md/.css/.html`
+- Pre-push: can be added later for `typecheck && test`
 
 ### 3.2 Engine Numerical Precision Gaps
 
@@ -308,24 +265,11 @@ Some packages use subpath exports (`@geonoise/geo/geom`), others don't. Some fil
 - [ ] Use subpath exports in `package.json` only where consumer ergonomics demand it
 - [ ] Document the chosen pattern in this file
 
-### 3.4 `eval()` Workaround for Dynamic Import
+### 3.4 ~~`eval()` Workaround for Dynamic Import~~ ✅ RESOLVED
 
-**Priority:** Medium
-**Effort:** Small
-**Location:** `packages/engine-backends/src/index.ts` line 43
+**Status:** ✅ Resolved (2026-02-09)
 
-```typescript
-const mod = await eval("import('@geonoise/engine-webgpu')") as WebGPUModule | null;
-```
-
-This bypasses Vite's static analysis to prevent bundling WebGPU when unused. Functionally correct but:
-- Triggers security linter warnings
-- Obscures intent for new contributors
-- May break in future bundler versions
-
-**Plan:**
-- [ ] Replace with Vite-native `import.meta.glob` or conditional `import()` with `/* @vite-ignore */` comment
-- [ ] Add explanatory comment if `eval` must stay
+Replaced `eval("import('...')")` with a variable + `/* @vite-ignore */` dynamic import. Prevents Vite static analysis while avoiding eval() security warnings.
 
 ### 3.5 Mixed Entity Abstractions
 
@@ -429,11 +373,13 @@ Defined in `apps/web/src/constants.ts`:
 | File | Lines | Status | Threshold |
 |------|-------|--------|-----------|
 | `main.ts` | ~5,200 | 🔴 Critical | Target ≤ 600 |
-| `style.css` | ~5,268 | 🔴 Critical | Target: split to ≤ 500 each |
+| `style.css` | — | ✅ Resolved | Split into `styles/` (11 files) |
+| `styles/components.css` | ~1,856 | 🟡 Monitor | Can split further (≤500 target) |
+| `styles/modals.css` | ~998 | 🟡 Monitor | Can split further |
 | `mapboxUI.ts` | 25 | ✅ Resolved | Split into `mapbox/` (8 modules) |
 | `interaction/pointer.ts` | ~680 | 🟢 OK | Well-structured |
 | `ui/contextPanel/properties.ts` | ~415 | 🟢 OK | Well-structured |
-| `index.html` | ~1,600 | 🟡 Monitor | Extract inline styles |
+| `index.html` | ~1,885 | 🟡 Monitor | 92 inline styles to extract |
 
 ---
 
@@ -507,20 +453,20 @@ This pattern enables testing modules in isolation, makes dependencies explicit, 
 ## Milestone Roadmap
 
 ### → 8.0 (Next)
-- [ ] Create ESLint + Prettier configuration and pass cleanly
-- [ ] Add GitHub Actions CI (build + typecheck + lint + test)
+- [x] Create ESLint + Prettier configuration and pass cleanly
+- [x] Add GitHub Actions CI (build + typecheck + lint + test)
 - [ ] Reduce `main.ts` to ≤ 2,000 lines
-- [ ] Split `style.css` into component files
+- [x] Split `style.css` into component files
 - [ ] Eliminate 50% of global `let` variables
-- [ ] Merge `interaction/` and `interactions/` directories
+- [x] Merge `interaction/` and `interactions/` directories
 
 ### → 8.5
 - [ ] Reduce `main.ts` to ≤ 1,000 lines
-- [ ] Add pre-commit hooks (husky + lint-staged)
+- [x] Add pre-commit hooks (husky + lint-staged)
 - [ ] Add integration tests for computation pipeline
 - [ ] Add unit tests for all `state/` modules
 - [ ] Fix engine numerical precision issues
-- [ ] Standardize export patterns across packages
+- [x] Standardize export patterns across packages (already consistent)
 
 ### → 9.0
 - [ ] Reduce `main.ts` to ≤ 600 lines (orchestration only)
