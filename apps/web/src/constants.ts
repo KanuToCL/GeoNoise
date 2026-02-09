@@ -25,6 +25,12 @@ export const ENABLE_RAY_VISUALIZATION = false;
  */
 export const ENABLE_MAPBOX = true;
 
+/**
+ * Enable map debug info overlays (scale info, center coordinates,
+ * scale comparison panel). Disable for production.
+ */
+export const ENABLE_MAP_DEBUG = false;
+
 // =============================================================================
 // NOISE MAP CONFIGURATION
 // =============================================================================

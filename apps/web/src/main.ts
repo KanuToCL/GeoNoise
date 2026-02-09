@@ -237,6 +237,7 @@ import {
 import {
   ENABLE_RAY_VISUALIZATION,
   ENABLE_MAPBOX,
+  ENABLE_MAP_DEBUG,
   DEFAULT_MAP_RANGE,
   DEFAULT_MAP_BAND_STEP,
   DEFAULT_MAP_BAND_STEP_PERBAND,
@@ -5161,6 +5162,7 @@ wireSettingsPopover();
   // Initialize Mapbox UI integration
   initMapboxUI({
     enabled: ENABLE_MAPBOX,
+    debug: ENABLE_MAP_DEBUG,
     onScaleSync: (metersPerPixel) => {
       // Sync canvas pixels-per-meter with map scale for 1:1 accuracy
       const newPpm = 1 / metersPerPixel;

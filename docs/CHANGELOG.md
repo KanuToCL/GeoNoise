@@ -4,6 +4,66 @@ This document contains the implementation history of completed features. For pla
 
 ---
 
+## v0.8.1 (2026-02-09)
+
+### Map Control Panel Polish & Modular Architecture
+
+**Status:** ✅ Complete
+
+Refined the Mapbox floating control panel UX and split the monolithic `mapboxUI.ts` (1,305 lines) into a focused `mapbox/` module directory following the modular architecture rules.
+
+#### UX Changes
+
+| Change | Description |
+|--------|-------------|
+| **Panel hidden until activation** | Map control panel only appears when map is activated from the dock toggle (was showing empty controls on first load) |
+| **Removed "Hide Map" button** | Redundant — dock toggle already controls map visibility |
+| **Removed "Enable Map Panning" button** | Map is always locked to canvas; no need for mode toggle |
+| **Removed drag handle dots** | Non-functional UI element removed from panel header |
+| **Neumorphic style alignment** | All map panel buttons now match dock button style guide: raised→sunken interaction, inset blue ring for active state, proper `scale()` transforms |
+| **Collapsible panel** | Collapse to floating title bar via button; state persists in localStorage |
+| **Expand on activation** | Panel always opens expanded when map is activated from dock |
+| **Consistent collapse width** | Collapsed title bar matches expanded panel width |
+
+#### Architecture: `mapboxUI.ts` → `mapbox/` Module
+
+| Before | After |
+|--------|-------|
+| `mapboxUI.ts` — 1,305 lines, 44 functions | `mapboxUI.ts` — 25 lines (thin re-export) |
+
+| New Module | Lines | Responsibility |
+|------------|-------|----------------|
+| `mapbox/types.ts` | 30 | Interfaces, callback types |
+| `mapbox/state.ts` | 123 | Shared mutable state, DOM refs |
+| `mapbox/token.ts` | 149 | Token modal wiring |
+| `mapbox/panel.ts` | 127 | Drag & collapse behaviour |
+| `mapbox/search.ts` | 185 | Geocoding search, coordinate inputs |
+| `mapbox/lifecycle.ts` | 316 | Show/hide, style, zoom/pan sync |
+| `mapbox/scaleComparison.ts` | 132 | Scale comparison panel + drag |
+| `mapbox/index.ts` | 169 | Barrel exports, `initMapboxUI` orchestrator |
+
+#### CSS Fixes (Neumorphic Style Guide Compliance)
+
+| Element | Fix |
+|---------|-----|
+| `.map-panel` | `var(--brand-bg)` → `var(--bg)`, hardcoded floating shadow |
+| `.map-panel-header` | Removed gradient, solid `var(--bg)` |
+| `.map-panel-style-btn` | Full raised→sunken hover/active states, proper transitions |
+| `.map-panel-style-btn.is-active` | Inset blue ring (medium 4px/6px) matching dock |
+| `.map-panel-btn` | Sunken hover (was going more raised), `scale(0.96)` active |
+| `.map-panel-input` | `var(--bg)`, guide shadow values, translucent focus ring |
+| `.map-panel-collapse-btn` | 24px → 28px (guide small size), full state transitions |
+| `.map-panel-slider` | Explicit sunken gutter shadows |
+| `.map-panel-search-results` | `var(--bg)`, hardcoded floating shadow |
+
+#### Dev Server Fix
+
+| File | Fix |
+|------|-----|
+| `apps/web/scripts/dev.mjs` | CSS routes now serve from `src/` directly instead of preferring stale `dist/` copy |
+
+---
+
 ## v0.8.0 (2026-02-03)
 
 ### Mapbox Map Overlay Integration
