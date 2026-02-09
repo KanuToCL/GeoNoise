@@ -43,6 +43,8 @@ export interface DisplaySettingsState {
 
 /** Callbacks for map settings changes */
 export interface MapSettingsCallbacks {
+  /** Get a fresh snapshot of the current map settings state */
+  getState: () => MapSettingsState;
   /** Get the current map band step value */
   getMapBandStep: () => number;
   /** Set the map render style */
@@ -118,7 +120,6 @@ export function updateMapSettingsControls(
  */
 export function wireMapSettings(
   elements: MapSettingsElements,
-  state: MapSettingsState,
   callbacks: MapSettingsCallbacks
 ): void {
   const { mapRenderStyleToggle, mapBandStepInput, mapAutoScaleToggle } = elements;
@@ -126,12 +127,12 @@ export function wireMapSettings(
   if (!mapRenderStyleToggle && !mapBandStepInput && !mapAutoScaleToggle) return;
 
   // Initialize controls to current state
-  updateMapSettingsControls(elements, state, callbacks.getMapBandStep);
+  updateMapSettingsControls(elements, callbacks.getState(), callbacks.getMapBandStep);
 
   // Render style toggle (Smooth vs Contours)
   mapRenderStyleToggle?.addEventListener('change', () => {
     callbacks.setMapRenderStyle(mapRenderStyleToggle.checked ? 'Contours' : 'Smooth');
-    updateMapSettingsControls(elements, state, callbacks.getMapBandStep);
+    updateMapSettingsControls(elements, callbacks.getState(), callbacks.getMapBandStep);
     callbacks.onRefreshVisualization();
   });
 

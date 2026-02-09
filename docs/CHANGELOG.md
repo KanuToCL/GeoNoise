@@ -4,6 +4,29 @@ This document contains the implementation history of completed features. For pla
 
 ---
 
+## v0.8.3 (2026-02-09)
+
+### Contour Toggle Fix
+
+**Status:** ✅ Complete
+
+Fixed contour mode toggle not working or auto-enabling when switching frequency bands.
+
+#### Bug Fix
+
+| Bug | Root Cause | Fix |
+|-----|------------|-----|
+| Contour toggle locks up, auto-enables on band change | `wireMapSettings()` captured a **stale state snapshot** at init time. The toggle handler called `updateMapSettingsControls()` with the frozen `state.mapRenderStyle = 'Smooth'`, immediately resetting the checkbox after every user click. Band changes used a fresh snapshot (via `callbacks.updateMapSettingsControls()`), so they "restored" the real state — appearing to auto-enable. | Added `getState()` callback to `MapSettingsCallbacks`. Toggle handler now fetches a fresh state snapshot on every interaction instead of reading the init-time copy. |
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `src/ui/settings.ts` | `wireMapSettings()` takes `callbacks` (with `getState`) instead of static `state` param |
+| `src/main.ts` | Added `getState: buildMapSettingsState` to callbacks; removed stale state arg |
+
+---
+
 ## v0.8.2 (2026-02-09)
 
 ### Scene Panel, Map UX Polish & Safety Checks

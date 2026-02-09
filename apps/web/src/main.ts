@@ -2573,6 +2573,7 @@ function buildMapSettingsState(): MapSettingsState {
 
 function buildMapSettingsCallbacks(): MapSettingsCallbacks {
   return {
+    getState: buildMapSettingsState,
     getMapBandStep,
     setMapRenderStyle: (style) => { mapRenderStyle = style; },
     setMapBandStep: (step) => { mapBandStep = step; },
@@ -2611,7 +2612,7 @@ function updateMapSettingsControls() {
 }
 
 function wireMapSettings() {
-  wireMapSettingsModule(buildMapSettingsElements(), buildMapSettingsState(), buildMapSettingsCallbacks());
+  wireMapSettingsModule(buildMapSettingsElements(), buildMapSettingsCallbacks());
 }
 
 function wireDisplaySettings() {
