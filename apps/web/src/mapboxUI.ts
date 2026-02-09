@@ -333,8 +333,11 @@ async function showMap(): Promise<void> {
   }
 
   try {
-    // Show container
+    // Show container first
     mapboxContainer.style.display = "block";
+
+    // Wait for browser to lay out the container before initializing map
+    await new Promise((resolve) => requestAnimationFrame(resolve));
 
     // Initialize map if not already done
     if (!uiState.map) {
@@ -369,6 +372,19 @@ async function showMap(): Promise<void> {
       const ppm = getPixelsPerMeter();
       syncMapZoomToCanvas(ppm);
     }
+
+    // Force map to re-render after layout is complete
+    // Double requestAnimationFrame ensures layout is fully processed
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (uiState.map) {
+          uiState.map.resize();
+          // Trigger a tiny pan to force tile rendering
+          const center = uiState.map.getCenter();
+          uiState.map.setCenter([center.lng, center.lat]);
+        }
+      });
+    });
   } catch (error) {
     console.error("Failed to show map:", error);
     mapboxContainer.style.display = "none";
