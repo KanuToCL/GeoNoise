@@ -1,0 +1,149 @@
+
+.topbar {
+  position: absolute;
+  top: 12px;
+  left: 24px;
+  right: 24px;
+  z-index: 100;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 18px;
+  padding: 8px 16px;
+  background: var(--brand-bg);
+  border: none;
+  border-radius: 18px;
+  /* Hard edge shadow - no neumorphic highlight glow */
+  box-shadow: 0 8px 32px #8a95a8, 0 2px 8px #a0a8b8;
+  pointer-events: auto;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  justify-self: start;
+}
+
+.topbar-center {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  justify-self: center;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-self: end;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.layers-toggle {
+  position: relative;
+  pointer-events: auto;
+}
+
+.settings-toggle {
+  position: relative;
+  pointer-events: auto;
+}
+
+.layers-popover {
+  position: fixed;
+  top: 92px;
+  left: 24px;
+  right: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 280px;
+  padding: 14px;
+  background: var(--bg);
+  border: none;
+  border-radius: 18px;
+  /* Hard edge shadow - no neumorphic highlight glow */
+  box-shadow: 0 8px 32px #8a95a8, 0 2px 8px #a0a8b8;
+  z-index: 9999;
+  isolation: isolate;
+  pointer-events: none;
+  /* Hidden state */
+  opacity: 0;
+  transform: translateY(-8px);
+  visibility: hidden;
+  transition: opacity 0.18s ease-out, transform 0.18s ease-out, visibility 0s linear 0.18s;
+}
+
+.settings-popover {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+  width: 260px;
+  padding: 14px;
+  background: var(--bg);
+  border: none;
+  border-radius: 18px;
+  /* Hard edge shadow - no neumorphic highlight glow */
+  box-shadow: 0 8px 32px #8a95a8, 0 2px 8px #a0a8b8;
+  z-index: 60;
+  pointer-events: auto;
+}
+
+.layers-popover.is-open {
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.18s ease-out, transform 0.18s ease-out, visibility 0s linear 0s;
+}
+
+/* Legacy: .settings-toggle.is-open .settings-popover - now uses .settings-popover--corner.is-open directly */
+.settings-popover.is-open {
+  display: flex;
+}
+
+.settings-title {
+  font-size: 11px;
+  text-transform: lowercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.layers-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.layers-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: var(--ui-letter-spacing);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.layers-divider {
+  height: 1px;
+  background: #c8d0dc;
+}

@@ -1,0 +1,36 @@
+/**
+ * GeoNoise UI Stylesheet — Aggregator
+ *
+ * NEUMORPHIC SHADOW STRATEGY:
+ *
+ * 1. FLOATING CONTAINERS (over the map):
+ *    Use simple drop shadows to avoid white "glow" against colorful backgrounds.
+ *    Pattern: box-shadow: 0 8px 32px #8a95a8, 0 2px 8px #a0a8b8;
+ *    Applied to: .topbar, .context-panel, .probe-panel, .layers-popover,
+ *                .settings-popover, .dock-tools, .dock-fab, .db-legend
+ *
+ * 2. INNER ELEMENTS (buttons, toggles, inputs):
+ *    Use full neumorphic dual shadows for raised/pressed states.
+ *    Raised: var(--shadow-raised) - light top-left, dark bottom-right
+ *    Pressed: var(--shadow-pressed) - inset shadows
+ *
+ * 3. MODAL BACKDROP:
+ *    Solid color (#c8ced8) matching the plastic aesthetic, no blur.
+ */
+
+/* Foundation */
+@import './theme.css';
+@import './reset.css';
+@import './base.css';
+
+/* Layout */
+@import './topbar.css';
+@import './dock.css';
+@import './panels.css';
+
+/* Components */
+@import './components.css';
+@import './spectrum.css';
+@import './modals.css';
+@import './settings.css';
+@import './map.css';

@@ -1,0 +1,74 @@
+.ui-surface {
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  border: none;
+  box-shadow: var(--shadow-panel);
+}
+
+.ui-inset {
+  background: var(--bg);
+  border-radius: var(--radius-md);
+  border: none;
+  box-shadow: var(--shadow-pressed);
+}
+
+.ui-button {
+  background: var(--bg);
+  border: none;
+  border-radius: 50px;
+  /* Raised state */
+  box-shadow: 3px 3px 6px rgba(100, 110, 130, 0.3), -2px -2px 5px rgba(255, 255, 255, 0.7);
+  color: var(--text);
+  font-weight: 500;
+  letter-spacing: var(--ui-letter-spacing);
+  text-transform: lowercase;
+  transition: transform 160ms ease, box-shadow 200ms ease, background 160ms ease;
+}
+
+.ui-button:hover {
+  background: var(--bg);
+  /* Sunken state */
+  box-shadow: inset 3px 3px 6px rgba(100, 110, 130, 0.25), inset -2px -2px 5px rgba(255, 255, 255, 0.6);
+  transform: scale(0.98);
+}
+
+.ui-button:active {
+  background: var(--bg);
+  /* Deeper sunken */
+  box-shadow: inset 4px 4px 8px rgba(100, 110, 130, 0.35), inset -3px -3px 6px rgba(255, 255, 255, 0.5);
+  transform: scale(0.96);
+}
+
+.ui-button.is-active {
+  /* Active state with inset ring, offset from edge */
+  background: var(--bg);
+  box-shadow:
+    inset 4px 4px 8px rgba(100, 110, 130, 0.3),
+    inset -3px -3px 6px rgba(255, 255, 255, 0.5),
+    inset 0 0 0 4px var(--bg),
+    inset 0 0 0 6px var(--active-blue);
+  color: var(--active-blue);
+  transform: scale(0.98);
+}
+
+.ui-button:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-raised), var(--focus-ring);
+}
+
+.app-shell {
+  /* Fullscreen container for canvas + floating UI. */
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+  animation: fadeIn 0.6s ease-out;
+}
+
+.ui-layer {
+  /* Overlay layer that allows the map to receive pointer events by default. */
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;

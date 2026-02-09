@@ -1,0 +1,687 @@
+/* ============================================
+   Settings Panel Redesign - Vertical Stack + Slide-out Popup
+   ============================================ */
+
+/* Header */
+.settings-header {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 14px;
+  text-align: center;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+}
+
+/* Profile Banner - Thin raised dropdown above category buttons
+   Feature Flag: Add data-feature-profile-dropdown="false" to <html> to hide */
+html[data-feature-profile-dropdown="false"] .settings-profile-banner {
+  display: none;
+}
+
+.settings-profile-banner {
+  margin-bottom: 10px;
+}
+
+/* The select itself styled as a neumorphic raised element (matching category buttons) */
+.settings-profile-banner select {
+  /* Reset browser defaults */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  border: none;
+  outline: none;
+
+  /* Match category button sizing and layout */
+  display: block;
+  width: 100%;
+  padding: 14px 18px;
+  padding-right: 36px; /* Extra space for dropdown arrow */
+  border-radius: 14px;
+
+  /* Match category button colors */
+  background-color: var(--bg);
+  color: var(--text-muted);
+  opacity: 0.85;
+
+  /* Typography - match category buttons */
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  text-align: left;
+
+  /* Raised neumorphic shadow - EXACT same as .settings-category-btn */
+  box-shadow:
+    3px 3px 6px rgba(100, 110, 130, 0.3),
+    -2px -2px 5px rgba(255, 255, 255, 0.7);
+
+  /* Dropdown arrow icon */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 200ms ease, background 160ms ease, color 160ms ease, opacity 160ms ease;
+}
+
+/* Hover: Sunken (same as .settings-category-btn:hover) */
+.settings-profile-banner select:hover {
+  background-color: var(--bg);
+  color: var(--text);
+  opacity: 1;
+  /* Sunken state - neumorphic inset shadows */
+  box-shadow:
+    inset 3px 3px 6px rgba(100, 110, 130, 0.25),
+    inset -2px -2px 5px rgba(255, 255, 255, 0.6);
+  transform: scale(0.98);
+}
+
+/* Focus state */
+.settings-profile-banner select:focus {
+  color: var(--text);
+  opacity: 1;
+  /* Sunken with subtle focus ring */
+  box-shadow:
+    inset 3px 3px 6px rgba(100, 110, 130, 0.25),
+    inset -2px -2px 5px rgba(255, 255, 255, 0.6);
+}
+
+/* When profile is "custom", show muted styling */
+.settings-profile-banner.is-custom select {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Category Stack - Vertical buttons */
+.settings-category-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Category Button - Raised State (like dock buttons) */
+.settings-category-btn {
+  width: 100%;
+  padding: 14px 18px;
+  border: none;
+  border-radius: 14px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: lowercase;
+  cursor: pointer;
+  opacity: 0.85;
+  /* Raised state - neumorphic outer shadows (same as dock-button) */
+  box-shadow:
+    3px 3px 6px rgba(100, 110, 130, 0.3),
+    -2px -2px 5px rgba(255, 255, 255, 0.7);
+  transition: transform 160ms ease, box-shadow 200ms ease, background 160ms ease, color 160ms ease, opacity 160ms ease;
+}
+
+/* Hover: Sunken (same as dock-button:hover) */
+.settings-category-btn:hover {
+  background: var(--bg);
+  color: var(--text);
+  opacity: 1;
+  /* Sunken state - neumorphic inset shadows */
+  box-shadow:
+    inset 3px 3px 6px rgba(100, 110, 130, 0.25),
+    inset -2px -2px 5px rgba(255, 255, 255, 0.6);
+  transform: scale(0.98);
+}
+
+/* Active (pressed): Deeper sunken */
+.settings-category-btn:active {
+  box-shadow:
+    inset 4px 4px 8px rgba(100, 110, 130, 0.35),
+    inset -3px -3px 6px rgba(255, 255, 255, 0.5);
+  transform: scale(0.96);
+}
+
+/* Selected state: Sunken with INSET blue ring (same as dock-button.is-active) */
+.settings-category-btn.is-active {
+  background: var(--bg);
+  color: var(--active-blue);
+  font-weight: 700;
+  opacity: 1;
+  transform: scale(0.98);
+  box-shadow:
+    inset 4px 4px 8px rgba(100, 110, 130, 0.3),
+    inset -3px -3px 6px rgba(255, 255, 255, 0.5),
+    inset 0 0 0 5px var(--bg),
+    inset 0 0 0 7px var(--active-blue);
+}
+
+/* ============================================
+   Slide-out Popup (appears to the LEFT of settings popover)
+   ============================================ */
+
+.settings-slide-popup {
+  position: fixed !important;
+  z-index: 9998 !important;
+  width: 280px !important;
+  max-height: min(65vh, calc(100vh - 180px)) !important;
+  overflow-y: auto !important;
+  padding: 18px !important;
+  border-radius: 18px !important;
+  background: var(--bg) !important;
+  border: none !important;
+  box-shadow: 0 8px 32px #8a95a8, 0 2px 8px #a0a8b8 !important;
+  /* Animation: slide in from right */
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(20px);
+  pointer-events: none;
+  transition:
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 200ms ease,
+    visibility 0s linear 300ms;
+}
+
+.settings-slide-popup.is-open {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: translateX(0) !important;
+  pointer-events: auto !important;
+  transition:
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 200ms ease,
+    visibility 0s linear 0s !important;
+}
+
+/* Inset scrollbar for slide popup */
+.settings-slide-popup::-webkit-scrollbar {
+  width: 16px;
+}
+
+.settings-slide-popup::-webkit-scrollbar-track {
+  background: transparent;
+  border-left: 12px solid transparent;
+  background-clip: padding-box;
+}
+
+.settings-slide-popup::-webkit-scrollbar-thumb {
+  background: linear-gradient(145deg, #f0f4f8, #d8dfe8);
+  border-radius: 10px;
+  border: 4px solid transparent;
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 1px #c8d0dc;
+}
+
+/* Panel Header */
+.settings-panel-header {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+}
+
+/* Slide Panel (inside slide popup) */
+.settings-slide-panel {
+  display: none;
+}
+
+.settings-slide-panel.is-open {
+  display: block;
+}
+
+/* Panel Content */
+.settings-panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Inherit section styles from corner popover */
+.settings-slide-popup .settings-section {
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.settings-slide-popup .settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.settings-slide-popup .settings-title {
+  font-size: 11px;
+  text-transform: lowercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.settings-slide-popup .property-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Scene action buttons */
+.scene-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow:
+    3px 3px 6px rgba(100, 110, 130, 0.25),
+    -2px -2px 5px rgba(255, 255, 255, 0.7);
+  transition: box-shadow 120ms ease, transform 120ms ease;
+}
+
+.scene-action-btn:hover {
+  box-shadow:
+    1px 1px 3px rgba(100, 110, 130, 0.2),
+    -1px -1px 2px rgba(255, 255, 255, 0.6);
+  transform: scale(0.98);
+}
+
+.scene-action-btn:active {
+  box-shadow:
+    inset 2px 2px 4px rgba(100, 110, 130, 0.25),
+    inset -1px -1px 3px rgba(255, 255, 255, 0.5);
+  transform: scale(0.97);
+}
+
+.scene-action-danger {
+  color: #b91c1c;
+}
+
+.scene-action-danger:hover {
+  color: #991b1b;
+}
+
+.settings-slide-popup .property-row span {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.settings-slide-popup .property-row select,
+.settings-slide-popup .property-row input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 999px;
+  border: none;
+  background: var(--brand-bg);
+  box-shadow:
+    inset 4px 4px 8px #a3b1c6,
+    inset -4px -4px 8px #ffffff;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  appearance: none;
+  -webkit-appearance: none;
+  transition: box-shadow 200ms ease;
+}
+
+.settings-slide-popup .property-row select {
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23788190' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  cursor: pointer;
+}
+
+.settings-slide-popup .property-row select:focus,
+.settings-slide-popup .property-row input:focus {
+  outline: none;
+  box-shadow:
+    inset 4px 4px 8px #a3b1c6,
+    inset -4px -4px 8px #ffffff,
+    0 0 0 3px rgba(45, 140, 255, 0.3);
+}
+
+.settings-slide-popup .toggle {
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  background: linear-gradient(145deg, var(--surface-lo), var(--surface-hi));
+  box-shadow: inset 2px 2px 4px var(--shadow-dark), inset -2px -2px 4px var(--shadow-light);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: box-shadow 200ms ease;
+}
+
+.settings-slide-popup .toggle:has(input:checked) {
+  /* No outer ring on toggle wrapper */
+}
+
+.settings-slide-popup .toggle input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, var(--surface-lo), var(--surface-hi));
+  box-shadow: inset 2px 2px 3px var(--shadow-dark), inset -2px -2px 3px var(--shadow-light);
+  cursor: pointer;
+  position: relative;
+  transition: box-shadow 200ms ease;
+  flex-shrink: 0;
+}
+
+.settings-slide-popup .toggle input[type="checkbox"]:checked {
+  box-shadow:
+    inset 2px 2px 3px var(--shadow-dark),
+    inset -2px -2px 3px var(--shadow-light),
+    inset 0 0 0 2px rgba(59, 130, 246, 0.6);
+  transition: box-shadow 200ms ease;
+}
+
+.settings-slide-popup .toggle input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--active-blue, #3b82f6);
+  box-shadow: 0 0 4px rgba(59, 130, 246, 0.5);
+}
+
+.settings-slide-popup .toggle span {
+  color: var(--text-soft);
+  font-size: 12px;
+  transition: color 200ms ease;
+}
+
+.settings-slide-popup .toggle:has(input:checked) span {
+  color: var(--text);
+}
+
+.settings-slide-popup .map-band-step {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-slide-popup .map-band-step span {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.settings-slide-popup .map-band-step input {
+  width: 70px;
+}
+
+/* Environmental Conditions: Input with unit label */
+.settings-slide-popup .input-with-unit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-slide-popup .input-with-unit input {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-slide-popup .input-with-unit .unit-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 32px;
+}
+
+/* Derived value display (e.g., Speed of Sound) */
+.settings-slide-popup .derived-value {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.settings-slide-popup .derived-display {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
+  box-shadow:
+    4px 4px 8px var(--shadow-dark),
+    -4px -4px 8px var(--shadow-light);
+  font-family: var(--font-mono, monospace);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+}
+
+/* ==========================================================================
+   Physics Profile Selector
+   ========================================================================== */
+
+.physics-profile-section {
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+/* Profile dropdown styling */
+.profile-select {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.profile-select option[value="custom"] {
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+/* Profile indicator in main settings popover */
+.settings-profile-indicator {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+.settings-profile-indicator.is-custom {
+  font-style: italic;
+  color: var(--text-soft);
+}
+
+/* ==========================================================================
+   Feature Flags
+   ========================================================================== */
+
+/* Hide probe engine controls when feature flag is off (not wired to engine yet) */
+html:not([data-feature-probe-engine-controls="true"]) .feature-probe-engine-controls {
+  display: none !important;
+}
+
+/* Hide profile dropdown when feature flag is off */
+html:not([data-feature-profile-dropdown="true"]) .settings-profile-banner {
+  display: none !important;
+}
+
+/* ==========================================================================
+   Physics Engine Sections
+   ========================================================================== */
+
+.physics-engine-section {
+  position: relative;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+  margin-top: 8px;
+}
+
+.physics-engine-section:first-child {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+/* Override settings-title for physics sections - letter-spaced style like rest of GUI */
+.physics-engine-section .settings-title,
+.settings-slide-popup .physics-engine-section .settings-title {
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  text-transform: lowercase !important;
+  letter-spacing: 0.25em !important;
+  color: var(--text) !important;
+  margin-bottom: 4px !important;
+}
+
+.engine-subtitle,
+.settings-slide-popup .engine-subtitle {
+  font-size: 11px !important;
+  color: var(--text-muted) !important;
+  margin-bottom: 10px !important;
+  letter-spacing: 0.02em !important;
+  font-weight: 400 !important;
+}
+
+/* Probe Engine Groups */
+.probe-paths-group,
+.probe-ground-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.probe-paths-group .toggle,
+.probe-ground-group .toggle {
+  margin-bottom: 2px;
+}
+
+.probe-paths-label {
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+/* Probe summary equation box */
+.probe-equation-summary {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 8px;
+  background: linear-gradient(145deg, var(--surface-lo), var(--surface-hi));
+  box-shadow:
+    inset 2px 2px 4px var(--shadow-dark),
+    inset -2px -2px 4px var(--shadow-light);
+  text-align: center;
+}
+
+.probe-equation-summary .equation-main {
+  font-family: var(--font-mono, 'SF Mono', Monaco, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-soft);
+  margin-bottom: 2px;
+}
+
+.probe-equation-summary .equation-where {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* ==========================================================================
+   Collapsible Equation Display
+   ========================================================================== */
+
+.equation-collapsible {
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+
+.equation-header,
+.settings-slide-popup .equation-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font-size: 9px !important;
+  color: var(--text-muted) !important;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+  padding: 2px 0;
+  user-select: none;
+  transition: color 200ms ease;
+  font-weight: 400 !important;
+  opacity: 0.5;
+}
+
+.equation-collapsible.is-expanded .equation-header {
+  opacity: 1;
+  color: var(--text-soft) !important;
+}
+
+.equation-header:hover {
+  color: var(--active-blue, #3b82f6) !important;
+  opacity: 0.8;
+}
+
+.equation-toggle {
+  font-size: 7px !important;
+  transition: transform 200ms ease;
+  display: inline-block;
+}
+
+.equation-collapsible.is-expanded .equation-toggle {
+  transform: rotate(90deg);
+}
+
+.equation-content {
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: linear-gradient(145deg, var(--surface-lo), var(--surface-hi));
+  box-shadow:
+    inset 1px 1px 3px var(--shadow-dark),
+    inset -1px -1px 3px var(--shadow-light);
+  font-family: var(--font-mono, 'SF Mono', Monaco, monospace);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-soft);
+  overflow: hidden;
+}
+
+.equation-content[hidden] {
+  display: none;
+}
+
+.equation-main {
+  font-weight: 400;
+  margin-bottom: 0;
+  word-break: break-word;
+}
+
+.equation-where {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+

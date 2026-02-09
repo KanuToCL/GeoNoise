@@ -1,0 +1,998 @@
+/* =============================================================================
+   Modal Layout - Centered Card with Scrollbar
+   =============================================================================
+   A moderately-sized centered modal with neumorphic scrollbar.
+   Not full span - provides comfortable reading width.
+   ============================================================================= */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 50;
+}
+
+.modal.is-open {
+  display: flex;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  /* Solid neumorphic backdrop - matches plastic look */
+  background: #c8ced8;
+}
+
+.modal-card {
+  position: relative;
+  z-index: 1;
+  width: min(900px, 94vw);
+  max-height: 85vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 28px;
+  padding-right: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Neumorphic inset scrollbar for modal cards */
+.modal-card::-webkit-scrollbar {
+  width: 10px;
+}
+
+.modal-card::-webkit-scrollbar-track {
+  background: #e0e5ec;
+  border-radius: 5px;
+  margin: 12px 4px;
+  box-shadow: inset 2px 2px 4px #a3b1c6, inset -2px -2px 4px #f0f4f8;
+}
+
+.modal-card::-webkit-scrollbar-thumb {
+  background: #cdd4de;
+  border-radius: 5px;
+  border: none;
+  box-shadow: inset 1px 1px 2px #a3b1c6;
+}
+
+.modal-card::-webkit-scrollbar-thumb:hover {
+  background: #c0c8d4;
+}
+
+.modal-plate {
+  border-radius: 28px;
+  background: var(--brand-bg);
+  border: none;
+  box-shadow: 16px 16px 32px var(--shadow-dark), -16px -16px 32px var(--shadow-light);
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-header h2 {
+  font-size: 18px;
+  letter-spacing: 1px;
+  color: var(--text);
+}
+
+.modal-title {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modal-subtitle {
+  font-size: 12px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
+  color: var(--text-muted);
+}
+
+.modal-close {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: var(--ui-letter-spacing);
+  text-transform: lowercase;
+  background: var(--bg);
+  color: var(--text-muted);
+  text-shadow: 1px 1px 0 var(--shadow-light-soft), -1px -1px 1px rgba(0, 0, 0, 0.2);
+  /* Raised state */
+  box-shadow: 3px 3px 6px rgba(100, 110, 130, 0.3), -2px -2px 5px rgba(255, 255, 255, 0.7);
+  transition: transform 160ms ease, box-shadow 200ms ease, background 160ms ease, color 160ms ease;
+}
+
+.modal-close:hover {
+  color: var(--text);
+  background: var(--bg);
+  /* Sunken state */
+  box-shadow: inset 3px 3px 6px rgba(100, 110, 130, 0.25), inset -2px -2px 5px rgba(255, 255, 255, 0.6);
+  transform: scale(0.98);
+}
+
+.modal-close:active {
+  box-shadow: inset 4px 4px 8px rgba(100, 110, 130, 0.35), inset -3px -3px 6px rgba(255, 255, 255, 0.5);
+  transform: scale(0.96);
+}
+
+/* Pill-based flowing grid - sections redistribute when expanded */
+.spec-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-content: start;
+  justify-content: center;
+}
+
+.spec-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.spec-section--full {
+  grid-column: 1 / -1;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Pill-style Collapsible Physics Sections
+   - Collapsed: compact horizontal pills that flow/wrap
+   - Expanded: full width, other pills redistribute around it
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.collapsible-section {
+  border-radius: 999px;
+  background: var(--brand-bg);
+  box-shadow: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
+  overflow: hidden;
+  /* Smooth, slow transitions for organic feel */
+  transition:
+    border-radius 500ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 400ms cubic-bezier(0.4, 0, 0.2, 1),
+    flex 600ms cubic-bezier(0.4, 0, 0.2, 1),
+    width 600ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* Collapsed: fixed width for consistent pill sizes */
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 100%;
+}
+
+.collapsible-section:hover {
+  box-shadow: 8px 8px 16px var(--shadow-dark), -8px -8px 16px var(--shadow-light);
+}
+
+/* Expanded: wider but not full edge-to-edge, rounded corners */
+.collapsible-section.is-open {
+  border-radius: 24px;
+  flex: 1 0 100%;
+  width: 100%;
+  max-width: 100%;
+}
+
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 18px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 160ms ease;
+}
+
+.collapsible-header:hover {
+  background: #f0f4f8;
+}
+
+/* When expanded, add more vertical padding */
+.collapsible-section.is-open .collapsible-header {
+  padding: 14px 18px;
+}
+
+.collapsible-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.collapsible-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.collapsible-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: var(--ui-letter-spacing);
+  color: var(--text);
+  text-transform: lowercase;
+}
+
+.collapsible-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.collapsible-chevron {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--brand-bg);
+  box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
+  transition: transform 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  flex-shrink: 0;
+}
+
+.collapsible-section.is-open .collapsible-chevron {
+  transform: rotate(180deg);
+}
+
+.collapsible-body {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    max-height 600ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 400ms cubic-bezier(0.4, 0, 0.2, 1) 100ms;
+}
+
+.collapsible-section.is-open .collapsible-body {
+  max-height: 2000px;
+  opacity: 1;
+}
+
+.collapsible-content {
+  padding: 0 18px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.collapsible-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border-soft), transparent);
+  margin: 0 18px;
+}
+
+/* Physics section formula highlight */
+.formula-highlight {
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--brand-bg);
+  box-shadow: inset 5px 5px 10px var(--shadow-dark), inset -5px -5px 10px var(--shadow-light);
+  font-family: "Times New Roman", "Times", serif;
+  font-size: 15px;
+  color: var(--text);
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+/* KaTeX equation styling */
+.formula-highlight.formula-katex,
+.equation-pill.equation-katex {
+  font-family: inherit; /* Let KaTeX handle fonts */
+  letter-spacing: normal;
+}
+
+.formula-highlight.formula-katex .katex,
+.equation-pill.equation-katex .katex {
+  font-size: 1.1em;
+  color: var(--text);
+}
+
+/* Inline KaTeX in text */
+.spec-text .katex,
+.spec-list .katex,
+.collapsible-subtitle .katex {
+  font-size: 0.95em;
+}
+
+/* Collapsible subtitle KaTeX styling */
+.collapsible-subtitle .katex {
+  color: var(--text-muted);
+}
+
+/* Ensure KaTeX display equations don't overflow */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0;
+  margin: 0;
+}
+
+/* Style for KaTeX in equation pills */
+.equation-pill .katex {
+  font-size: 1em;
+}
+
+/* Diagram container */
+.physics-diagram {
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--brand-bg);
+  box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light);
+  font-family: "SF Mono", "Monaco", "Consolas", monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* Reference values table */
+.physics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.physics-table th,
+.physics-table td {
+  padding: 6px 8px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.physics-table th {
+  font-weight: 600;
+  color: var(--text-soft);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.physics-table tr:nth-child(even) {
+  background: #f0f4f8;
+}
+
+/* Expand all button */
+.expand-all-btn {
+  align-self: flex-end;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 10px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
+  color: var(--text-muted);
+  background: var(--brand-bg);
+  border: 1px solid var(--border-soft);
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.expand-all-btn:hover {
+  color: var(--active-blue);
+  border-color: var(--active-blue);
+}
+
+/* Standards badge */
+.standards-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
+  box-shadow: 2px 2px 4px var(--shadow-dark), -2px -2px 4px var(--shadow-light);
+}
+
+.standards-badge--iso {
+  color: #4a7c59;
+}
+
+.standards-badge--empirical {
+  color: #7c6b4a;
+}
+
+/* Accuracy indicator */
+.accuracy-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
+  box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
+}
+
+.accuracy-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4a7c59;
+  box-shadow: 0 0 6px rgba(74, 124, 89, 0.4);
+}
+
+.accuracy-text {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+/* Limitations list */
+.limitations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.limitations-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.limitations-list li::before {
+  content: "•";
+  color: var(--text-soft);
+  flex-shrink: 0;
+}
+
+/* References section */
+.references-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.references-list li {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  padding-left: 24px;
+  position: relative;
+}
+
+.references-list li::before {
+  content: attr(data-ref);
+  position: absolute;
+  left: 0;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+/* Section intro text */
+.section-intro {
+  font-size: 13px;
+  color: var(--text-soft);
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+
+.about-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  background: transparent;
+}
+
+.about-tab {
+  border: none;
+  background: var(--bg);
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-size: 11px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
+  color: var(--text-muted);
+  font-weight: 600;
+  cursor: pointer;
+  /* Raised state - neumorphic outer shadows */
+  box-shadow: 3px 3px 6px rgba(100, 110, 130, 0.3), -2px -2px 5px rgba(255, 255, 255, 0.7);
+  transition: transform 160ms ease, box-shadow 200ms ease, background 160ms ease, color 160ms ease;
+}
+
+.about-tab:hover {
+  background: var(--bg);
+  color: var(--text);
+  /* Sunken state - neumorphic inset shadows */
+  box-shadow: inset 3px 3px 6px rgba(100, 110, 130, 0.25), inset -2px -2px 5px rgba(255, 255, 255, 0.6);
+  transform: scale(0.98);
+}
+
+.about-tab:active {
+  /* Deeper sunken on press */
+  box-shadow: inset 4px 4px 8px rgba(100, 110, 130, 0.35), inset -3px -3px 6px rgba(255, 255, 255, 0.5);
+  transform: scale(0.96);
+}
+
+.about-tab.is-active {
+  /* Active state: sunken with INSET blue ring, offset from edge */
+  background: var(--bg);
+  box-shadow:
+    inset 4px 4px 8px rgba(100, 110, 130, 0.3),
+    inset -3px -3px 6px rgba(255, 255, 255, 0.5),
+    inset 0 0 0 4px var(--bg),
+    inset 0 0 0 6px var(--active-blue);
+  color: var(--active-blue);
+  font-weight: 700;
+  transform: scale(0.98);
+}
+
+.about-panel {
+  display: none;
+}
+
+.about-panel.is-active {
+  display: block;
+}
+
+.spec-heading {
+  font-size: 14px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
+  color: var(--text-muted);
+  text-shadow: 1px 1px 0 var(--shadow-light-soft), -1px -1px 1px rgba(0, 0, 0, 0.2);
+}
+
+.spec-tray {
+  background: var(--bg);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: var(--shadow-pressed);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.spec-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.spec-subhead {
+  font-size: 13px;
+  text-transform: lowercase;
+  letter-spacing: var(--ui-letter-spacing);
+  color: var(--text-soft);
+  margin-top: 6px;
+}
+
+.spec-list {
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.equation-pill {
+  align-self: center;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--brand-bg);
+  box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light);
+  font-family: "Times New Roman", "Times", serif;
+  font-size: 14px;
+  color: var(--text-muted);
+  letter-spacing: 0.4px;
+  text-align: center;
+}
+
+.equation-block {
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: var(--brand-bg);
+  box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light);
+  font-family: "Times New Roman", "Times", serif;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.equation-block > div + div {
+  margin-top: 4px;
+}
+
+/* Equations grid - CSS grid layout for Full Equations tab */
+.equations-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  padding: 20px 0;
+}
+
+.equations-grid .spec-section {
+  min-width: 0;
+}
+
+.equations-grid .spec-section--full {
+  grid-column: 1 / -1;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 1100px) {
+  .topbar {
+    left: 16px;
+    right: 16px;
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+  }
+
+  .topbar-center {
+    align-items: flex-start;
+    justify-self: stretch;
+  }
+
+  .topbar-right {
+    justify-content: flex-start;
+  }
+
+  .topbar-left {
+    flex-wrap: wrap;
+  }
+
+  .dock {
+    bottom: 24px;
+  }
+
+  .dock-instruction-bottom {
+    max-width: 80vw;
+    text-align: center;
+  }
+
+  .context-panel {
+    right: 16px;
+    width: min(360px, 90vw);
+  }
+
+  .probe-panel {
+    right: 16px;
+    width: min(360px, 90vw);
+    bottom: 104px;
+  }
+
+  .settings-footer {
+    left: 16px;
+    bottom: 60px;
+    right: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .topbar {
+    top: 10px;
+    left: 12px;
+    right: 12px;
+    padding: 8px 12px;
+  }
+
+  .dock-tools {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .dock-button {
+    width: 42px;
+    height: 42px;
+  }
+
+  .dock-label {
+    font-size: 12px;
+  }
+
+  .context-panel {
+    top: 72px;
+    right: 12px;
+  }
+
+  .probe-panel {
+    right: 12px;
+    bottom: 96px;
+  }
+
+  .probe-chart canvas {
+    height: 120px;
+  }
+
+  .settings-footer {
+    left: 12px;
+    bottom: 60px;
+    right: auto;
+  }
+}
+
+/* FORCE SETTINGS TO BOTTOM LEFT */
+.settings-footer {
+  position: absolute !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: 80px !important;
+  left: 20px !important;
+  z-index: 100 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  background: transparent !important;
+  width: auto !important;
+  height: auto !important;
+  pointer-events: auto !important;
+}
+
+/* STYLE THE BUTTON (Make it a circle FAB) */
+.settings-footer .ui-button.icon-button {
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 50% !important;
+  background: #2a3648 !important;
+  border: 1px solid #4a5568 !important;
+  box-shadow: 0 4px 12px #404040 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: var(--text-muted) !important;
+}
+
+.settings-footer .ui-button.icon-button:hover {
+  background: var(--accent-dark) !important;
+  color: var(--text-on-dark) !important;
+}
+
+/* FORCE POPUP TO OPEN UPWARDS */
+.settings-footer .settings-popover {
+  position: absolute !important;
+  bottom: 100% !important;
+  left: 0 !important;
+  top: auto !important;
+  margin-bottom: 12px !important;
+  transform-origin: bottom left !important;
+  max-height: 60vh !important;
+  overflow-y: auto !important;
+  margin-top: 0 !important;
+}
+
+/* Settings toggle in canvas corner - popover opens upward */
+.canvas-corner .settings-toggle {
+  position: relative;
+}
+
+.settings-popover--corner {
+  position: fixed !important;
+  bottom: 90px !important;
+  right: 18px !important;
+  left: auto !important;
+  top: auto !important;
+  transform-origin: bottom right !important;
+  width: 300px !important;
+  max-height: min(65vh, calc(100vh - 180px)) !important;
+  overflow-y: auto !important;
+  padding: 18px !important;
+  border-radius: 18px !important;
+  background: var(--bg) !important;
+  border: none !important;
+  /* Hard edge shadow - no neumorphic highlight glow */
+  box-shadow: 0 8px 32px #8a95a8, 0 2px 8px #a0a8b8 !important;
+  z-index: 9999 !important;
+  /* Use visibility/opacity for animation */
+  display: flex !important;
+  flex-direction: column !important;
+  opacity: 0;
+  visibility: hidden;
+  transform: scaleY(0);
+  pointer-events: none;
+  transition: transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+              visibility 0s linear 400ms;
+}
+
+.settings-popover--corner.is-open {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: scaleY(1) !important;
+  pointer-events: auto !important;
+  transition: transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+              visibility 0s linear 0s !important;
+}
+
+/* Inset scrollbar for settings popover */
+.settings-popover--corner::-webkit-scrollbar {
+  width: 16px;
+}
+
+.settings-popover--corner::-webkit-scrollbar-track {
+  background: transparent;
+  border-left: 12px solid transparent;
+  background-clip: padding-box;
+}
+
+.settings-popover--corner::-webkit-scrollbar-thumb {
+  background: linear-gradient(145deg, #f0f4f8, #d8dfe8);
+  border-radius: 10px;
+  border: 4px solid transparent;
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 1px #c8d0dc;
+}
+
+.settings-popover--corner .settings-section {
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.settings-popover--corner .settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.settings-popover--corner .settings-title {
+  font-size: 11px;
+  text-transform: lowercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.settings-popover--corner .property-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-popover--corner .property-row span {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.settings-popover--corner .property-row select,
+.settings-popover--corner .property-row input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 999px;
+  border: none;
+  background: var(--brand-bg);
+  box-shadow:
+    inset 4px 4px 8px #a3b1c6,
+    inset -4px -4px 8px #ffffff;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  appearance: none;
+  -webkit-appearance: none;
+  transition: box-shadow 200ms ease;
+}
+
+.settings-popover--corner .property-row select {
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23788190' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  cursor: pointer;
+}
+
+.settings-popover--corner .property-row select:focus,
+.settings-popover--corner .property-row input:focus {
+  outline: none;
+  box-shadow:
+    inset 4px 4px 8px #a3b1c6,
+    inset -4px -4px 8px #ffffff,
+    0 0 0 3px rgba(45, 140, 255, 0.3);
+}
+
+.settings-popover--corner .toggle {
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
+  box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
+}
+
+.settings-popover--corner .toggle span {
+  color: var(--text-soft);
+}
+
+.settings-popover--corner .map-band-step {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-popover--corner .map-band-step span {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.settings-popover--corner .map-band-step input {
+  width: 70px;
+}
+
+/* Environmental Conditions: Input with unit label */
+.settings-popover--corner .input-with-unit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-popover--corner .input-with-unit input {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-popover--corner .input-with-unit .unit-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 32px;
+}
+
+/* Derived value display (e.g., Speed of Sound) */
+.settings-popover--corner .derived-value {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.settings-popover--corner .derived-display {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: linear-gradient(145deg, var(--surface-hi), var(--surface-lo));
+  box-shadow:
+    4px 4px 8px var(--shadow-dark),
+    -4px -4px 8px var(--shadow-light);
+  font-family: var(--font-mono, monospace);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+}
+

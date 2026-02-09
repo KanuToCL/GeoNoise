@@ -39,8 +39,8 @@ function resolveFilePath(urlPath) {
     return resolve(root, 'src', 'style.css');
   }
 
-  if (urlPath === '/styles/theme.css') {
-    return resolve(root, 'src', 'styles', 'theme.css');
+  if (urlPath.startsWith('/styles/')) {
+    return resolve(root, 'src', urlPath.slice(1));
   }
 
   if (urlPath.startsWith('/packages/')) {

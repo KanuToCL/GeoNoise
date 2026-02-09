@@ -1,0 +1,95 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* =============================================================================
+   GeoNoise UI Stylesheet
+   =============================================================================
+
+   NEUMORPHIC SHADOW STRATEGY:
+
+   1. FLOATING CONTAINERS (over the map):
+      Use simple drop shadows to avoid white "glow" against colorful backgrounds.
+      Pattern: box-shadow: 0 8px 32px #8a95a8, 0 2px 8px #a0a8b8;
+      Applied to: .topbar, .context-panel, .probe-panel, .layers-popover,
+                  .settings-popover, .dock-tools, .dock-fab, .db-legend
+
+   2. INNER ELEMENTS (buttons, toggles, inputs):
+      Use full neumorphic dual shadows for raised/pressed states.
+      Raised: var(--shadow-raised) - light top-left, dark bottom-right
+      Pressed: var(--shadow-pressed) - inset shadows
+
+   3. MODAL BACKDROP:
+      Solid color (#c8ced8) matching the plastic aesthetic, no blur.
+
+   ============================================================================= */
+
+/* ============================================================================
+   Neumorphic Scrollbars
+   ============================================================================ */
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #e0e5ec;
+  border-radius: 10px;
+  margin: 8px;
+  box-shadow: inset 3px 3px 6px #a3b1c6,
+              inset -3px -3px 6px #ffffff;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(145deg, #f0f4f8, #d8dfe8);
+  border-radius: 10px;
+  border: 2px solid #e0e5ec;
+  box-shadow: 3px 3px 6px #a3b1c6,
+              -3px -3px 6px #ffffff;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(145deg, #e8ecf2, #d0d8e2);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: #dce2ea;
+  box-shadow: inset 2px 2px 4px #a3b1c6;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d8dfe8 #e0e5ec;
+}
+
+/* Scrollbar button (arrows at ends) - hide them for cleaner look */
+::-webkit-scrollbar-button {
+  display: none;
+  height: 0;
+  width: 0;
+}
+
+html {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--bg);
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  overflow: hidden;
+}
